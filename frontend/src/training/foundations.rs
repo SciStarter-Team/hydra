@@ -19,6 +19,7 @@ use common::message::user::{BasicInfo, WorkflowStatusResponse, WorkflowType};
 use poem::{Response, handler, session::Session};
 use sailfish::TemplateOnce;
 
+use crate::badge::EarnedLinks;
 use crate::middleware::authorization::Authenticated;
 use crate::training::content::TrainingCopy;
 use crate::training::{
@@ -82,10 +83,11 @@ pub struct FoundationsContent {
     /// The header's button for a signed-out visitor who has finished the
     /// tutorial, in place of "Start Now". It leads to the badge step.
     pub claim_button: String,
-    /// The badge step's congratulations, above the earner's own badge links.
+    /// The badge step's copy: the badge holder's congratulations, shown the
+    /// same, still locked, to anyone short of the badge. `href="{badge_url}"`
+    /// and `href="{linkedin_url}"` are filled with the earner's own links to
+    /// the badge, and left out until there are any.
     pub claim_html: String,
-    /// The badge step's copy below the earner's badge links.
-    pub next_steps_html: String,
     /// The badge step's copy for a signed-out visitor who has finished the
     /// tutorial: the badge waits on an account, and this is their last
     /// chance to make one.
@@ -148,11 +150,22 @@ impl TrainingCopy for FoundationsContent {
             articulate_es: FOUNDATIONS_ES_URL.to_string(),
             claim_heading: "Congratulations!".to_string(),
             claim_button: "Claim your badge".to_string(),
-            claim_html: "<p>🎉 <b>You've completed the Foundations of Citizen Science training!</b> 🎉</p>".to_string(),
-            next_steps_html: r#"<p><b>What's next?</b> Put what you've learned into action by finding a project that matches your interests, location, or available time.</p>
-<p><a href="/finder" class="btn btn-primary">Find a project</a></p>
-<p>Or keep learning! Explore additional SciStarter trainings and opportunities to earn more badges and certificates.</p>
-<p><a href="/training" class="btn btn-primary">Explore more trainings</a></p>"#.to_string(),
+            claim_html: r#"<h3 class="text-primary-dark">Training Complete! 🎉</h3>
+<p><b>Congratulations! You've completed the Foundations of Citizen Science training!</b></p>
+<p>You've earned your Foundations of Citizen Science digital badge! Your badge has been added to your SciStarter profile.</p>
+<p class="mt-8"><b>🏅 Celebrate your achievement!</b></p>
+<p>View your badge or add it to your LinkedIn profile to highlight your knowledge and skills.</p>
+<div class="flex flex-col md:flex-row gap-2">
+  <a href="{badge_url}" class="btn btn-primary text-center" style="white-space: normal">View your badge</a>
+  <a href="{linkedin_url}" target="_blank" class="btn btn-primary text-center" style="white-space: normal">Add your badge to LinkedIn</a>
+</div>
+<p class="text-sm mt-2"><b>LinkedIn tip:</b> If the issuing organization field is blank, enter SciStarter and select it from the list.</p>
+<p class="mt-8"><b>🔎 Put your knowledge into action!</b></p>
+<p>Ready to participate in citizen science? Explore projects that match your interests, location, and available time.</p>
+<div class="flex flex-col md:flex-row gap-2"><a href="/finder" class="btn btn-primary text-center" style="white-space: normal">Find a citizen science project</a></div>
+<p class="mt-8"><b>🌟 Keep learning!</b></p>
+<p>Discover more SciStarter trainings and opportunities to earn additional badges and certificates.</p>
+<div class="flex flex-col md:flex-row gap-2"><a href="/training" class="btn btn-primary text-center" style="white-space: normal">Explore more trainings</a></div>"#.to_string(),
             last_chance_html: r#"<p><b>You completed the Foundations of Citizen Science training.</b> One last step to receive your digital badge.</p>
 <p>Log in to SciStarter or create a free account now so we can connect you with your completed training and award your <b>Foundations of Citizen Science digital badge</b>.</p>
 <p><b>This is your final opportunity to claim your badge.</b> Once you leave this page, we will no longer be able to associate you with your completed Foundations training.</p>
@@ -357,9 +370,12 @@ async fn build_steps(
 
     let badge_body = BadgeBody {
         tutorial_pending,
-        claim_html: content.claim_html.clone(),
-        earned_html: crate::badge::earned_html(user_info, Badge::FoundationsOfCitizenScience).await,
-        next_steps_html: content.next_steps_html.clone(),
+        claim_html: fill_links(
+            &content.claim_html,
+            crate::badge::earned_links(user_info, Badge::FoundationsOfCitizenScience)
+                .await
+                .as_ref(),
+        ),
         last_chance_html: content.last_chance_html.clone(),
     }
     .render_once()
@@ -389,7 +405,7 @@ async fn build_steps(
     StepsView { steps }
 }
 
-/// The badge step: congratulations and the earner's own badge links, or --
+/// The badge step: congratulations with the earner's own badge links, or --
 /// for a signed-out visitor who has finished the tutorial -- the last chance
 /// to make the account the badge waits on.
 #[derive(TemplateOnce)]
@@ -397,14 +413,38 @@ async fn build_steps(
 struct BadgeBody {
     tutorial_pending: bool,
     claim_html: String,
-    earned_html: String,
-    next_steps_html: String,
     last_chance_html: String,
+}
+
+/// Fills the earner's own `links` into the badge step's copy, where it
+/// writes `href="{badge_url}"` and `href="{linkedin_url}"`. Short of the
+/// badge there are none, and those anchors are left without an `href`,
+/// leading nowhere, so the copy reads the same before the step is reached
+/// as after.
+fn fill_links(html: &str, links: Option<&EarnedLinks>) -> String {
+    let urls = [
+        ("{badge_url}", links.map(|links| &links.badge_url)),
+        ("{linkedin_url}", links.map(|links| &links.linkedin_url)),
+    ];
+
+    let mut html = html.to_string();
+
+    for (placeholder, url) in urls {
+        html = match url {
+            Some(url) => html.replace(placeholder, &crate::component::html_escape(url)),
+            None => html
+                .replace(&format!(r#" href="{placeholder}""#), "")
+                .replace(placeholder, ""),
+        };
+    }
+
+    html
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{BadgeBody, FoundationsContent, step_opens, step_states};
+    use super::{BadgeBody, FoundationsContent, fill_links, step_opens, step_states};
+    use crate::badge::EarnedLinks;
     use crate::training::StepState::{Available, Blocked, Completed, Current};
     use crate::training::content::TrainingCopy;
     use sailfish::TemplateOnce;
@@ -459,8 +499,6 @@ mod tests {
             BadgeBody {
                 tutorial_pending,
                 claim_html: content.claim_html.clone(),
-                earned_html: "EARNED".to_string(),
-                next_steps_html: content.next_steps_html.clone(),
                 last_chance_html: content.last_chance_html.clone(),
             }
             .render_once()
@@ -470,11 +508,32 @@ mod tests {
         let pending = body(true);
         assert!(pending.contains("final opportunity"));
         assert!(pending.contains("next=/training/foundations%23start"));
-        assert!(!pending.contains("EARNED"));
+        assert!(!pending.contains("Training Complete!"));
 
         let earned = body(false);
         assert!(earned.contains("You've completed the Foundations"));
-        assert!(earned.contains("EARNED"));
         assert!(!earned.contains("final opportunity"));
+    }
+
+    /// The earner's buttons lead to their own badge; short of the badge the
+    /// same buttons are there, leading nowhere.
+    #[test]
+    fn the_badge_buttons_lead_to_the_earners_badge_or_nowhere() {
+        let content = FoundationsContent::built_in(());
+        let links = EarnedLinks {
+            badge_url: "https://scistarter.org/badges/B/U".to_string(),
+            linkedin_url: "https://www.linkedin.com/profile/add?a=1&b=2".to_string(),
+        };
+
+        let earned = fill_links(&content.claim_html, Some(&links));
+        assert!(earned.contains(r#"<a href="https://scistarter.org/badges/B/U" class="btn"#));
+        assert!(earned.contains(r#"href="https://www.linkedin.com/profile/add?a=1&amp;b=2""#));
+        assert!(!earned.contains('{'));
+
+        let locked = fill_links(&content.claim_html, None);
+        assert!(locked.contains(r#"<a class="btn btn-primary text-center" style="white-space: normal">View your badge</a>"#));
+        assert!(locked.contains(r#"<a target="_blank" class="btn"#));
+        assert!(!locked.contains('{'));
+        assert!(locked.contains(r#"href="/finder""#));
     }
 }

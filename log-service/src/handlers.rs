@@ -10,7 +10,7 @@ use common::{
         EditLogEntry, EditLogRequest, EditLogResponse, EntityListContributions,
         EntityListParticipant, EntityListStatsRequest, EntityListStatsResponse,
         ExternalLinkClickthroughResponse, ExternalLinksResponse, GoUrlStatsRequest,
-        GoUrlStatsResponse, LastChangedRequest, LastChangedResponse, PageChange,
+        GoUrlStatsResponse, Housekeeping, LastChangedRequest, LastChangedResponse, PageChange,
         ProjectLikesRequest, ProjectLikesResponse, ProjectMemberCountRequest,
         ProjectMemberCountResponse, ProjectParticipationRecord, ProjectParticipationRequest,
         ProjectParticipationResponse, ProjectReviewsRequest, ProjectReviewsResponse,
@@ -1968,7 +1968,9 @@ pub async fn handle_edit_log(req: &async_nats::service::Request) -> Result<EditL
         .filter(
             col("action")
                 .eq(lit(PageChange::ProjectEdit.action()))
-                .or(col("action").eq(lit(PageChange::EventEdit.action()))),
+                .or(col("action").eq(lit(PageChange::EventEdit.action())))
+                .or(col("action").eq(lit(Housekeeping::Project.action())))
+                .or(col("action").eq(lit(Housekeeping::Event.action()))),
         )?
         .filter(col("target").eq(lit(&request.target_id)))?
         .select(vec![col("when"), col("user_id"), col("extra")])?

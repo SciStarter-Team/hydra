@@ -384,6 +384,14 @@ fn user_facing() -> impl Endpoint {
             post(component::detail_page::connect_platform_account),
         )
         .at(
+            "/-detail/:id/account",
+            get(component::detail_page::inline_auth_form).post(
+                component::detail_page::inline_auth
+                    .with(auth::credential_rate_limit())
+                    .with(middleware::session_cookie::EnablePartitionedCookies),
+            ),
+        )
+        .at(
             "/-detail/:id/edit-log",
             get(component::detail_page::edit_log),
         )
@@ -724,6 +732,7 @@ async fn main() -> Result<(), Error> {
     let _synchronize_exchanges = tokio::spawn(sync::synchronize_exchanges());
     let _update_expired_statuses = tokio::spawn(sync::update_expired_statuses());
     let _ala_import = tokio::spawn(project::ala::import_periodically());
+    let _inat_linking = tokio::spawn(project::inaturalist::link_periodically());
     let _periodic_maintenance = tokio::spawn(periodic_maintenance());
 
     // Start NATS service
@@ -854,8 +863,11 @@ mod sync {
     use std::time::Duration;
 
     use common::{
-        insensitivestring::InsensitiveString, message::log::PageChange, misc,
-        service::log_activity, timestring::TimeString,
+        insensitivestring::InsensitiveString,
+        message::log::{Housekeeping, LastChangedRequest, LastChangedResponse, PageChange},
+        misc,
+        service::{log_activity, request},
+        timestring::TimeString,
     };
     use jiff::Timestamp;
     use tokio::time::sleep;
@@ -893,8 +905,8 @@ mod sync {
     /// whether storing a copy from orrery changed any of it can be told by
     /// comparing what is held before and after.
     ///
-    /// Orrery stamps a record as updated whenever it is saved, changed or
-    /// not, so its timestamp alone would count as changes the saves that
+    /// Orrery stamps a record's `changed` whenever it is saved, changed or
+    /// not, so that timestamp alone would count as changes the saves that
     /// made none. And the copy arrives again on every instance, so the
     /// comparison is also what keeps one change from being logged once per
     /// instance: a peer that has already saved the copy it was sent finds
@@ -955,6 +967,63 @@ mod sync {
         }
     }
 
+    /// Whether a change synced from orrery to `target` was an update to its
+    /// page, rather than housekeeping.
+    ///
+    /// Orrery keeps two times for a record. `updated` moves only when the
+    /// record is really updated, by its own people or by the import it came
+    /// from; `changed` moves on every write, staff edits, publishing and
+    /// affiliate linking included. So a change is an update exactly when
+    /// `updated` is later than the last change logged against the page.
+    /// When the log can't be asked, the change is taken to be an update.
+    async fn is_update(target: Ulid, updated: Timestamp) -> bool {
+        let last: LastChangedResponse = match request(
+            "log.last_changed",
+            LastChangedRequest {
+                targets: vec![target],
+            },
+        )
+        .await
+        {
+            Ok(last) => last,
+            Err(err) => {
+                tracing::error!("Error asking when {} last changed: {}", target, err);
+                return true;
+            }
+        };
+
+        last.changes
+            .into_iter()
+            .next()
+            .and_then(|change| Timestamp::try_from(change.when).ok())
+            .is_none_or(|when| updated > when)
+    }
+
+    /// Logs a change synced from orrery to `target`: an update as `update`,
+    /// at the time orrery says the record was updated, and housekeeping as
+    /// `housekeeping`, at the time it changed.
+    async fn log_synced_change(
+        target: Ulid,
+        updated: Timestamp,
+        changed: Timestamp,
+        update: PageChange,
+        housekeeping: Housekeeping,
+        edit: String,
+    ) -> Result<(), anyhow::Error> {
+        if is_update(target, updated).await {
+            log_activity(TimeString::from(updated), update, None, target, edit).await
+        } else {
+            log_activity(TimeString::from(changed), housekeeping, None, target, edit).await
+        }
+    }
+
+    /// The start of a sync's paging cursor, as it was saved.
+    fn bookmark_time(saved: Option<String>) -> Timestamp {
+        saved
+            .and_then(|saved| saved.parse().ok())
+            .unwrap_or_else(|| "2000-01-01T00:00:00Z".parse().expect("a valid timestamp"))
+    }
+
     /// The names of the fields that differ between two canonical forms. Tags
     /// are a set held in no particular order, so their order is not a
     /// difference.
@@ -1006,7 +1075,14 @@ mod sync {
         publish: bool,
         foreign_id: String, // default blank, partial index
         created: Timestamp,
+
+        /// When the project was last really updated.
         updated: Timestamp,
+
+        /// When the project last changed in any way, which orrery pages by.
+        /// Absent from an orrery that predates it, which paged by `updated`.
+        changed: Option<Timestamp>,
+
         name: String,
         tags: String,
         meta_description: String,
@@ -1213,10 +1289,12 @@ mod sync {
     #[tracing::instrument]
     pub async fn synchronize_projects() -> Result<(), anyhow::Error> {
         loop {
-            let last_update = misc::get("project-sync-bookmark-update")
-                .await
-                .expect("Retrieving sync bookmark failed")
-                .unwrap_or_else(|| String::from("2000-01-01T00:00:00.0Z"));
+            let last_update = bookmark_time(
+                misc::get("project-sync-bookmark-update")
+                    .await
+                    .expect("Retrieving sync bookmark failed"),
+            )
+            .to_string();
 
             let last_id = misc::get("project-sync-bookmark-id")
                 .await
@@ -1268,13 +1346,13 @@ mod sync {
                 }
             };
 
-            let mut bookmark = (last_update.clone(), last_id);
+            let mut bookmark = (bookmark_time(Some(last_update)), last_id);
 
             let got_projects = projects.len();
             tracing::info!("Synchronization received {} projects", got_projects);
 
             for data in projects {
-                let updated = data.updated.to_string(); //.strftime("%Y-%m-%d %H:%M:%S+00").to_string();
+                let changed = data.changed.unwrap_or(data.updated);
                 let legacy_id = data.legacy_v2_project_id;
 
                 let mut proj = ProjectAll::default();
@@ -1705,11 +1783,12 @@ mod sync {
 
                 let after = Stored::of_project(proj.project_id).await;
                 if after != before {
-                    if let Err(err) = log_activity(
-                        TimeString::from(data.updated),
-                        PageChange::ProjectEdit,
-                        None,
+                    if let Err(err) = log_synced_change(
                         proj.project_id,
+                        data.updated,
+                        changed,
+                        PageChange::ProjectEdit,
+                        Housekeeping::Project,
                         before.edit(&after),
                     )
                     .await
@@ -1718,13 +1797,13 @@ mod sync {
                     }
                 }
 
-                let new_bookmark = (updated, legacy_id);
+                let new_bookmark = (changed, legacy_id);
                 if new_bookmark > bookmark {
                     bookmark = new_bookmark;
                 }
             }
 
-            misc::set("project-sync-bookmark-update", bookmark.0)
+            misc::set("project-sync-bookmark-update", bookmark.0.to_string())
                 .await
                 .expect("Saving sync bookmark failed");
 
@@ -1754,7 +1833,15 @@ mod sync {
         welcomed: bool,
         page_creator_id: String, // Ulid,        // NB was "owner"
         page_editor_ids: String, // Box<[Ulid]>, // NB was "managers"
+
+        /// When the event was last really updated.
         event_last_edited: Option<Timestamp>, // Option<TimeString>,
+
+        /// When the event last changed in any way, which orrery pages by.
+        /// Absent from an orrery that predates it, which paged by
+        /// `event_last_edited`.
+        changed: Option<Timestamp>,
+
         name: String,
         tags: String, // HashSet<InsensitiveString>,
         /// The ULID of the exchange the event was submitted through, if any.
@@ -1845,10 +1932,12 @@ mod sync {
     #[tracing::instrument]
     pub async fn synchronize_events() -> Result<(), anyhow::Error> {
         loop {
-            let last_update = misc::get("event-sync-bookmark-update")
-                .await
-                .expect("Retrieving sync bookmark failed")
-                .unwrap_or_else(|| String::from("2000-01-01T00:00:00.0Z"));
+            let last_update = bookmark_time(
+                misc::get("event-sync-bookmark-update")
+                    .await
+                    .expect("Retrieving sync bookmark failed"),
+            )
+            .to_string();
 
             let last_id = misc::get("event-sync-bookmark-id")
                 .await
@@ -1900,16 +1989,14 @@ mod sync {
                 }
             };
 
-            let mut bookmark = (last_update.clone(), last_id);
+            let mut bookmark = (bookmark_time(Some(last_update)), last_id);
 
             let got_events = events.len();
             tracing::info!("Synchronization received {} events", got_events);
 
             for data in events {
-                let updated = data
-                    .event_last_edited
-                    .unwrap_or_else(|| Timestamp::now())
-                    .to_string();
+                let updated = data.event_last_edited.unwrap_or_else(Timestamp::now);
+                let changed = data.changed.unwrap_or(updated);
 
                 let legacy_id = data.legacy_id;
 
@@ -2072,11 +2159,12 @@ mod sync {
 
                 let after = Stored::of_event(evt.event_id).await;
                 if after != before {
-                    if let Err(err) = log_activity(
-                        data.event_last_edited.map(TimeString::from),
-                        PageChange::EventEdit,
-                        None,
+                    if let Err(err) = log_synced_change(
                         evt.event_id,
+                        updated,
+                        changed,
+                        PageChange::EventEdit,
+                        Housekeeping::Event,
                         before.edit(&after),
                     )
                     .await
@@ -2085,13 +2173,13 @@ mod sync {
                     }
                 }
 
-                let new_bookmark = (updated, legacy_id);
+                let new_bookmark = (changed, legacy_id);
                 if new_bookmark > bookmark {
                     bookmark = new_bookmark;
                 }
             }
 
-            misc::set("event-sync-bookmark-update", bookmark.0)
+            misc::set("event-sync-bookmark-update", bookmark.0.to_string())
                 .await
                 .expect("Saving sync bookmark failed");
 
@@ -2117,6 +2205,10 @@ mod sync {
         citation: String,
         detailed_citation: String,
         updated: String,
+
+        /// When the project last changed in any way, which orrery pages by.
+        /// Absent from an orrery that predates it, which paged by `updated`.
+        changed: Option<String>,
     }
 
     #[tracing::instrument]
@@ -2219,7 +2311,7 @@ mod sync {
                     continue;
                 }
 
-                let new_bookmark = (data.updated.clone(), data.id);
+                let new_bookmark = (data.changed.unwrap_or(data.updated), data.id);
                 if new_bookmark > bookmark {
                     bookmark = new_bookmark;
                 }
@@ -2248,6 +2340,10 @@ mod sync {
         name: String,
         affiliation: String,
         updated: String,
+
+        /// When the project last changed in any way, which orrery pages by.
+        /// Absent from an orrery that predates it, which paged by `updated`.
+        changed: Option<String>,
     }
 
     #[tracing::instrument]
@@ -2348,7 +2444,7 @@ mod sync {
                     continue;
                 }
 
-                let new_bookmark = (data.updated.clone(), data.id);
+                let new_bookmark = (data.changed.unwrap_or(data.updated), data.id);
                 if new_bookmark > bookmark {
                     bookmark = new_bookmark;
                 }
@@ -3173,6 +3269,23 @@ mod sync {
         #[test]
         fn no_authority_protects_nothing() {
             check!(protected_field_sources("").is_empty());
+        }
+
+        #[test]
+        fn bookmarks_order_by_time_not_by_text() {
+            // As text, the whole second sorts after the fraction of it.
+            let whole = bookmark_time(Some(String::from("2026-10-27T15:34:12Z")));
+            let later = bookmark_time(Some(String::from("2026-10-27T15:34:12.5Z")));
+
+            check!(later > whole);
+        }
+
+        #[test]
+        fn a_missing_or_unreadable_bookmark_starts_at_the_beginning() {
+            let beginning: Timestamp = "2000-01-01T00:00:00Z".parse().unwrap();
+
+            check!(bookmark_time(None) == beginning);
+            check!(bookmark_time(Some(String::from("garbage"))) == beginning);
         }
     }
 }

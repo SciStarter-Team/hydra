@@ -11,11 +11,22 @@ use common::{
     shared::db,
     timestring::TimeString,
 };
+use ulid::Ulid;
 
 pub async fn create_join(req: &Request) -> Result<ProjectJoinResponse, Error> {
     let message: ProjectJoinRequest = decode_structured_message(req.message.clone())?;
 
-    let user_id_str = message.user_id.to_string();
+    record_join(message.user_id, &message.project_id).await?;
+
+    Ok(ProjectJoinResponse {
+        success: true,
+        message: "Project joined successfully".to_string(),
+    })
+}
+
+/// Join `user_id` to `project_id`, if they haven't already joined it.
+pub async fn record_join(user_id: Ulid, project_id: &str) -> Result<(), Error> {
+    let user_id_str = user_id.to_string();
 
     // Insert project join
     sqlx::query!(
@@ -25,7 +36,7 @@ pub async fn create_join(req: &Request) -> Result<ProjectJoinResponse, Error> {
         ON CONFLICT(user_id, project_id) DO NOTHING
         "#,
         user_id_str,
-        message.project_id
+        project_id
     )
     .execute(db())
     .await?;
@@ -33,16 +44,13 @@ pub async fn create_join(req: &Request) -> Result<ProjectJoinResponse, Error> {
     log_activity(
         Some(TimeString::now()),
         "project_join",
-        Some(message.user_id),
-        None::<ulid::Ulid>,
-        Some(message.project_id),
+        Some(user_id),
+        None::<Ulid>,
+        Some(project_id.to_string()),
     )
     .await?;
 
-    Ok(ProjectJoinResponse {
-        success: true,
-        message: "Project joined successfully".to_string(),
-    })
+    Ok(())
 }
 
 pub async fn check_join(req: &Request) -> Result<ProjectJoinCheckResponse, Error> {

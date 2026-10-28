@@ -225,13 +225,8 @@ const FOUNDATIONS: &[&SectionSpec] = &[
             ),
             field(
                 "claim_html",
-                "Congratulations (HTML)",
-                Input::Html { rows: 2 },
-            ),
-            field(
-                "next_steps_html",
-                "Below the badge links (HTML)",
-                Input::Html { rows: 6 },
+                "Congratulations (HTML; href=\"{badge_url}\" and href=\"{linkedin_url}\" become the earner's links)",
+                Input::Html { rows: 16 },
             ),
             field(
                 "last_chance_html",

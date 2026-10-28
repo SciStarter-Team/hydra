@@ -413,7 +413,7 @@ struct LoginSignupPage {
 /// sets directly, and the tag rule that user-service applies to whatever tags
 /// ride along. `signup_action` passes only the flag, leaving the tag half to
 /// user-service's own door, so this is the one place that has to combine them.
-fn signup_will_be_protected(session: &Session) -> bool {
+pub fn signup_will_be_protected(session: &Session) -> bool {
     session.get::<bool>("signup_protected").unwrap_or(false)
         || signup_needs_protection(&session_tags::list(session))
 }
@@ -546,26 +546,49 @@ async fn verify_turnstile(token: &str, remote_ip: Option<std::net::IpAddr>) -> b
     }
 }
 
-#[handler]
-#[tracing::instrument]
-pub async fn signup_action(
+/// The fields a password signup supplies; everything else about the account
+/// comes from the session.
+pub struct PasswordSignup {
+    pub handle: String,
+    pub email: String,
+    pub password: String,
+    pub newsletter: bool,
+    pub zipcode: String,
+    /// The project to join, if the signup was made from one's page.
+    pub join_project: Option<String>,
+}
+
+/// How a password signup came out.
+pub enum SignupOutcome {
+    /// The account exists and the session is signed in to it.
+    SignedIn(BasicInfo),
+    /// Turnstile couldn't vouch for the visitor, so the account waits on a
+    /// link emailed to them.
+    Deferred,
+    /// The email address already belongs to an account.
+    AlreadyRegistered,
+    /// Too many deferred signups from the visitor's network.
+    RateLimited,
+    /// Something on our side failed.
+    Unavailable,
+}
+
+/// Create an account with a password, the way every password signup form
+/// does: protected status, tags, a staked-out badge, held training steps and
+/// attribution all come from the session, and the account is signed in.
+///
+/// `turnstile_token` is what the form's Turnstile challenge produced, empty
+/// if nothing. Without its vouching the signup is deferred behind an emailed
+/// link rather than refused, and `next` is where that link lands.
+pub async fn sign_up_with_password(
     session: &Session,
-    RealIp(client_ip): RealIp,
-    Form(form): Form<SignupForm>,
-) -> Response {
-    let next: Option<String> = session
-        .get::<String>("auth_next")
-        .filter(|n| is_local_next(n));
-
-    let use_passkey = form.use_passkey.unwrap_or(false);
-
-    // Validate password confirmation (only if not using passkey)
-    if !use_passkey && form.password1 != form.password2 {
-        return Redirect::see_other("/login?mismatch=true").into_response();
-    }
-
-    let token = form.cf_turnstile_response.as_deref().unwrap_or("");
-    let turnstile_ok = !token.is_empty() && verify_turnstile(token, client_ip).await;
+    client_ip: Option<std::net::IpAddr>,
+    fields: PasswordSignup,
+    turnstile_token: &str,
+    next: Option<String>,
+) -> SignupOutcome {
+    let turnstile_ok =
+        !turnstile_token.is_empty() && verify_turnstile(turnstile_token, client_ip).await;
 
     // Get session values for protected and tags
     let protected = session.get::<bool>("signup_protected").unwrap_or(false);
@@ -581,104 +604,143 @@ pub async fn signup_action(
         None
     };
 
-    // For passkey users, this shouldn't be reached since JavaScript handles the flow
-    // This is only for password users now
-    if !use_passkey {
-        let email = form.email.clone();
+    let email = fields.email.clone();
 
-        // Regular password signup - create user immediately
-        let signup_request = Signup {
-            handle: form.handle,
-            email: form.email,
-            password: form.password1,
-            newsletter: form.newsletter.unwrap_or(false),
-            zipcode: form.zipcode,
-            protected,
-            point,
-            tags,
-            disabled_password: false, // Regular password account
-            badgeclass: staked_out_badge(session),
-            attribution: first_touch(session),
-            pending_transitions: pending_transitions::list(session),
+    let signup_request = Signup {
+        handle: fields.handle,
+        email: fields.email,
+        password: fields.password,
+        newsletter: fields.newsletter,
+        zipcode: fields.zipcode,
+        protected,
+        point,
+        tags,
+        disabled_password: false, // Regular password account
+        badgeclass: staked_out_badge(session),
+        attribution: first_touch(session),
+        pending_transitions: pending_transitions::list(session),
+        join_project: fields.join_project,
+    };
+
+    if !turnstile_ok {
+        // Turnstile never produced a token (blocked script, filtered
+        // network) or its verdict was negative. Neither proves the
+        // visitor is a bot, so instead of rejecting them the signup is
+        // deferred behind an emailed completion link: a human gets in
+        // with one click, a bot without a real inbox gets nothing.
+        let deferral = DeferSignup {
+            signup: signup_request,
+            next,
+            ip_address: client_ip.map(|ip| ip.to_string()),
         };
 
-        if !turnstile_ok {
-            // Turnstile never produced a token (blocked script, filtered
-            // network) or its verdict was negative. Neither proves the
-            // visitor is a bot, so instead of rejecting them the signup is
-            // deferred behind an emailed completion link: a human gets in
-            // with one click, a bot without a real inbox gets nothing.
-            let deferral = DeferSignup {
-                signup: signup_request,
-                next,
-                ip_address: client_ip.map(|ip| ip.to_string()),
-            };
-
-            return match request::<DeferSignupOutcome>("user.auth.defer_signup", deferral).await {
-                Ok(DeferSignupOutcome::Deferred) => {
-                    session.set("pending_signup_email", &email);
-                    // The pending row holds the badge and the held steps
-                    // now, and it outlives this session — the completion
-                    // link may be clicked in another browser entirely.
-                    clear_staked_out_badge(session);
-                    pending_transitions::clear(session);
-                    Redirect::see_other("/check-email").into_response()
-                }
-                Ok(DeferSignupOutcome::AlreadyRegistered) => {
-                    Redirect::see_other("/login?exists=true").into_response()
-                }
-                Ok(DeferSignupOutcome::RateLimited) => {
-                    Redirect::see_other("/login?ratelimited=true").into_response()
-                }
-                Err(_) => Redirect::see_other("/login?system=true").into_response(),
-            };
-        }
-
-        // Call user-service's signup via NATS
-        match request_with_retry::<Option<BasicInfo>>("user.auth.signup", signup_request).await {
-            Ok(Some(basic_info)) => {
-                // Regular password signup - log them in immediately.
-                // Rotate the session ID on this privilege transition to
-                // prevent session fixation.
-                session.renew();
-                session.set("basic_info", &basic_info);
-
-                // Clear signup-specific session data
-                session.remove("signup_protected");
-                session_tags::clear(session);
+        return match request::<DeferSignupOutcome>("user.auth.defer_signup", deferral).await {
+            Ok(DeferSignupOutcome::Deferred) => {
+                session.set("pending_signup_email", &email);
+                // The pending row holds the badge and the held steps
+                // now, and it outlives this session — the completion
+                // link may be clicked in another browser entirely.
                 clear_staked_out_badge(session);
                 pending_transitions::clear(session);
-
-                log_activity(None, "user_signup", basic_info.user_id, None, next.clone())
-                    .await
-                    .ok();
-
-                // Redirect to intended page or home
-                let page_url = session
-                    .get::<String>("auth_page")
-                    .as_deref()
-                    .and_then(pages_return_url);
-                if let Some(page_url) = page_url {
-                    session.remove("auth_page");
-                    session.remove("auth_next");
-                    Redirect::see_other(page_url).into_response()
-                } else if let Some(next) = next {
-                    session.remove("auth_next");
-                    Redirect::see_other(next).into_response()
-                } else {
-                    Redirect::see_other("/").into_response()
-                }
+                SignupOutcome::Deferred
             }
-            Ok(None) => {
-                // The email address already belongs to an account.
-                Redirect::see_other("/login?exists=true").into_response()
-            }
-            Err(_) => Redirect::see_other("/login?system=true").into_response(),
+            Ok(DeferSignupOutcome::AlreadyRegistered) => SignupOutcome::AlreadyRegistered,
+            Ok(DeferSignupOutcome::RateLimited) => SignupOutcome::RateLimited,
+            Err(_) => SignupOutcome::Unavailable,
+        };
+    }
+
+    // Call user-service's signup via NATS
+    match request_with_retry::<Option<BasicInfo>>("user.auth.signup", signup_request).await {
+        Ok(Some(basic_info)) => {
+            // Regular password signup - log them in immediately.
+            // Rotate the session ID on this privilege transition to
+            // prevent session fixation.
+            session.renew();
+            session.set("basic_info", &basic_info);
+
+            // Clear signup-specific session data
+            session.remove("signup_protected");
+            session_tags::clear(session);
+            clear_staked_out_badge(session);
+            pending_transitions::clear(session);
+
+            log_activity(None, "user_signup", basic_info.user_id, None, next)
+                .await
+                .ok();
+
+            SignupOutcome::SignedIn(basic_info)
         }
+        // The email address already belongs to an account.
+        Ok(None) => SignupOutcome::AlreadyRegistered,
+        Err(_) => SignupOutcome::Unavailable,
+    }
+}
+
+/// Where a visitor goes once signed in, by the `page=` or `next=` the login
+/// page was given, and forgets them.
+fn post_auth_redirect(session: &Session, next: Option<String>) -> Response {
+    let page_url = session
+        .get::<String>("auth_page")
+        .as_deref()
+        .and_then(pages_return_url);
+    if let Some(page_url) = page_url {
+        session.remove("auth_page");
+        session.remove("auth_next");
+        Redirect::see_other(page_url).into_response()
+    } else if let Some(next) = next {
+        session.remove("auth_next");
+        Redirect::see_other(next).into_response()
     } else {
+        Redirect::see_other("/").into_response()
+    }
+}
+
+#[handler]
+#[tracing::instrument]
+pub async fn signup_action(
+    session: &Session,
+    RealIp(client_ip): RealIp,
+    Form(form): Form<SignupForm>,
+) -> Response {
+    let next: Option<String> = session
+        .get::<String>("auth_next")
+        .filter(|n| is_local_next(n));
+
+    // For passkey users, this shouldn't be reached since JavaScript handles the flow
+    // This is only for password users now
+    if form.use_passkey.unwrap_or(false) {
         // Passkey signup - this shouldn't be reached since JavaScript handles it
         // Return an error if somehow we get here
-        Redirect::see_other("/login?system=true").into_response()
+        return Redirect::see_other("/login?system=true").into_response();
+    }
+
+    // Validate password confirmation
+    if form.password1 != form.password2 {
+        return Redirect::see_other("/login?mismatch=true").into_response();
+    }
+
+    let token = form.cf_turnstile_response.as_deref().unwrap_or("");
+
+    let fields = PasswordSignup {
+        handle: form.handle,
+        email: form.email,
+        password: form.password1,
+        newsletter: form.newsletter.unwrap_or(false),
+        zipcode: form.zipcode,
+        join_project: None,
+    };
+
+    match sign_up_with_password(session, client_ip, fields, token, next.clone()).await {
+        SignupOutcome::SignedIn(_) => post_auth_redirect(session, next),
+        SignupOutcome::Deferred => Redirect::see_other("/check-email").into_response(),
+        SignupOutcome::AlreadyRegistered => {
+            Redirect::see_other("/login?exists=true").into_response()
+        }
+        SignupOutcome::RateLimited => {
+            Redirect::see_other("/login?ratelimited=true").into_response()
+        }
+        SignupOutcome::Unavailable => Redirect::see_other("/login?system=true").into_response(),
     }
 }
 
@@ -809,17 +871,26 @@ struct LoginForm {
     password: String,
 }
 
-#[handler]
-#[tracing::instrument]
-pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Response {
-    let next: Option<String> = session
-        .get::<String>("auth_next")
-        .filter(|n| is_local_next(n));
+/// How an attempt to sign in with a password came out.
+pub enum PasswordLogin {
+    /// The session is signed in to this account.
+    SignedIn(BasicInfo),
+    /// The email address and password don't match an account.
+    Refused,
+    /// Something on our side failed.
+    Unavailable,
+}
 
-    let login_request = Login {
-        email: form.email.clone(),
-        password: form.password,
-    };
+/// Sign the session in with an email address and password, applying what
+/// the session was holding for the account: signup-context tags, a
+/// staked-out badge, held training steps. `next` is only recorded.
+pub async fn log_in_with_password(
+    session: &Session,
+    email: String,
+    password: String,
+    next: Option<String>,
+) -> PasswordLogin {
+    let login_request = Login { email, password };
 
     // Call user-service's login via NATS
     match request_with_retry::<Option<BasicInfo>>("user.auth.login", login_request).await {
@@ -834,27 +905,29 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
             grant_staked_out_badge(session, basic_info.user_id).await;
             apply_pending_transitions(session, basic_info.user_id).await;
 
-            log_activity(None, "user_login", basic_info.user_id, None, next.clone())
+            log_activity(None, "user_login", basic_info.user_id, None, next)
                 .await
                 .ok();
 
-            // Redirect to intended page or home
-            let page_url = session
-                .get::<String>("auth_page")
-                .as_deref()
-                .and_then(pages_return_url);
-            if let Some(page_url) = page_url {
-                session.remove("auth_page");
-                session.remove("auth_next");
-                Redirect::see_other(page_url).into_response()
-            } else if let Some(next) = next {
-                session.remove("auth_next");
-                Redirect::see_other(next).into_response()
-            } else {
-                Redirect::see_other("/").into_response()
-            }
+            PasswordLogin::SignedIn(basic_info)
         }
-        Ok(None) => {
+        Ok(None) => PasswordLogin::Refused,
+        // This should never happen since request_with_retry retries indefinitely
+        // But we include it for completeness
+        Err(_) => PasswordLogin::Unavailable,
+    }
+}
+
+#[handler]
+#[tracing::instrument]
+pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Response {
+    let next: Option<String> = session
+        .get::<String>("auth_next")
+        .filter(|n| is_local_next(n));
+
+    match log_in_with_password(session, form.email, form.password, next.clone()).await {
+        PasswordLogin::SignedIn(_) => post_auth_redirect(session, next),
+        PasswordLogin::Refused => {
             // Login failed - redirect back with error
             if let Some(next) = next {
                 Redirect::see_other(format!("/login?password=true&next={next}")).into_response()
@@ -862,9 +935,7 @@ pub async fn login_action(session: &Session, Form(form): Form<LoginForm>) -> Res
                 Redirect::see_other("/login?password=true").into_response()
             }
         }
-        Err(_) => {
-            // This should never happen since request_with_retry retries indefinitely
-            // But we include it for completeness
+        PasswordLogin::Unavailable => {
             if let Some(next) = next {
                 Redirect::see_other(format!("/login?system=true&next={next}")).into_response()
             } else {
@@ -1394,6 +1465,7 @@ pub async fn webauthn_registration_complete(
                         badgeclass: staked_out_badge(session),
                         attribution: first_touch(session),
                         pending_transitions: pending_transitions::list(session),
+                        join_project: None,
                     };
 
                     match request_with_retry::<Option<BasicInfo>>(

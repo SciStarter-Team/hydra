@@ -14,7 +14,8 @@ use common::{
         user::{
             BasicInfo, BookmarkCheckRequest, BookmarkCheckResponse, BookmarkCreateRequest,
             BookmarkCreateResponse, ProjectJoinCheckRequest, ProjectJoinCheckResponse,
-            UserDisplayInfoBatchRequest, UserDisplayInfoBatchResponse,
+            ProjectJoinRequest, ProjectJoinResponse, UserDisplayInfoBatchRequest,
+            UserDisplayInfoBatchResponse,
         },
     },
     service::{log_share, request, send},
@@ -23,7 +24,8 @@ use common::{
 };
 use poem::{
     IntoResponse, handler,
-    web::{Form, Html, Path},
+    session::Session,
+    web::{Form, Html, Path, Query, RealIp},
 };
 use sailfish::TemplateOnce;
 use std::collections::HashMap;
@@ -38,6 +40,7 @@ use crate::middleware::authorization::Authenticated;
 use crate::participant_file::ParticipantFile;
 use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
+use crate::project::linked_platform::PlatformCopy;
 use common::quill::content_to_html;
 
 const DOMAIN: &str = env!("DOMAIN");
@@ -329,6 +332,9 @@ pub struct DetailPage {
     pub slug: String,
     pub kind: DetailPageKind,
     pub target_id: Ulid,
+    /// Whether an account signed up for from this page would be protected
+    /// (`auth::signup_will_be_protected`), which only the session knows.
+    pub signup_protected: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -540,6 +546,8 @@ pub struct PlatformAccountForm {
     pub platform: LinkedPlatform,
     pub visitor: PlatformAccountVisitor,
     pub outcome: PlatformAccountOutcome,
+    /// Whether the page lists the project's mobile apps, further down.
+    pub has_app_links: bool,
 }
 
 #[derive(Clone)]
@@ -547,9 +555,69 @@ pub enum PlatformAccountVisitor {
     /// Signed in, with the username they have named on the platform, "" if
     /// none.
     SignedIn(String),
-    /// Not signed in; `page_path` is where to come back to afterwards.
-    SignedOut { page_path: String },
+    /// Not signed in, and offered the way to.
+    SignedOut(InlineAuthForm),
 }
+
+/// A sign-in / create-account form that sits in a project page, rather than
+/// a link to /login. Either way the visitor comes back signed in to the same
+/// page, having joined the project.
+#[derive(TemplateOnce, Clone)]
+#[template(path = "pages/detail_page_inline_auth.stpl.html")]
+pub struct InlineAuthForm {
+    pub target_id: String,
+    /// The project's page, where a signup finished from an emailed link
+    /// lands, and the full login page sends a passkey holder back to.
+    pub page_path: String,
+    pub mode: InlineAuthMode,
+    /// The email address typed so far.
+    pub email: String,
+    /// Whether to offer the newsletter: a protected account never gets it.
+    pub offer_newsletter: bool,
+    pub problem: Option<InlineAuthProblem>,
+    /// Set once a signup has been deferred to the link emailed here.
+    pub pending_email: Option<String>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InlineAuthMode {
+    SignUp,
+    SignIn,
+}
+
+/// Why the inline form is being shown again.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum InlineAuthProblem {
+    WrongPassword,
+    EmailTaken,
+    PasswordTooShort,
+    RateLimited,
+    Unavailable,
+}
+
+impl InlineAuthProblem {
+    pub fn message(self) -> &'static str {
+        match self {
+            InlineAuthProblem::WrongPassword => "Incorrect email or password.",
+            InlineAuthProblem::EmailTaken => {
+                "That email address already belongs to a SciStarter account. Sign in instead."
+            }
+            InlineAuthProblem::PasswordTooShort => {
+                "Please choose a password of at least 8 characters."
+            }
+            InlineAuthProblem::RateLimited => {
+                "Too many signup attempts from your network right now. Please try again in an hour."
+            }
+            InlineAuthProblem::Unavailable => {
+                "Something went wrong on our end. Please wait a little while and then try again."
+            }
+        }
+    }
+}
+
+/// The shortest password the inline signup accepts, as orrery's does.
+const MINIMUM_PASSWORD_LENGTH: usize = 8;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PlatformAccountOutcome {
@@ -559,7 +627,7 @@ pub enum PlatformAccountOutcome {
 }
 
 /// The path a project's page is served at.
-fn project_page_path(slug: &str) -> String {
+pub fn project_page_path(slug: &str) -> String {
     format!("{}{slug}", crate::entity::EntityKind::Project.path_prefix())
 }
 
@@ -1013,11 +1081,20 @@ impl DetailPage {
                 platform,
                 visitor: match platform_username {
                     Some(username) => PlatformAccountVisitor::SignedIn(username),
-                    None => PlatformAccountVisitor::SignedOut {
+                    None => PlatformAccountVisitor::SignedOut(InlineAuthForm {
+                        target_id: self.target_id.to_string(),
                         page_path: project_page_path(&self.slug),
-                    },
+                        mode: InlineAuthMode::SignUp,
+                        email: String::new(),
+                        offer_newsletter: !self.signup_protected,
+                        problem: None,
+                        pending_email: None,
+                    }),
                 },
                 outcome: PlatformAccountOutcome::Unsubmitted,
+                has_app_links: !row.mobile_app_url.is_empty()
+                    || !row.mobile_app_url_ios.is_empty()
+                    || !row.mobile_app_url_android.is_empty(),
             }),
         );
 
@@ -2048,7 +2125,8 @@ pub async fn connect_platform_account(
     let id_str = project_id.to_string();
 
     let project = sqlx::query!(
-        r#"SELECT is_affiliate as "is_affiliate: bool", is_inaturalist as "is_inaturalist: bool"
+        r#"SELECT is_affiliate as "is_affiliate: bool", is_inaturalist as "is_inaturalist: bool",
+                  mobile_app_url, mobile_app_url_android, mobile_app_url_ios
            FROM projects WHERE project_id = ?"#,
         id_str
     )
@@ -2087,11 +2165,208 @@ pub async fn connect_platform_account(
         platform,
         visitor: PlatformAccountVisitor::SignedIn(username),
         outcome,
+        has_app_links: !project.mobile_app_url.is_empty()
+            || !project.mobile_app_url_android.is_empty()
+            || !project.mobile_app_url_ios.is_empty(),
     }
     .render_once()
     .map_err(|e| internal(e.into()))?;
 
     Ok(Html(html).into_response())
+}
+
+#[derive(serde::Deserialize)]
+pub struct InlineAuthQuery {
+    mode: InlineAuthMode,
+    #[serde(default)]
+    email: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct InlineAuthSubmission {
+    mode: InlineAuthMode,
+    email: String,
+    password: String,
+    newsletter: Option<bool>,
+    #[serde(rename = "cf-turnstile-response")]
+    cf_turnstile_response: Option<String>,
+}
+
+/// The id and page path of the project an inline sign-in form belongs to.
+async fn inline_auth_project(id: &str) -> poem::Result<(Ulid, String)> {
+    let project_id: Ulid = id
+        .parse()
+        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::NOT_FOUND))?;
+    let id_str = project_id.to_string();
+
+    let slug = sqlx::query_scalar!(
+        r#"SELECT slug FROM entities WHERE target = ? AND kind = 'Project'"#,
+        id_str
+    )
+    .fetch_optional(db())
+    .await
+    .map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?
+    .ok_or_else(|| poem::Error::from_status(poem::http::StatusCode::NOT_FOUND))?;
+
+    Ok((project_id, project_page_path(&slug)))
+}
+
+fn render_inline_auth(form: InlineAuthForm) -> poem::Result<poem::Response> {
+    let html = form.render_once().map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
+    Ok(Html(html).into_response())
+}
+
+/// The page, reloaded signed in.
+fn signed_in_response() -> poem::Response {
+    poem::Response::builder()
+        .header("HX-Refresh", "true")
+        .finish()
+}
+
+/// Switch a project page's inline form between signing in and signing up,
+/// keeping the email address typed so far.
+#[handler]
+pub async fn inline_auth_form(
+    Path(id): Path<String>,
+    session: &Session,
+    Authenticated(user_info): Authenticated,
+    Query(query): Query<InlineAuthQuery>,
+) -> poem::Result<poem::Response> {
+    if user_info.is_some() {
+        return Ok(signed_in_response());
+    }
+
+    let (project_id, page_path) = inline_auth_project(&id).await?;
+
+    render_inline_auth(InlineAuthForm {
+        target_id: project_id.to_string(),
+        page_path,
+        mode: query.mode,
+        email: query.email,
+        offer_newsletter: !crate::auth::signup_will_be_protected(session),
+        problem: None,
+        pending_email: None,
+    })
+}
+
+/// Sign in or create an account from a project page's inline form, joining
+/// the project either way, and reload the page signed in. Anything short of
+/// that shows the form again, saying why.
+#[handler]
+pub async fn inline_auth(
+    Path(id): Path<String>,
+    session: &Session,
+    RealIp(client_ip): RealIp,
+    Form(submission): Form<InlineAuthSubmission>,
+) -> poem::Result<poem::Response> {
+    use crate::auth::{
+        PasswordLogin, PasswordSignup, SignupOutcome, log_in_with_password, sign_up_with_password,
+    };
+
+    let (project_id, page_path) = inline_auth_project(&id).await?;
+
+    let form = |mode, problem, pending_email| InlineAuthForm {
+        target_id: project_id.to_string(),
+        page_path: page_path.clone(),
+        mode,
+        email: submission.email.clone(),
+        offer_newsletter: !crate::auth::signup_will_be_protected(session),
+        problem,
+        pending_email,
+    };
+
+    match submission.mode {
+        InlineAuthMode::SignIn => {
+            match log_in_with_password(
+                session,
+                submission.email.clone(),
+                submission.password,
+                Some(page_path.clone()),
+            )
+            .await
+            {
+                PasswordLogin::SignedIn(basic_info) => {
+                    // A signup joins as part of creating the account; signing
+                    // in has to ask separately. Not fatal: they are signed in
+                    // whether or not this lands.
+                    if let Err(e) = request::<ProjectJoinResponse>(
+                        "user.joins.create",
+                        ProjectJoinRequest {
+                            user_id: basic_info.user_id,
+                            project_id: project_id.to_string(),
+                        },
+                    )
+                    .await
+                    {
+                        tracing::warn!("Failed to join {project_id} on signing in: {e}");
+                    }
+
+                    Ok(signed_in_response())
+                }
+                PasswordLogin::Refused => render_inline_auth(form(
+                    InlineAuthMode::SignIn,
+                    Some(InlineAuthProblem::WrongPassword),
+                    None,
+                )),
+                PasswordLogin::Unavailable => render_inline_auth(form(
+                    InlineAuthMode::SignIn,
+                    Some(InlineAuthProblem::Unavailable),
+                    None,
+                )),
+            }
+        }
+        InlineAuthMode::SignUp => {
+            if submission.password.chars().count() < MINIMUM_PASSWORD_LENGTH {
+                return render_inline_auth(form(
+                    InlineAuthMode::SignUp,
+                    Some(InlineAuthProblem::PasswordTooShort),
+                    None,
+                ));
+            }
+
+            let fields = PasswordSignup {
+                handle: String::new(),
+                email: submission.email.clone(),
+                password: submission.password,
+                newsletter: submission.newsletter.unwrap_or(false),
+                zipcode: String::new(),
+                join_project: Some(project_id.to_string()),
+            };
+
+            let token = submission.cf_turnstile_response.as_deref().unwrap_or("");
+
+            match sign_up_with_password(session, client_ip, fields, token, Some(page_path.clone()))
+                .await
+            {
+                SignupOutcome::SignedIn(_) => Ok(signed_in_response()),
+                SignupOutcome::Deferred => render_inline_auth(form(
+                    InlineAuthMode::SignUp,
+                    None,
+                    Some(submission.email.clone()),
+                )),
+                SignupOutcome::AlreadyRegistered => render_inline_auth(form(
+                    InlineAuthMode::SignIn,
+                    Some(InlineAuthProblem::EmailTaken),
+                    None,
+                )),
+                SignupOutcome::RateLimited => render_inline_auth(form(
+                    InlineAuthMode::SignUp,
+                    Some(InlineAuthProblem::RateLimited),
+                    None,
+                )),
+                SignupOutcome::Unavailable => render_inline_auth(form(
+                    InlineAuthMode::SignUp,
+                    Some(InlineAuthProblem::Unavailable),
+                    None,
+                )),
+            }
+        }
+    }
 }
 
 /// Staff-only edit log (lazy loaded via HTMX)
@@ -2262,6 +2537,27 @@ mod tests {
             platform: LinkedPlatform::Zooniverse,
             visitor: PlatformAccountVisitor::SignedIn(String::new()),
             outcome: PlatformAccountOutcome::Unsubmitted,
+            has_app_links: false,
+        }
+    }
+
+    fn inline_auth_form() -> InlineAuthForm {
+        InlineAuthForm {
+            target_id: Ulid::new().to_string(),
+            page_path: project_page_path("backyard-worlds"),
+            mode: InlineAuthMode::SignUp,
+            email: String::new(),
+            offer_newsletter: true,
+            problem: None,
+            pending_email: None,
+        }
+    }
+
+    fn inaturalist_form(visitor: PlatformAccountVisitor) -> PlatformAccountForm {
+        PlatformAccountForm {
+            platform: LinkedPlatform::INaturalist,
+            visitor,
+            ..platform_form()
         }
     }
 
@@ -2315,26 +2611,117 @@ mod tests {
     }
 
     #[test]
-    fn the_platform_form_renders_for_either_visitor() {
-        let signed_in = PlatformAccountForm {
-            visitor: PlatformAccountVisitor::SignedIn("Stargazer".to_string()),
-            outcome: PlatformAccountOutcome::Saved,
+    fn a_platform_where_only_some_projects_credit_says_so() {
+        let html = PlatformAccountForm {
+            visitor: PlatformAccountVisitor::SignedOut(inline_auth_form()),
             ..platform_form()
         }
         .render_once()
         .unwrap();
-        assert!(signed_in.contains(r#"value="Stargazer""#));
-        assert!(signed_in.contains("Your Zooniverse account is connected."));
 
-        let signed_out = PlatformAccountForm {
-            visitor: PlatformAccountVisitor::SignedOut {
-                page_path: project_page_path("backyard-worlds"),
-            },
-            ..platform_form()
+        assert!(html.contains("Three Easy Steps!"));
+        assert!(html.contains("paste your Zooniverse username below (case-sensitive)."));
+        assert!(html.contains("even if you join more SciStarter Affiliate Zooniverse projects"));
+    }
+
+    #[test]
+    fn a_signed_out_visitor_is_walked_through_signing_in_first() {
+        let html = inaturalist_form(PlatformAccountVisitor::SignedOut(inline_auth_form()))
+            .render_once()
+            .unwrap();
+
+        assert!(html.contains("Three Easy Steps!"));
+        assert!(html.contains("Sign in to SciStarter or create a free SciStarter account."));
+        assert!(html.contains("class=\"inline-auth"));
+        assert!(html.contains("<turnstile-widget"));
+        assert!(html.contains(r#"name="username" type="text" disabled"#));
+        assert!(html.contains("That's it!"));
+    }
+
+    #[test]
+    fn a_signed_in_visitor_without_a_username_has_two_steps() {
+        let html = inaturalist_form(PlatformAccountVisitor::SignedIn(String::new()))
+            .render_once()
+            .unwrap();
+
+        assert!(html.contains("Two Easy Steps!"));
+        assert!(!html.contains("inline-auth"));
+        assert!(!html.contains("disabled"));
+        assert!(!html.contains("case-sensitive"));
+        assert!(!html.contains("app links"));
+    }
+
+    #[test]
+    fn the_app_links_are_mentioned_only_when_the_page_has_them() {
+        let html = PlatformAccountForm {
+            has_app_links: true,
+            ..inaturalist_form(PlatformAccountVisitor::SignedIn(String::new()))
         }
         .render_once()
         .unwrap();
-        assert!(signed_out.contains("/login?next=%2Fprojects%2Fbackyard-worlds"));
-        assert!(!signed_out.contains("<form"));
+
+        assert!(html.contains("or use the app links below"));
+    }
+
+    #[test]
+    fn a_connected_visitor_sees_their_username_and_may_change_it() {
+        let html = PlatformAccountForm {
+            outcome: PlatformAccountOutcome::Saved,
+            ..inaturalist_form(PlatformAccountVisitor::SignedIn("Stargazer".to_string()))
+        }
+        .render_once()
+        .unwrap();
+
+        assert!(html.contains("connected as <strong>Stargazer</strong>"));
+        assert!(html.contains("<details"));
+        assert!(html.contains(r#"value="Stargazer""#));
+        assert!(!html.contains("Easy Steps!"));
+    }
+
+    #[test]
+    fn clearing_the_username_returns_to_the_steps() {
+        let html = PlatformAccountForm {
+            outcome: PlatformAccountOutcome::Blank,
+            ..inaturalist_form(PlatformAccountVisitor::SignedIn(String::new()))
+        }
+        .render_once()
+        .unwrap();
+
+        assert!(html.contains("Two Easy Steps!"));
+        assert!(html.contains("Please enter your iNaturalist username."));
+    }
+
+    #[test]
+    fn the_inline_form_switches_between_signing_up_and_in() {
+        let sign_up = inline_auth_form().render_once().unwrap();
+        assert!(sign_up.contains(r#"name="mode" value="sign_up""#));
+        assert!(sign_up.contains(r#"name="newsletter""#));
+        assert!(sign_up.contains("?mode=sign_in"));
+
+        let sign_in = InlineAuthForm {
+            mode: InlineAuthMode::SignIn,
+            email: "stargazer@example.invalid".to_string(),
+            problem: Some(InlineAuthProblem::WrongPassword),
+            ..inline_auth_form()
+        }
+        .render_once()
+        .unwrap();
+        assert!(sign_in.contains(r#"name="mode" value="sign_in""#));
+        assert!(sign_in.contains(r#"value="stargazer@example.invalid""#));
+        assert!(sign_in.contains("Incorrect email or password."));
+        assert!(!sign_in.contains("<turnstile-widget"));
+    }
+
+    #[test]
+    fn a_deferred_signup_says_to_check_email() {
+        let html = InlineAuthForm {
+            pending_email: Some("stargazer@example.invalid".to_string()),
+            ..inline_auth_form()
+        }
+        .render_once()
+        .unwrap();
+
+        assert!(html.contains("Check your email."));
+        assert!(!html.contains("<form"));
     }
 }

@@ -38,6 +38,11 @@ pub struct Signup {
     /// keeps them on the pending row until the emailed link is clicked.
     #[serde(default)]
     pub pending_transitions: Vec<PendingTransition>,
+    /// The project the visitor signed up from, which the new account joins --
+    /// orrery's `join` signup field. A deferred signup keeps it on the
+    /// pending row until the emailed link is clicked.
+    #[serde(default)]
+    pub join_project: Option<String>,
 }
 
 /// A training step a visitor earned while signed out, waiting for the account
@@ -305,7 +310,7 @@ pub fn signup_needs_protection<S: AsRef<str>>(tags: &[S]) -> bool {
 /// about the same cohort, and a partner can need one without the other --
 /// girlscout is protected and is not credited, ldpl is credited and is not
 /// protected.
-pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 8] = [
+pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 9] = [
     "laplstudent",
     "ldpl",
     "signup-noyce",
@@ -314,6 +319,7 @@ pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 8] = [
     "port-charlotte",
     "turkey-scicomm",
     "azla",
+    "ambassador-foundations-event",
 ];
 
 /// Whether an account carrying `tags` from its signup context is credited
@@ -2209,6 +2215,7 @@ mod tests {
             badgeclass: None,
             attribution: attribution.clone(),
             pending_transitions: vec![],
+            join_project: None,
         };
 
         let decoded: Signup =

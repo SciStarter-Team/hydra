@@ -10,7 +10,9 @@
     <link rel="stylesheet" type="text/css" href="/-static/css/style.css" />
     <script src="/-static/js/scripts.js"></script>
     <script src="/-static/js/clickthrough.js" defer></script>
+    <% if self.own_badge { %>
     <script type="text/javascript" src="https://platform-api.sharethis.com/js/sharethis.js#property=684be7fdeb2dda0012da59f3&product=inline-share-buttons&source=platform" async="async"></script>
+    <% } %>
     <%# Everyone's view of this page carries these, crawlers' included:
         they say what was earned, never who earned it. %>
     <meta property="og:title" content="<%= &self.link_title %>">
@@ -33,11 +35,11 @@
   <body>
     <div class="ss-container mx-auto !py-4 ss-text">
       <% include!("language.stpl.html"); %>
-      <div class="flex flex-col sm:flex-row max-w-[1120px] mx-auto mt-4">
-        <a class="flex justify-center" href="<%= &self.image_url %>" download>
-          <img src="<%= &self.image_url %>" title="<%= crate::i18n::tr("verifiable {name} badge image").replace("{name}", &self.name) %>" class="self-center md:self-start w-[200px] h-[200px] mr-4 mb-4 sm:mb-0" />
+      <div class="badge-credential max-w-[1120px] mx-auto mt-4">
+        <a class="badge-credential-image" href="<%= &self.image_url %>" download>
+          <img src="<%= &self.image_url %>" title="<%= crate::i18n::tr("verifiable {name} badge image").replace("{name}", &self.name) %>" class="w-[200px] h-[200px]" />
         </a>
-        <div>
+        <div class="badge-credential-header">
           <h1 class="ss-xl mb-2" lang="<%= self.lang %>"><%= self.name %></h1>
           <p class="ss-small"><%- &self.badgeclass_description %></p>
           <div class="flex items-start gap-4">
@@ -47,11 +49,9 @@
               <p class="ss-xxs mt-0"><%= crate::i18n::tr("Last verified just now by SciStarter") %></p>
             </div>
           </div>
-          <%# Everyone is shown both what the earner can do with the badge
-              and how anyone can check whom it was issued to. %>
           <div>
             <p class="ss-xxs" style="margin-bottom: 0px"><b><%= crate::i18n::tr("Issued on:") %></b> <%= &self.issued_on %></p>
-            <% if self.confirm { %>
+            <% if !self.own_badge && self.confirm { %>
               <% if self.confirmed { %>
                 <p class="ss-xxs"><b><%= crate::i18n::tr("Issued to:") %></b> <span style="color: #09BC10"><%= &self.confirm_email %></span></p>
               <% } else { %>
@@ -59,7 +59,11 @@
               <% } %>
             <% } %>
           </div>
-          <% include!("icons.stpl.html"); %>
+        </div>
+        <% include!("icons.stpl.html"); %>
+        <%# The earner shares their badge; anyone else checks whom it was
+            issued to. Nobody needs both. %>
+        <% if self.own_badge { %>
           <section class="badge-panel" aria-labelledby="showcase-heading">
             <h2 id="showcase-heading" class="badge-section-heading"><%= crate::i18n::tr(crate::badge::SHOWCASE_HEADING) %></h2>
             <p class="ss-xxs"><%= crate::i18n::tr(crate::badge::SHOWCASE_INTRO) %></p>
@@ -99,29 +103,28 @@
               </div>
             </div>
           </section>
-          <% if !self.confirmed { %>
-            <section class="badge-panel" aria-labelledby="confirm-heading">
-              <div class="badge-option badge-option-bare">
-                <svg class="badge-option-icon badge-icon-confirm" viewBox="0 0 24 24" aria-hidden="true"><use href="#badge-icon-shield-check" /></svg>
-                <div class="badge-option-body">
-                  <h2 id="confirm-heading" class="badge-section-heading"><%= crate::i18n::tr(crate::badge::CONFIRM_HEADING) %></h2>
-                  <p class="badge-subheading badge-audience"><%= crate::i18n::tr(crate::badge::CONFIRM_AUDIENCE) %></p>
-                  <p class="ss-xxs mb-2"><%= &self.confirm_intro %></p>
-                </div>
+        <% } else if !self.confirmed { %>
+          <section class="badge-panel" aria-labelledby="confirm-heading">
+            <div class="badge-option badge-option-bare">
+              <svg class="badge-option-icon badge-icon-confirm" viewBox="0 0 24 24" aria-hidden="true"><use href="#badge-icon-shield-check" /></svg>
+              <div class="badge-option-body">
+                <h2 id="confirm-heading" class="badge-section-heading"><%= crate::i18n::tr(crate::badge::CONFIRM_HEADING) %></h2>
+                <p class="badge-subheading badge-audience"><%= crate::i18n::tr(crate::badge::CONFIRM_AUDIENCE) %></p>
+                <p class="ss-xxs mb-2"><%= &self.confirm_intro %></p>
               </div>
-              <form method="get" class="mb-2">
-                <label for="confirm-recipient" class="sr-only"><%= crate::i18n::tr("Enter email address") %></label>
-                <div class="badge-confirm-row">
-                  <input id="confirm-recipient" type="email" name="confirm" placeholder="<%= crate::i18n::tr("Enter email address") %>" required value="<%= &self.confirm_email %>" />
-                  <button type="submit" class="btn btn-blue"><%= crate::i18n::tr(crate::badge::CONFIRM_BUTTON) %></button>
-                </div>
-              </form>
-              <p class="badge-fine-print"><%- crate::i18n::tr(r#"You can also use Open Badges tools such as <a target=_blank href="https://badgecheck.io/" class="hyperlink">BadgeCheck</a> to verify this badge."#) %></p>
-            </section>
-          <% } %>
-        </div>
+            </div>
+            <form method="get" class="mb-2">
+              <label for="confirm-recipient" class="sr-only"><%= crate::i18n::tr("Enter email address") %></label>
+              <div class="badge-confirm-row">
+                <input id="confirm-recipient" type="email" name="confirm" placeholder="<%= crate::i18n::tr("Enter email address") %>" required value="<%= &self.confirm_email %>" />
+                <button type="submit" class="btn btn-blue"><%= crate::i18n::tr(crate::badge::CONFIRM_BUTTON) %></button>
+              </div>
+            </form>
+            <p class="badge-fine-print"><%- crate::i18n::tr(r#"You can also use Open Badges tools such as <a target=_blank href="https://badgecheck.io/" class="hyperlink">BadgeCheck</a> to verify this badge."#) %></p>
+          </section>
+        <% } %>
 
-        <div class="badge-issuer min-w-[200px] md:ml-4">
+        <div class="badge-issuer">
           <div class="ss-xxs"><%= crate::i18n::tr("Offered by:") %></div>
           <a href="/"><img src="/-static/img/logo/logo-rgb-coral-blue.svg" alt="SciStarter logo" class="max-w-[100px] mb-2" /></a>
 
@@ -145,7 +148,7 @@
 
       <hr class="badge-rule badge-rule-before-details" />
 
-      <div class="flex flex-col sm:flex-row">
+      <div class="badge-details">
         <div class="w-full p-4 gap-8 md:flex">
           <div class="md:text-right min-w-[250px] md:max-w-[250px]">
             <h2 class="ss-normal"><%= crate::i18n::tr("Earning Criteria") %></h2>
@@ -155,14 +158,16 @@
             <%- &self.badgeclass_criteria_text %>
           </div>
         </div>
-        <div class="w-full sm:w-[300px] p-4">
-          <% if !self.tags.is_empty() { %>
+        <% if !self.tags.is_empty() { %>
+          <div class="badge-details-aside p-4">
             <h3 class="ss-normal mb-4"><%= crate::i18n::tr("Tags") %></h3>
-            <% for tag in self.tags.iter() { %>
-              <span class="ss-tag"><%= tag %></span>
-            <% } %>
-          <% } %>
-        </div>
+            <div>
+              <% for tag in self.tags.iter() { %>
+                <span class="ss-tag"><%= tag %></span>
+              <% } %>
+            </div>
+          </div>
+        <% } %>
       </div>
 
       <div class="flex flex-col sm:flex-row">

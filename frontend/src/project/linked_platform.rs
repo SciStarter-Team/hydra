@@ -54,6 +54,67 @@ pub(crate) fn push_zooniverse_affiliate_filter(qb: &mut sqlx::QueryBuilder<sqlx:
     qb.push("))");
 }
 
+/// How a project page talks about a platform, beside what
+/// `common::linked_platform` knows of it.
+pub trait PlatformCopy {
+    /// Where the platform's projects that credit participation are listed,
+    /// when only some of them do; None when every project on the platform
+    /// does.
+    fn eligible_projects_url(self) -> Option<String>;
+
+    /// "a" or "an", before the platform's name.
+    fn article(self) -> &'static str;
+
+    /// Where a visitor signs in to the platform to find their username.
+    fn sign_in_url(self) -> &'static str;
+
+    /// One unit of what the platform credits, and what a participant does to
+    /// make one: an observation is uploaded, a classification made.
+    fn contribution(self) -> &'static str;
+    fn contributed(self) -> &'static str;
+}
+
+impl PlatformCopy for LinkedPlatform {
+    fn eligible_projects_url(self) -> Option<String> {
+        match self {
+            LinkedPlatform::INaturalist => None,
+            LinkedPlatform::Zooniverse => Some(
+                crate::search::FinderQuery::projects()
+                    .with_misc_filter(crate::search::MiscFilter::ZooniverseAffiliate)
+                    .url(),
+            ),
+        }
+    }
+
+    fn article(self) -> &'static str {
+        match self {
+            LinkedPlatform::INaturalist => "an",
+            LinkedPlatform::Zooniverse => "a",
+        }
+    }
+
+    fn sign_in_url(self) -> &'static str {
+        match self {
+            LinkedPlatform::INaturalist => "https://www.inaturalist.org/login",
+            LinkedPlatform::Zooniverse => "https://www.zooniverse.org/",
+        }
+    }
+
+    fn contribution(self) -> &'static str {
+        match self {
+            LinkedPlatform::INaturalist => "observation",
+            LinkedPlatform::Zooniverse => "classification",
+        }
+    }
+
+    fn contributed(self) -> &'static str {
+        match self {
+            LinkedPlatform::INaturalist => "uploaded",
+            LinkedPlatform::Zooniverse => "made",
+        }
+    }
+}
+
 /// The platform whose activity on a project is credited to anybody who
 /// connects their account there, if there is one.
 ///

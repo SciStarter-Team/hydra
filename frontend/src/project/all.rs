@@ -1564,6 +1564,19 @@ impl LoadStorePeered for ProjectAll {
     const GROUP: &str = "project";
     const SPECIFIC: &str = "all";
 
+    /// Whether the project is on iNaturalist, and which iNaturalist project
+    /// it is, follow from its URL.
+    async fn after_store(&self) -> Result<(), Error> {
+        if let Err(err) = super::inaturalist::derive_link(self.project_id).await {
+            tracing::error!(
+                "Deriving the iNaturalist link of {}: {err:#}",
+                self.project_id
+            );
+        }
+
+        Ok(())
+    }
+
     #[tracing::instrument]
     async fn save_to_database(&self) -> Result<(), Error> {
         let Some(source) = self.update_source else {

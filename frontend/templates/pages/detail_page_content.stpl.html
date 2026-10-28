@@ -206,16 +206,27 @@
             <% match &self.guidance { GetStartedGuidance::Custom(html) => { %>
             <div class="mb-3"><%- html %></div>
             <% } GetStartedGuidance::LinkedPlatform(form) => { %>
-            <h3 class="text-lg font-semibold text-primary-dark mb-2">Track Your Citizen Science Contributions</h3>
-            <p class="mb-3">iNaturalist and Zooniverse are popular citizen science platforms featuring projects promoted by SciStarter. Connect your accounts to track your participation in <strong>SciStarter Affiliate projects</strong> on your SciStarter dashboard.</p>
-            <p class="mb-3">All iNaturalist projects are SciStarter Affiliates, but only select Zooniverse projects qualify. <a class="text-primary-action underline" href="<%= crate::search::FinderQuery::projects().with_misc_filter(crate::search::MiscFilter::ZooniverseAffiliate).url() %>" target="_blank" rel="noopener">View eligible Zooniverse projects</a>.</p>
-            <p class="mb-3">More integrations coming soon!</p>
-            <h4 class="font-semibold text-primary-dark mt-6 mb-2">Connect Your <%= form.platform.label() %> Account</h4>
-            <%+ form.clone() %>
-            <% if form.platform.username_case_sensitive() { %>
-            <p class="text-sm mb-3">Usernames are case-sensitive. Enter yours exactly as it appears on <%= form.platform.label() %>.</p>
+            <% let label = form.platform.label(); %>
+            <% let eligible_url = form.platform.eligible_projects_url(); %>
+            <h3 class="text-lg font-semibold text-primary-dark mb-2">Connect Your <%= label %> Account &mdash; Just Once!</h3>
+            <%/* On the platform's own page, "X is a project on X" would read oddly */%>
+            <% if self.name.trim() == label { %>
+            <p class="mb-2"><%= label %> is a SciStarter Affiliate project! Connect your accounts to:</p>
+            <% } else { %>
+            <p class="mb-2"><%= &self.name %> is a SciStarter Affiliate project on <%= label %>! Connect your accounts to:</p>
             <% } %>
-            <p class="mb-3">Please note: Contributions may take 24 hours or longer to appear on your SciStarter dashboard. As of August 2026, only contributions made after connecting your accounts are tracked. Earlier contributions cannot be added retroactively. Your existing contribution records on iNaturalist and Zooniverse remain unchanged.</p>
+            <ul class="list-disc pl-6 mb-3 space-y-1">
+              <% if let Some(url) = &eligible_url { %>
+              <li>Get credit for participating in <%= &self.name %> and other SciStarter Affiliate projects, including <a class="text-primary-action underline" href="<%= url %>" target="_blank" rel="noopener">these <%= label %> projects</a>.</li>
+              <% } else { %>
+              <li>Get credit for participating in <%= label %> and other SciStarter Affiliate projects.</li>
+              <% } %>
+              <li>See your impact grow on your <a class="text-primary-action underline" href="/dashboard" target="_blank">SciStarter Dashboard</a>.</li>
+              <li>Help reach 5 million acts of science! Every <% if eligible_url.is_some() { %><%= form.platform.contribution() %> <%= form.platform.contributed() %> on a SciStarter Affiliate <%= label %> project<% } else { %><%= label %> <%= form.platform.contribution() %> <%= form.platform.contributed() %><% } %> during April counts toward the global <a class="text-primary-action underline" href="/citizensciencemonth" target="_blank">Citizen Science Month</a> goal.</li>
+            </ul>
+            <%+ form.clone() %>
+            <p class="mb-3">Your participation will appear on your SciStarter Dashboard within 24 hours.</p>
+            <p class="mb-3"><strong>Important:</strong> Only <%= form.platform.contribution() %>s <%= form.platform.contributed() %> after connecting your accounts will count. Previous <%= form.platform.contribution() %>s cannot be added retroactively.</p>
             <% } GetStartedGuidance::Affiliate => { %>
             <p class="mb-3">Good news! This is a SciStarter Affiliate project. You can earn credit in your <a class="text-primary-action underline" href="/dashboard" target="_blank">SciStarter Dashboard</a> for your participation.</p>
             <p class="mb-3">Click the <q>Visit</q> button on this page. You will be directed to the project's website or app and invited to create a project account there. <strong>Use the same email address (<em>case sensitive!</em>) you used to create your SciStarter account to join this project.</strong></p>

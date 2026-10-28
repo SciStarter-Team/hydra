@@ -268,6 +268,7 @@ pub async fn api_create_user(req: &Request) -> Result<ApiCreateUserResponse, any
             ..Attribution::default()
         },
         pending_transitions: Vec::new(),
+        join_project: None,
     };
 
     let basic_info: Option<common::message::user::BasicInfo> =

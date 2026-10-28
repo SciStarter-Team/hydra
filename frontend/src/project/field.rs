@@ -3839,6 +3839,25 @@ impl LoadStorePeered for ProjectField {
     const GROUP: &str = "project";
     const SPECIFIC: &str = "field";
 
+    /// Whether the project is on iNaturalist, and which iNaturalist project
+    /// it is, follow from these fields.
+    async fn after_store(&self) -> Result<(), Error> {
+        if matches!(
+            self.field,
+            ProjectFieldValue::Url(_)
+                | ProjectFieldValue::IsInaturalist(_)
+                | ProjectFieldValue::InatProjectId(_)
+        ) && let Err(err) = super::inaturalist::derive_link(self.project_id).await
+        {
+            tracing::error!(
+                "Deriving the iNaturalist link of {}: {err:#}",
+                self.project_id
+            );
+        }
+
+        Ok(())
+    }
+
     #[tracing::instrument]
     async fn save_to_database(&self) -> Result<(), Error> {
         // Check source permission first

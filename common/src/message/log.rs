@@ -779,6 +779,32 @@ impl From<PageChange> for String {
     }
 }
 
+/// A change to a project or event that is not an update to its page: staff
+/// edits, publishing, affiliate linking and other upkeep, as the orrery sync
+/// reports them. Logged so that the edit history shows the change, but not a
+/// [`PageChange`], so the page is not taken to have been updated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Housekeeping {
+    Project,
+    Event,
+}
+
+impl Housekeeping {
+    /// The action the change is logged as.
+    pub const fn action(self) -> &'static str {
+        match self {
+            Housekeeping::Project => "project-housekeeping",
+            Housekeeping::Event => "event-housekeeping",
+        }
+    }
+}
+
+impl From<Housekeeping> for String {
+    fn from(change: Housekeeping) -> String {
+        change.action().to_string()
+    }
+}
+
 /// Ask when each of `targets` last changed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LastChangedRequest {

@@ -95,8 +95,9 @@
             </label>
           </div>
           <% } %>
-          <div id="signup-turnstile" class="cf-turnstile my-4" data-sitekey="<%= self.turnstile_sitekey %>" data-language="<%= self.turnstile_language %>" data-callback="onSignupTurnstileSuccess" data-expired-callback="onSignupTurnstileReset" data-error-callback="onSignupTurnstileError"></div>
-          <div id="signup-turnstile-fallback" class="hidden text-sm text-gray-600 my-4"><%= crate::i18n::tr("We couldn't run our automatic spam check on your browser or network. You can still sign up—we'll email you a link to finish creating your account.") %></div>
+          <turnstile-widget class="block my-4" sitekey="<%= self.turnstile_sitekey %>" language="<%= self.turnstile_language %>">
+            <div data-turnstile-fallback hidden class="text-sm text-gray-600"><%= crate::i18n::tr("We couldn't run our automatic spam check on your browser or network. You can still sign up—we'll email you a link to finish creating your account.") %></div>
+          </turnstile-widget>
           <input class="btn btn-primary w-full" type=submit value="<%= crate::i18n::tr("Sign Up") %>">
         </form>
       </div>
@@ -104,27 +105,7 @@
   </div>
 </div>
 
-<script>
- function onSignupTurnstileSuccess(_token) {
-     let widget = document.getElementById("signup-turnstile");
-     if (widget) widget.style.display = "none";
-     let note = document.getElementById("signup-turnstile-fallback");
-     if (note) note.classList.add("hidden");
- }
- function onSignupTurnstileReset() {
-     let widget = document.getElementById("signup-turnstile");
-     if (widget) widget.style.display = "";
- }
- function onSignupTurnstileError() {
-     // Turnstile can't run here (blocked script or failed challenge). The
-     // form still works: the server defers the account behind an emailed
-     // completion link instead.
-     onSignupTurnstileReset();
-     let note = document.getElementById("signup-turnstile-fallback");
-     if (note) note.classList.remove("hidden");
- }
-</script>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer onerror="onSignupTurnstileError()"></script>
+<script src="/-static/js/turnstile-widget.js"></script>
 
 <script>
  // htmx.config.logAll = true;

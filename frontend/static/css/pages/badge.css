@@ -6,6 +6,89 @@
     margin-block: 1.5rem;
 }
 
+/* The credential: the badge's picture, its name and description, the
+   section where the reader does something with it, and its issuer. A phone
+   stacks them. A wider screen sets the picture beside the name, with the
+   section and then the issuer the full width beneath, because a column on
+   either side would leave the section too narrow to read. Only a desktop
+   has the width for the picture and the issuer to stand in columns of their
+   own on either side. */
+.badge-credential {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "image" "header" "panel" "issuer";
+    column-gap: 1rem;
+}
+.badge-credential-image {
+    grid-area: image;
+    display: flex;
+    justify-self: center;
+    align-self: start;
+    margin-bottom: 1rem;
+}
+.badge-credential-header {
+    grid-area: header;
+}
+.badge-credential > .badge-panel {
+    grid-area: panel;
+}
+.badge-issuer {
+    grid-area: issuer;
+    align-self: start;
+}
+@media (min-width: 640px) {
+    .badge-credential {
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas: "image header" "panel panel" "issuer issuer";
+    }
+    .badge-credential-image {
+        justify-self: start;
+        margin-bottom: 0;
+    }
+}
+@media (min-width: 1024px) {
+    .badge-credential {
+        grid-template-columns: auto minmax(0, 1fr) 200px;
+        grid-template-areas: "image header issuer" "image panel issuer";
+    }
+}
+
+/* Below a desktop's width the issuer follows the section beneath the
+   badge's name, so it is ruled off from it. */
+@media (max-width: 1023px) {
+    .badge-issuer {
+        border-top: 1px solid #E5E7EB;
+        margin-top: 1.5rem;
+        padding-top: 1.5rem;
+    }
+}
+
+/* How the badge is earned, and its tags. The tags stand in a column beside
+   the criteria only on a desktop; narrower, they follow the criteria,
+   arranged like the skills beneath them. */
+.badge-details {
+    display: flex;
+    flex-direction: column;
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+    .badge-details-aside {
+        display: grid;
+        grid-template-columns: 250px minmax(0, 1fr);
+        column-gap: 2rem;
+    }
+    .badge-details-aside > h3 {
+        text-align: right;
+    }
+}
+@media (min-width: 1024px) {
+    .badge-details {
+        flex-direction: row;
+    }
+    .badge-details-aside {
+        width: 300px;
+    }
+}
+
 /* The sections where the earner shows the badge off and where anyone
    confirms whom it was issued to sit on a cool tint, set apart from the
    credential above them. */
@@ -190,8 +273,6 @@
     margin-bottom: 0.5rem;
 }
 
-/* On a phone the issuer's column drops below the earner's sections, which
-   end with a section of their own, so it is ruled off from them too. */
 @media (max-width: 639px) {
     .badge-panel {
         padding: 1rem;
@@ -221,10 +302,5 @@
     .badge-option-icon {
         width: 2.25rem;
         height: 2.25rem;
-    }
-    .badge-issuer {
-        border-top: 1px solid #E5E7EB;
-        margin-top: 1.5rem;
-        padding-top: 1.5rem;
     }
 }

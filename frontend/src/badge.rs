@@ -403,84 +403,68 @@ fn issued_on(user_badge: &UserBadge) -> Result<jiff::Zoned, Error> {
     Ok(issued.to_zoned(jiff::tz::TimeZone::UTC))
 }
 
-/// What a training page says in its closing step once `user` holds
-/// `badge`, with their own links to it; empty until then, so the page claims
-/// nothing it cannot back up.
+/// The earner's own links to the badge they hold, for a training page whose
+/// copy points at it: the page carries the copy, and fills these into it.
+#[derive(Debug)]
+pub struct EarnedLinks {
+    /// The earner's badge page.
+    pub badge_url: String,
+
+    /// LinkedIn's "Add to Profile" form, filled in with the badge.
+    pub linkedin_url: String,
+}
+
+/// `user`'s links to the `badge` they hold, or `None` until they hold it.
 ///
 /// A badge that is not yet [`released`] is already on the earner's profile,
-/// but its badge page -- and LinkedIn's copy of it -- would show nothing
-/// yet, so those links wait, and the earner is told what they are waiting
-/// for.
-pub async fn earned_html(user: &Option<Arc<BasicInfo>>, badge: Badge) -> String {
-    let Some(user) = user else {
-        return String::new();
-    };
+/// but LinkedIn's copy of it would lead to nothing yet, so until then both
+/// links lead to the badge page, which tells its earner what it waits for.
+pub async fn earned_links(user: &Option<Arc<BasicInfo>>, badge: Badge) -> Option<EarnedLinks> {
+    let user = user.as_ref()?;
 
     let request = UserAndBadge {
         user_id: user.user_id,
         badge,
     };
 
-    let user_badge: Option<UserBadge> =
-        match common::service::request("user.badges.get", &request).await {
-            Ok(user_badge) => user_badge,
+    let user_badge: UserBadge =
+        match common::service::request::<Option<UserBadge>>("user.badges.get", &request).await {
+            Ok(user_badge) => user_badge?,
             Err(e) => {
                 tracing::error!("Failed to get badge from user-service: {}", e);
-                return String::new();
+                return None;
             }
         };
 
-    let Some(user_badge) = user_badge else {
-        return String::new();
-    };
+    let user_id = user.user_id.to_string();
+    let badge_url = badge_url(badge, &user_id);
 
     let email_request = UserEmailInfoRequest {
         user_id: user.user_id,
     };
 
-    let links =
+    let linkedin_url =
         match common::service::request::<UserEmailInfo>("user.info.email_info", &email_request)
             .await
         {
-            Ok(user_info) if released(&user_info) => {
-                let user_id = user.user_id.to_string();
-
-                match issued_on(&user_badge) {
-                    Ok(issued) => Some(EarnedLinks {
-                        badge_url: badge_url(badge, &user_id),
-                        linkedin_url: linkedin_add_url(badge, &user_id, &issued),
-                    }),
-                    Err(e) => {
-                        tracing::error!("Failed to read when a badge was issued: {}", e);
-                        None
-                    }
+            Ok(user_info) if released(&user_info) => match issued_on(&user_badge) {
+                Ok(issued) => linkedin_add_url(badge, &user_id, &issued),
+                Err(e) => {
+                    tracing::error!("Failed to read when a badge was issued: {}", e);
+                    badge_url.clone()
                 }
-            }
-            Ok(_) => None,
+            },
+            Ok(_) => badge_url.clone(),
             Err(e) => {
                 tracing::error!("Failed to get user email: {}", e);
-                None
+                badge_url.clone()
             }
         };
 
-    EarnedSlot {
-        name: BadgeText::shown(badge, current_lang()).name,
-        links,
-    }
-    .render_once()
-    .unwrap_or_default()
-}
-
-struct EarnedLinks {
-    badge_url: String,
-    linkedin_url: String,
-}
-
-#[derive(TemplateOnce)]
-#[template(path = "badge/earned_slot.stpl.html")]
-struct EarnedSlot {
-    name: String,
-    links: Option<EarnedLinks>,
+    Some(EarnedLinks {
+        badge_url,
+        linkedin_url,
+    })
 }
 
 /// Look up `user_id`'s `badgeclass` badge, provided it may be handed out.

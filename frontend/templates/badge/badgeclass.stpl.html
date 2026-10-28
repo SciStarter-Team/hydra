@@ -20,11 +20,11 @@
   <body>
     <div class="ss-container mx-auto !py-4 ss-text">
       <% include!("language.stpl.html"); %>
-      <div class="flex flex-col sm:flex-row max-w-[1120px] mx-auto mt-4">
-        <span class="flex justify-center">
-          <img src="<%= &self.image_url %>" title="<%= crate::i18n::tr("example {name} badge image").replace("{name}", &self.name) %>" class="self-center md:self-start w-[200px] h-[200px] mr-4 mb-4 sm:mb-0" />
+      <div class="badge-credential max-w-[1120px] mx-auto mt-4">
+        <span class="badge-credential-image">
+          <img src="<%= &self.image_url %>" title="<%= crate::i18n::tr("example {name} badge image").replace("{name}", &self.name) %>" class="w-[200px] h-[200px]" />
         </span>
-        <div>
+        <div class="badge-credential-header">
           <h1 class="ss-xl mb-2" lang="<%= self.lang %>"><%= self.name %></h1>
           <p class="ss-small"><%- &self.badgeclass_description %></p>
           <div class="flex items-start gap-4"></div>
@@ -38,7 +38,7 @@
           </div>
         </div>
 
-        <div class="min-w-[200px] md:ml-4">
+        <div class="badge-issuer">
           <div class="ss-xxs"><%= crate::i18n::tr("Offered by:") %></div>
           <a href="/"><img src="/-static/img/logo/logo-rgb-coral-blue.svg" alt="SciStarter logo" class="max-w-[100px] mb-2" /></a>
 
@@ -52,7 +52,7 @@
 
       <hr class="badge-rule badge-rule-before-details" />
 
-      <div class="flex flex-col sm:flex-row">
+      <div class="badge-details">
         <div class="w-full p-4 gap-8 md:flex">
           <div class="md:text-right min-w-[250px] md:max-w-[250px]">
             <h2 class="ss-normal"><%= crate::i18n::tr("Earning Criteria") %></h2>
@@ -62,14 +62,16 @@
             <%- &self.badgeclass_criteria_text %>
           </div>
         </div>
-        <div class="w-full sm:w-[300px] p-4">
-          <% if !self.tags.is_empty() { %>
+        <% if !self.tags.is_empty() { %>
+          <div class="badge-details-aside p-4">
             <h3 class="ss-normal mb-4"><%= crate::i18n::tr("Tags") %></h3>
-            <% for tag in self.tags.iter() { %>
-              <span class="ss-tag"><%= tag %></span>
-            <% } %>
-          <% } %>
-        </div>
+            <div>
+              <% for tag in self.tags.iter() { %>
+                <span class="ss-tag"><%= tag %></span>
+              <% } %>
+            </div>
+          </div>
+        <% } %>
       </div>
 
       <div class="flex flex-col sm:flex-row">

@@ -1,0 +1,46 @@
+<% use crate::component::detail_page::InlineAuthMode; %>
+<% let signing_up = self.mode == InlineAuthMode::SignUp; %>
+<div class="inline-auth max-w-xl">
+  <% if let Some(email) = &self.pending_email { %>
+  <p class="text-sm" role="status"><strong>Check your email.</strong> We sent a link to <strong><%= email %></strong>. Click it to finish creating your SciStarter account and come back here. The link is good for 7 days; if it doesn't arrive in a few minutes, check your spam folder.</p>
+  <% } else { %>
+  <form hx-post="/-detail/<%= &self.target_id %>/account" hx-target="closest .inline-auth" hx-swap="outerHTML">
+    <input type="hidden" name="mode" value="<% if signing_up { %>sign_up<% } else { %>sign_in<% } %>">
+    <div class="flex flex-wrap gap-x-3 gap-y-2">
+      <label for="inline-auth-email-<%= &self.target_id %>" class="flex-[1_1_12rem] min-w-0 text-sm font-semibold">Email
+        <input id="inline-auth-email-<%= &self.target_id %>" type="email" name="email" value="<%= &self.email %>" required autocomplete="email" class="mt-1 block w-full border border-linework rounded-sm px-3 py-2 text-sm font-normal bg-white">
+      </label>
+      <label for="inline-auth-password-<%= &self.target_id %>" class="flex-[1_1_12rem] min-w-0 text-sm font-semibold">Password
+        <% if signing_up { %>
+        <input id="inline-auth-password-<%= &self.target_id %>" type="password" name="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters" class="mt-1 block w-full border border-linework rounded-sm px-3 py-2 text-sm font-normal bg-white">
+        <% } else { %>
+        <input id="inline-auth-password-<%= &self.target_id %>" type="password" name="password" required autocomplete="current-password" class="mt-1 block w-full border border-linework rounded-sm px-3 py-2 text-sm font-normal bg-white">
+        <% } %>
+      </label>
+    </div>
+    <% if signing_up { %>
+    <% if self.offer_newsletter { %>
+    <label class="flex items-center gap-2 mt-2 text-sm"><input class="w-auto" type="checkbox" name="newsletter" value="true" checked> Send me SciStarter's newsletter</label>
+    <% } %>
+    <script src="/-static/js/turnstile-widget.js"></script>
+    <turnstile-widget class="block mt-2" sitekey="<%= env!("TURNSTILE_SITEKEY") %>" appearance="interaction-only">
+      <p data-turnstile-fallback hidden class="text-sm text-gray-600">We couldn't run our automatic spam check on your browser or network. You can still sign up&mdash;we'll email you a link to finish creating your account.</p>
+    </turnstile-widget>
+    <% } %>
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
+      <button type="submit" class="btn btn-primary btn-thin"><% if signing_up { %>Create account<% } else { %>Sign in<% } %></button>
+      <% if signing_up { %>
+      <span class="text-sm">Already have an account? <a href="/login?next=<%= urlencoding::encode(&self.page_path) %>" class="text-primary-action underline" hx-get="/-detail/<%= &self.target_id %>/account?mode=sign_in" hx-include="#inline-auth-email-<%= &self.target_id %>" hx-target="closest .inline-auth" hx-swap="outerHTML">Sign in</a></span>
+      <% } else { %>
+      <span class="text-sm">New to SciStarter? <a href="/login?next=<%= urlencoding::encode(&self.page_path) %>" class="text-primary-action underline" hx-get="/-detail/<%= &self.target_id %>/account?mode=sign_up" hx-include="#inline-auth-email-<%= &self.target_id %>" hx-target="closest .inline-auth" hx-swap="outerHTML">Create a free account</a> &middot; <a href="/login?next=<%= urlencoding::encode(&self.page_path) %>" class="text-primary-action underline">Sign in with a passkey</a></span>
+      <% } %>
+    </div>
+    <% if signing_up { %>
+    <p class="text-sm mt-2">By creating an account, you agree to SciStarter's <a class="text-primary-action underline" href="/terms" target="_blank">Terms of Use</a>.</p>
+    <% } %>
+    <% if let Some(problem) = self.problem { %>
+    <p class="text-sm text-red-700 mt-2" role="alert"><%= problem.message() %></p>
+    <% } %>
+  </form>
+  <% } %>
+</div>
