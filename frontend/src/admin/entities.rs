@@ -3,9 +3,10 @@
 use crate::component::{AdminLayout, Component};
 use crate::entity::{Entity, EntityKind, EntityTarget};
 use crate::middleware::authorization::Authenticated;
+use crate::page_change::entity_change;
 use crate::pagecontent::PageContentKind;
 use crate::peering::LoadStorePeered;
-use common::message::log::PageChange;
+use common::message::log::{Housekeeping, PageChange};
 use common::shared::db;
 use poem::{
     Endpoint, Route, get, handler, post,
@@ -244,7 +245,7 @@ async fn entities_create(
     Form(form): Form<CreateEntityForm>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    match (async || -> Result<(String, Option<Ulid>), anyhow::Error> {
+    match (async || -> Result<(String, Option<Ulid>, EntityKind), anyhow::Error> {
         if form.slug.trim().is_empty() {
             return Err(anyhow::anyhow!("Slug is required"));
         }
@@ -259,15 +260,15 @@ async fn entities_create(
         let entity = Entity::new(&form.slug, kind, target);
         entity.store().await?;
 
-        Ok((form.slug.clone(), entity.target().as_ulid()))
+        Ok((form.slug.clone(), entity.target().as_ulid(), kind))
     })()
     .await
     {
-        Ok((slug, target)) => {
+        Ok((slug, target, kind)) => {
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    PageChange::EntityCreate,
+                    entity_change(&kind, PageChange::EntityCreate),
                     user_info.user_id,
                     target,
                     format!("slug={} kind={}", slug, form.kind),
@@ -426,7 +427,7 @@ async fn entities_update(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    PageChange::EntityUpdate,
+                    entity_change(updated_entity.kind(), PageChange::EntityUpdate),
                     user_info.user_id,
                     updated_entity.target().as_ulid(),
                     format!("slug={} kind={}", slug, form.kind),
@@ -586,9 +587,9 @@ async fn entities_publish_toggle(
         let _ = common::service::log_activity(
             None,
             if publish {
-                PageChange::EntityPublish.action()
+                Housekeeping::EntityPublish
             } else {
-                "entity-unpublish"
+                Housekeeping::EntityUnpublish
             },
             user_info.user_id,
             updated_entity.target().as_ulid(),

@@ -716,41 +716,44 @@ pub struct ReviewSetRequest {
     pub private: bool,
 }
 
-/// A change to a page, as the activity log records it.
+/// An update to a page, as the activity log records it.
 ///
-/// When a page last changed is when the latest of these was logged against
-/// its target -- the project, event, piece of content or community it shows
-/// -- which is what `log.last_changed` reports, and nothing keeps an
-/// `updated` column of its own. So every way of changing a page logs one of
-/// these, and an action that is not one of them does not count as a change.
+/// When a page was last updated is when the latest of these was logged
+/// against its target -- the project, event, piece of content or community
+/// it shows -- which is what `log.last_changed` reports, and nothing keeps an
+/// `updated` column of its own. So every way of updating a page logs one of
+/// these, and an action that is not one of them does not count.
+///
+/// Who updates a page depends on what it shows. A project or an event is
+/// updated by its own people, by the import it came from, or by orrery
+/// saying so; what staff do to one is [`Housekeeping`]. Content pages and
+/// communities are staff's own, so staff edits to them are updates.
+/// Publishing is never an update, whatever the page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageChange {
     ProjectCreate,
     ProjectEdit,
-    ProjectPublish,
     EventCreate,
     EventEdit,
     /// The content of a content page or a page-builder page was stored.
     ContentEdit,
-    /// An entity, the address of a page, was created, changed or published.
+    /// An entity, the address of a page, was created or changed. For the
+    /// page of a project or an event that is housekeeping instead.
     EntityCreate,
     EntityUpdate,
-    EntityPublish,
     CommunityCreate,
     CommunityUpdate,
 }
 
 impl PageChange {
-    pub const ALL: [PageChange; 11] = [
+    pub const ALL: [PageChange; 9] = [
         PageChange::ProjectCreate,
         PageChange::ProjectEdit,
-        PageChange::ProjectPublish,
         PageChange::EventCreate,
         PageChange::EventEdit,
         PageChange::ContentEdit,
         PageChange::EntityCreate,
         PageChange::EntityUpdate,
-        PageChange::EntityPublish,
         PageChange::CommunityCreate,
         PageChange::CommunityUpdate,
     ];
@@ -760,13 +763,11 @@ impl PageChange {
         match self {
             PageChange::ProjectCreate => "project-create",
             PageChange::ProjectEdit => "project-edit",
-            PageChange::ProjectPublish => "project-publish",
             PageChange::EventCreate => "event-create",
             PageChange::EventEdit => "event-edit",
             PageChange::ContentEdit => "content-edit",
             PageChange::EntityCreate => "entity-create",
             PageChange::EntityUpdate => "entity-update",
-            PageChange::EntityPublish => "entity-publish",
             PageChange::CommunityCreate => "community-create",
             PageChange::CommunityUpdate => "community-update",
         }
@@ -779,14 +780,22 @@ impl From<PageChange> for String {
     }
 }
 
-/// A change to a project or event that is not an update to its page: staff
-/// edits, publishing, affiliate linking and other upkeep, as the orrery sync
-/// reports them. Logged so that the edit history shows the change, but not a
-/// [`PageChange`], so the page is not taken to have been updated.
+/// A change to a page that is not an update to it, logged so that it is on
+/// record without the page being taken to have been updated: it is not a
+/// [`PageChange`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Housekeeping {
+    /// Staff edits to a project and other upkeep of it, such as affiliate
+    /// linking, whether made here or reported by the orrery sync. Its edit
+    /// history shows these beside the updates.
     Project,
+    /// The same, for an event.
     Event,
+    /// A reviewer approved a project.
+    ProjectPublish,
+    /// A page was published or unpublished.
+    EntityPublish,
+    EntityUnpublish,
 }
 
 impl Housekeeping {
@@ -795,6 +804,9 @@ impl Housekeeping {
         match self {
             Housekeeping::Project => "project-housekeeping",
             Housekeeping::Event => "event-housekeeping",
+            Housekeeping::ProjectPublish => "project-publish",
+            Housekeeping::EntityPublish => "entity-publish",
+            Housekeeping::EntityUnpublish => "entity-unpublish",
         }
     }
 }

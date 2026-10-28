@@ -48,6 +48,7 @@ use crate::builder::context::{Context, ContextMode};
 use crate::builder::render::{CompiledTemplate, render};
 use crate::entity::{Entity, EntityKind, EntityTarget};
 use crate::mcp_token::McpToken;
+use crate::page_change::entity_change;
 use crate::pagebuilder::source::{
     clear_slot, compose_component_into_slot, extract_slots, move_slot_content, replace_component,
     resize_container,
@@ -884,7 +885,7 @@ async fn tool_create_entity(args: Value) -> Result<String, Error> {
     entity.store().await?;
     log_activity(
         None,
-        PageChange::EntityCreate,
+        entity_change(&kind, PageChange::EntityCreate),
         None,
         entity.target().as_ulid(),
         format!("slug={slug} kind={}", kind.as_ref()),
@@ -946,7 +947,7 @@ async fn tool_update_entity(args: Value) -> Result<String, Error> {
     entity.store().await?;
     log_activity(
         None,
-        PageChange::EntityUpdate,
+        entity_change(&kind, PageChange::EntityUpdate),
         None,
         entity.target().as_ulid(),
         format!("slug={slug} kind={}", kind.as_ref()),

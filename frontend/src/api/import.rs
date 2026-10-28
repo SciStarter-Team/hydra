@@ -3,7 +3,10 @@ use std::collections::HashSet;
 use anyhow::Error;
 use common::{
     insensitivestring::InsensitiveString,
-    message::user::{ValidateApiKeyRequest, ValidateApiKeyResponse},
+    message::{
+        log::PageChange,
+        user::{ValidateApiKeyRequest, ValidateApiKeyResponse},
+    },
     service::request,
     shared::db,
     timestring::TimeString,
@@ -15,6 +18,7 @@ use ulid::Ulid;
 use crate::{
     entity::{Entity, EntityKind, EntityTarget},
     event::{EventInstance, all::EventAll},
+    page_change::Stored,
     peering::LoadStorePeered,
 };
 
@@ -181,6 +185,16 @@ async fn import_single_event(event: ImportEvent) -> Result<(), Error> {
     }
 
     let ulid = event_id.unwrap_or_else(Ulid::new);
+    let before = Stored::of_event(ulid).await;
+
+    // An event met again keeps the time it first arrived.
+    let created = match event_id {
+        Some(existing) => EventAll::load(existing)
+            .await
+            .map(|event| event.created)
+            .unwrap_or_else(|_| TimeString::now()),
+        None => TimeString::now(),
+    };
 
     // Determine URL and entirely_online
     let (url, entirely_online, address) = match event.location {
@@ -202,7 +216,7 @@ async fn import_single_event(event: ImportEvent) -> Result<(), Error> {
 
     let event_all = EventAll {
         event_id: ulid,
-        created: TimeString::now(),
+        created,
         name: event.name.clone(),
         description: event.description,
         origin: "scanner".to_string(),
@@ -230,7 +244,15 @@ async fn import_single_event(event: ImportEvent) -> Result<(), Error> {
         entity.store().await?;
     }
 
-    Ok(())
+    let after = Stored::of_event(ulid).await;
+    let update = if event_id.is_none() {
+        PageChange::EventCreate
+    } else {
+        PageChange::EventEdit
+    };
+    before
+        .log_update(&after, update, None, ulid, "the event scanner")
+        .await
 }
 
 fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {

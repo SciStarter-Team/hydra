@@ -8,7 +8,7 @@
 //! does the telling there.
 
 use anyhow::Error;
-use common::message::log::PageChange;
+use common::message::log::Housekeeping;
 use common::{
     service::{TriggerEvent, log_activity, trigger_email, trigger_email_to_address},
     shared::db,
@@ -156,7 +156,7 @@ pub async fn publish(project_id: Ulid, reviewer: Ulid) -> Result<(), Error> {
 
     let _ = log_activity(
         None,
-        PageChange::ProjectPublish,
+        Housekeeping::ProjectPublish,
         reviewer,
         Some(project_id),
         None,

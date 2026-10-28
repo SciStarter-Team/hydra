@@ -18,7 +18,7 @@ use crate::project::field_source::FieldSource;
 use crate::project::publish::Submitter;
 use crate::project::{ProjectRejectionReason, SUBMISSION_REJECTION_NOTICES};
 use common::insensitivestring::InsensitiveString;
-use common::message::log::PageChange;
+use common::message::log::Housekeeping;
 use common::shared::db;
 use common::timestring::TimeString;
 use poem::{
@@ -2758,7 +2758,7 @@ async fn projects_update_field(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    PageChange::ProjectEdit,
+                    Housekeeping::Project,
                     user_info.user_id,
                     parsed_project_id,
                     format!("{:?}", field_type),
@@ -2915,7 +2915,7 @@ async fn projects_update_multiselect_field(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    PageChange::ProjectEdit,
+                    Housekeeping::Project,
                     user_info.user_id,
                     project_ulid,
                     field_type.clone(),
@@ -3007,7 +3007,7 @@ async fn projects_add_array_item(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    PageChange::ProjectEdit,
+                    Housekeeping::Project,
                     user_info.user_id,
                     project_ulid,
                     format!("add={}[{}]", field_type, new_item),
@@ -3086,7 +3086,7 @@ async fn projects_update_array_item(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    PageChange::ProjectEdit,
+                    Housekeeping::Project,
                     user_info.user_id,
                     project_ulid,
                     format!("{}[{}]", field_type, item_index),
@@ -3161,7 +3161,7 @@ async fn projects_remove_array_item(
             if let Some(user_info) = &user_info {
                 common::service::log_activity(
                     None,
-                    PageChange::ProjectEdit,
+                    Housekeeping::Project,
                     user_info.user_id,
                     project_ulid,
                     format!("remove={}[{}]", field_type, item_index),
@@ -3385,7 +3385,7 @@ async fn projects_add_tag(
     if let Some(user_info) = &user_info {
         common::service::log_activity(
             None,
-            PageChange::ProjectEdit,
+            Housekeeping::Project,
             user_info.user_id,
             project_ulid,
             format!("add=tags[{}]", new_tag),
@@ -3432,7 +3432,7 @@ async fn projects_remove_tag(
     if let Some(user_info) = &user_info {
         common::service::log_activity(
             None,
-            PageChange::ProjectEdit,
+            Housekeeping::Project,
             user_info.user_id,
             project_ulid,
             format!("remove=tags[{}]", tag),
@@ -3527,7 +3527,7 @@ async fn projects_add_contact(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            PageChange::ProjectEdit,
+            Housekeeping::Project,
             user_info.user_id,
             project_ulid,
             format!("add=contact[{}]", new_contact_id),
@@ -3593,7 +3593,7 @@ async fn projects_update_contact(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            PageChange::ProjectEdit,
+            Housekeeping::Project,
             user_info.user_id,
             project_ulid,
             format!("contact[{}]", contact_ulid),
@@ -3652,7 +3652,7 @@ async fn projects_remove_contact(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            PageChange::ProjectEdit,
+            Housekeeping::Project,
             user_info.user_id,
             project_ulid,
             format!("remove=contact[{}]", contact_ulid),
@@ -3746,7 +3746,7 @@ async fn projects_add_participant_file(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            PageChange::ProjectEdit,
+            Housekeeping::Project,
             user_info.user_id,
             project_ulid,
             "add=participant_files".to_string(),
@@ -3782,7 +3782,7 @@ async fn projects_update_participant_file(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            PageChange::ProjectEdit,
+            Housekeeping::Project,
             user_info.user_id,
             project_ulid,
             format!("participant_files[{}]", index),
@@ -3816,7 +3816,7 @@ async fn projects_remove_participant_file(
     if let Some(user_info) = &user_info {
         let _ = common::service::log_activity(
             None,
-            PageChange::ProjectEdit,
+            Housekeeping::Project,
             user_info.user_id,
             project_ulid,
             format!("remove=participant_files[{}]", index),

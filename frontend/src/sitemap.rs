@@ -30,7 +30,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::LazyLock;
 
 use anyhow::Error;
-use common::message::log::{LastChangedRequest, LastChangedResponse};
 use common::message::user::{
     AmbassadorDirectoryListingRequest, AmbassadorDirectoryListingResponse,
 };
@@ -50,6 +49,7 @@ use url::Url;
 
 use crate::communities::list_communities;
 use crate::entity::EntityKind;
+use crate::page_change::last_changes;
 use crate::project::{ProjectStatus, push_listing_rule};
 use crate::training::{self, dataethics::DataEthicsLanguage};
 
@@ -268,28 +268,6 @@ async fn ambassadors() -> Result<Paths, Error> {
         .into_iter()
         .map(|user_id| (crate::ambassador::profile_path(user_id), None))
         .collect())
-}
-
-/// When each of `targets` last changed, for those that have changed since
-/// the log began.
-async fn last_changes(targets: Vec<Ulid>) -> Result<HashMap<Ulid, TimeString>, Error> {
-    let mut changes = HashMap::new();
-    for batch in targets.chunks(LastChangedRequest::MAX_TARGETS) {
-        let response: LastChangedResponse = request(
-            "log.last_changed",
-            LastChangedRequest {
-                targets: batch.to_vec(),
-            },
-        )
-        .await?;
-        changes.extend(
-            response
-                .changes
-                .into_iter()
-                .map(|change| (change.target, change.when)),
-        );
-    }
-    Ok(changes)
 }
 
 #[derive(TemplateOnce)]

@@ -18,6 +18,7 @@ use ulid::Ulid;
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::analytics::{Device, Interaction};
 use crate::middleware::authorization::Authenticated;
+use crate::page_change::last_changes;
 use crate::peering::LoadStorePeered;
 
 use super::tracking::{self, TrackedAction, TrackedPage};
@@ -1600,6 +1601,18 @@ pub async fn exchange_csv(
         Default::default()
     };
 
+    // When each project was last updated, as its page says.
+    let updates = if full {
+        last_changes(
+            rows.iter()
+                .filter_map(|row| Ulid::from_string(&row.0).ok())
+                .collect(),
+        )
+        .await?
+    } else {
+        Default::default()
+    };
+
     let mut writer = csv::WriterBuilder::new()
         .terminator(csv::Terminator::CRLF)
         .from_writer(vec![]);
@@ -1645,7 +1658,7 @@ pub async fn exchange_csv(
             contact_email: contact.map(|contact| contact.email.clone()),
             contact_address: contact.and_then(|contact| contact.address.clone()),
             created: project.created.to_string(),
-            updated: project.project_last_edited.map(|when| when.to_string()),
+            updated: updates.get(&project_id).map(|when| when.to_string()),
             audience: project.audience.join(";"),
             classroom_materials: project.classroom_materials,
             admin_link,

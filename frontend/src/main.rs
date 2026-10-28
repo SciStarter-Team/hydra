@@ -46,6 +46,7 @@ pub mod misc;
 pub mod news;
 pub mod number;
 pub mod oauth2;
+pub mod page_change;
 pub mod page_manager;
 pub mod pagebuilder;
 pub mod pagecontent;
@@ -875,8 +876,9 @@ mod sync {
 
     use crate::{
         contact::{Contact, ContactRole},
-        entity::{Entity, EntityKind},
+        entity::Entity,
         event::{EventInstance, all::EventAll},
+        page_change::Stored,
         page_manager,
         peering::LoadStorePeered,
         project::{
@@ -898,72 +900,6 @@ mod sync {
     impl EmptyAsNone for InsensitiveString {
         fn empty_as_none(self) -> Option<Self> {
             if self.is_empty() { None } else { Some(self) }
-        }
-    }
-
-    /// What this instance holds of a project or event and its page, so that
-    /// whether storing a copy from orrery changed any of it can be told by
-    /// comparing what is held before and after.
-    ///
-    /// Orrery stamps a record's `changed` whenever it is saved, changed or
-    /// not, so that timestamp alone would count as changes the saves that
-    /// made none. And the copy arrives again on every instance, so the
-    /// comparison is also what keeps one change from being logged once per
-    /// instance: a peer that has already saved the copy it was sent finds
-    /// nothing changed.
-    #[derive(PartialEq)]
-    struct Stored<T> {
-        /// The record in its canonical form, if there is one.
-        record: Option<T>,
-        /// The slug of its page, and whether the page is published.
-        page: Option<(String, bool)>,
-    }
-
-    impl<T: PartialEq + serde::Serialize> Stored<T> {
-        /// What an edit synced from orrery is logged as having changed, in
-        /// the place of the field a hydra edit names: what differs between
-        /// `self`, held before the store, and `after`.
-        fn edit(&self, after: &Stored<T>) -> String {
-            let mut fields = match (&self.record, &after.record) {
-                (Some(before), Some(after)) => changed_fields(before, after),
-                _ => vec!["all".to_string()],
-            };
-
-            match (&self.page, &after.page) {
-                (Some((before_slug, before_publish)), Some((after_slug, after_publish))) => {
-                    if before_slug != after_slug {
-                        fields.push("slug".to_string());
-                    }
-                    if before_publish != after_publish {
-                        fields.push("publish".to_string());
-                    }
-                }
-                (None, Some(_)) => fields.push("page".to_string()),
-                _ => {}
-            }
-
-            format!("{} (from orrery)", fields.join(", "))
-        }
-    }
-
-    impl Stored<ProjectAll> {
-        async fn of_project(project_id: Ulid) -> Stored<ProjectAll> {
-            Stored {
-                record: ProjectAll::load(project_id)
-                    .await
-                    .ok()
-                    .map(ProjectAll::canonical),
-                page: page(EntityKind::Project, project_id).await,
-            }
-        }
-    }
-
-    impl Stored<EventAll> {
-        async fn of_event(event_id: Ulid) -> Stored<EventAll> {
-            Stored {
-                record: EventAll::load(event_id).await.ok().map(EventAll::canonical),
-                page: page(EntityKind::Event, event_id).await,
-            }
         }
     }
 
@@ -1022,47 +958,6 @@ mod sync {
         saved
             .and_then(|saved| saved.parse().ok())
             .unwrap_or_else(|| "2000-01-01T00:00:00Z".parse().expect("a valid timestamp"))
-    }
-
-    /// The names of the fields that differ between two canonical forms. Tags
-    /// are a set held in no particular order, so their order is not a
-    /// difference.
-    fn changed_fields<T: serde::Serialize>(before: &T, after: &T) -> Vec<String> {
-        use serde_json::Value;
-
-        let (Ok(Value::Object(before)), Ok(Value::Object(after))) =
-            (serde_json::to_value(before), serde_json::to_value(after))
-        else {
-            return vec!["all".to_string()];
-        };
-
-        let sorted = |value: &Value| {
-            let mut items: Vec<String> = match value {
-                Value::Array(items) => items.iter().map(Value::to_string).collect(),
-                other => vec![other.to_string()],
-            };
-            items.sort_unstable();
-            items
-        };
-
-        after
-            .iter()
-            .filter(|(field, value)| match before.get(*field) {
-                Some(was) if field.as_str() == "tags" => sorted(was) != sorted(value),
-                Some(was) => was != *value,
-                None => true,
-            })
-            .map(|(field, _)| field.clone())
-            .collect()
-    }
-
-    /// The slug of the page of `target`, and whether it is published.
-    async fn page(kind: EntityKind, target: Ulid) -> Option<(String, bool)> {
-        Entity::page_of(kind, target)
-            .await
-            .ok()
-            .flatten()
-            .map(|page| (page.slug().to_string(), page.publish()))
     }
 
     #[derive(Default, Debug, serde::Deserialize)]
@@ -1789,7 +1684,7 @@ mod sync {
                         changed,
                         PageChange::ProjectEdit,
                         Housekeeping::Project,
-                        before.edit(&after),
+                        before.edit(&after, "orrery"),
                     )
                     .await
                     {
@@ -2165,7 +2060,7 @@ mod sync {
                         changed,
                         PageChange::EventEdit,
                         Housekeeping::Event,
-                        before.edit(&after),
+                        before.edit(&after, "orrery"),
                     )
                     .await
                     {

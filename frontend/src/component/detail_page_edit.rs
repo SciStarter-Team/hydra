@@ -1,5 +1,4 @@
 use anyhow::Error;
-use common::message::log::PageChange;
 use common::{message::user::BasicInfo, service::log_activity, shared::db, timestring::TimeString};
 use poem::{
     IntoResponse, handler,
@@ -23,6 +22,7 @@ use crate::event::facebook::FacebookEvent;
 use crate::event::field::{EventField, EventFieldType, EventFieldValue};
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
+use crate::page_change::record_edit;
 use crate::participant_file::ParticipantFile;
 use crate::peering::LoadStorePeered;
 use crate::project::field::{
@@ -1414,10 +1414,7 @@ pub async fn save_field(
     }
 
     // Log activity
-    let action = match kind {
-        DetailPageKind::Project => PageChange::ProjectEdit,
-        DetailPageKind::Event => PageChange::EventEdit,
-    };
+    let action = edit_action(kind, source);
     let _ = log_activity(None, action, user.user_id, target_ulid, field_type.clone()).await;
 
     // Return updated display
@@ -1929,7 +1926,7 @@ pub async fn add_instance(
         )
     })?;
 
-    let (can_edit, _) = check_edit_permission(&id, &user, DetailPageKind::Event)
+    let (can_edit, is_staff) = check_edit_permission(&id, &user, DetailPageKind::Event)
         .await
         .map_err(|e| {
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -1976,7 +1973,7 @@ pub async fn add_instance(
     })?;
     let _ = log_activity(
         None,
-        PageChange::EventEdit,
+        record_edit(DetailPageKind::Event, is_staff),
         user.user_id,
         target_ulid,
         "instances".to_string(),
@@ -2015,7 +2012,7 @@ pub async fn update_instance(
         )
     })?;
 
-    let (can_edit, _) = check_edit_permission(&id, &user, DetailPageKind::Event)
+    let (can_edit, is_staff) = check_edit_permission(&id, &user, DetailPageKind::Event)
         .await
         .map_err(|e| {
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -2093,7 +2090,7 @@ pub async fn update_instance(
     })?;
     let _ = log_activity(
         None,
-        PageChange::EventEdit,
+        record_edit(DetailPageKind::Event, is_staff),
         user.user_id,
         target_ulid,
         "instances".to_string(),
@@ -2130,7 +2127,7 @@ pub async fn delete_instance(
         )
     })?;
 
-    let (can_edit, _) = check_edit_permission(&id, &user, DetailPageKind::Event)
+    let (can_edit, is_staff) = check_edit_permission(&id, &user, DetailPageKind::Event)
         .await
         .map_err(|e| {
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -2190,7 +2187,7 @@ pub async fn delete_instance(
     })?;
     let _ = log_activity(
         None,
-        PageChange::EventEdit,
+        record_edit(DetailPageKind::Event, is_staff),
         user.user_id,
         target_ulid,
         "instances".to_string(),
@@ -2347,12 +2344,10 @@ fn edit_source(is_staff: bool) -> FieldSource {
     }
 }
 
-/// The activity-log action name for an edit of the given kind.
-fn edit_action(kind: DetailPageKind) -> PageChange {
-    match kind {
-        DetailPageKind::Project => PageChange::ProjectEdit,
-        DetailPageKind::Event => PageChange::EventEdit,
-    }
+/// The activity-log action for an edit of the given kind, written from
+/// `source`.
+fn edit_action(kind: DetailPageKind, source: FieldSource) -> &'static str {
+    record_edit(kind, source == FieldSource::Staff)
 }
 
 fn auth_required() -> poem::Error {
@@ -2455,7 +2450,7 @@ pub async fn add_contact(
 
     let _ = log_activity(
         None,
-        edit_action(kind),
+        edit_action(kind, source),
         user.user_id,
         target,
         "contacts".to_string(),
@@ -2487,7 +2482,7 @@ pub async fn delete_contact(
 
     let _ = log_activity(
         None,
-        edit_action(kind),
+        edit_action(kind, source),
         user.user_id,
         target,
         "contacts".to_string(),
@@ -2597,7 +2592,7 @@ pub async fn update_contact(
 
     let _ = log_activity(
         None,
-        edit_action(kind),
+        edit_action(kind, source),
         user.user_id,
         target,
         "contacts".to_string(),
@@ -2659,7 +2654,7 @@ pub async fn update_facebook_event(
     poem::web::Form(form): poem::web::Form<FacebookAnswers>,
 ) -> poem::Result<poem::Response> {
     let user = user_info.ok_or_else(auth_required)?;
-    let (kind, target, _) = require_editor(&id, &user).await?;
+    let (kind, target, source) = require_editor(&id, &user).await?;
     if kind != DetailPageKind::Event {
         return Err(poem::Error::from_string(
             "Only events have Facebook answers",
@@ -2685,7 +2680,7 @@ pub async fn update_facebook_event(
             .map_err(internal_error)?;
         let _ = log_activity(
             None,
-            edit_action(kind),
+            edit_action(kind, source),
             user.user_id,
             target,
             "facebook_event".to_string(),
@@ -2874,7 +2869,7 @@ pub async fn add_manager(
             .map_err(internal_error)?;
         let _ = log_activity(
             None,
-            edit_action(kind),
+            edit_action(kind, source),
             user.user_id,
             target,
             "managers".to_string(),
@@ -2951,7 +2946,7 @@ pub async fn update_manager(
 
     let _ = log_activity(
         None,
-        edit_action(kind),
+        edit_action(kind, source),
         user.user_id,
         target,
         "managers".to_string(),
@@ -2983,7 +2978,7 @@ pub async fn delete_manager(
 
     let _ = log_activity(
         None,
-        edit_action(kind),
+        edit_action(kind, source),
         user.user_id,
         target,
         "managers".to_string(),
@@ -3095,11 +3090,17 @@ async fn store_and_render_participant_files(
     Ok(Html(html).into_response())
 }
 
-fn log_project_edit(user_info: &Option<std::sync::Arc<BasicInfo>>, id: &str, detail: String) {
+fn log_project_edit(
+    user_info: &Option<std::sync::Arc<BasicInfo>>,
+    id: &str,
+    source: FieldSource,
+    detail: String,
+) {
     if let (Some(user), Ok(ulid)) = (user_info.as_ref(), Ulid::from_string(id)) {
         let user_id = user.user_id;
+        let action = edit_action(DetailPageKind::Project, source);
         tokio::spawn(async move {
-            let _ = log_activity(None, PageChange::ProjectEdit, user_id, ulid, detail).await;
+            let _ = log_activity(None, action, user_id, ulid, detail).await;
         });
     }
 }
@@ -3152,7 +3153,7 @@ pub async fn add_participant_file(
         files.push(new_file);
     }
 
-    log_project_edit(&user_info, &id, "add=participant_files".to_string());
+    log_project_edit(&user_info, &id, source, "add=participant_files".to_string());
     store_and_render_participant_files(&id, files, source).await
 }
 
@@ -3177,7 +3178,12 @@ pub async fn update_participant_file(
         url: form.url.trim().to_string(),
     };
 
-    log_project_edit(&user_info, &id, format!("participant_files[{}]", index));
+    log_project_edit(
+        &user_info,
+        &id,
+        source,
+        format!("participant_files[{}]", index),
+    );
     store_and_render_participant_files(&id, files, source).await
 }
 
@@ -3197,6 +3203,7 @@ pub async fn delete_participant_file(
     log_project_edit(
         &user_info,
         &id,
+        source,
         format!("remove=participant_files[{}]", index),
     );
     store_and_render_participant_files(&id, files, source).await

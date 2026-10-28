@@ -2,7 +2,7 @@ use std::{fmt::Display, sync::Arc};
 
 use anyhow::Error;
 use common::{
-    message::{log::PageChange, user::BasicInfo},
+    message::{log::Housekeeping, user::BasicInfo},
     service::log_activity,
     shared::db,
     timestring::TimeString,
@@ -880,7 +880,7 @@ impl Entity {
         entity.store().await?;
         log_activity(
             None,
-            PageChange::EntityPublish,
+            Housekeeping::EntityPublish,
             None,
             target,
             Some(entity.slug().to_string()),

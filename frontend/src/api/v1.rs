@@ -4,7 +4,7 @@
 use anyhow::Error;
 use common::{
     message::{
-        log::ProjectParticipationRecord,
+        log::{PageChange, ProjectParticipationRecord},
         user::{
             ApiCreateUserRequest, ApiCreateUserResponse, IdentifierType, ProfileIdLookupRequest,
             ProfileIdLookupResponse, ProfileIdLookupType, UserMatchRequest, UserMatchResponse,
@@ -24,6 +24,7 @@ use ulid::Ulid;
 
 use super::check_api_key_permission;
 use crate::contact::{edit_contact_person, edit_manager};
+use crate::page_change::Stored;
 use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
 use crate::project::all::{ProjectAll, Submission, persist_new_project};
@@ -1296,7 +1297,19 @@ pub async fn project_add(body: String) -> Result<Response, Error> {
         };
         persist_new_project(proj, false, api_user_id, submission).await?
     } else {
+        let before = Stored::of_project(project_id).await;
         proj.store().await?;
+        let after = Stored::of_project(project_id).await;
+        before
+            .log_update(
+                &after,
+                PageChange::ProjectEdit,
+                Some(api_user_id),
+                project_id,
+                "the API",
+            )
+            .await?;
+
         let project_id_str = project_id.to_string();
         sqlx::query_scalar!(
             "SELECT slug FROM entities WHERE target = ? LIMIT 1",

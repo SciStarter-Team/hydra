@@ -14,6 +14,10 @@ name = "dedupe-log"
 path = "src/bin/dedupe-log.rs"
 
 [[bin]]
+name = "reclassify-orrery-edits"
+path = "src/bin/reclassify-orrery-edits.rs"
+
+[[bin]]
 name = "participation-repair"
 path = "src/bin/participation-repair.rs"
 

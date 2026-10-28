@@ -33,7 +33,10 @@ use std::time::Duration;
 use anyhow::{Error, anyhow};
 use common::{
     elect,
-    message::user::{UserByEmailRequest, UserByEmailResponse},
+    message::{
+        log::PageChange,
+        user::{UserByEmailRequest, UserByEmailResponse},
+    },
     primary::PRIMARY,
     service::request,
     shared::db,
@@ -54,6 +57,7 @@ use super::{
 };
 use crate::{
     contact::{edit_manager, remove_manager},
+    page_change::Stored,
     peering::LoadStorePeered,
 };
 
@@ -593,6 +597,7 @@ async fn write(
         persist_new_project(project, false, owner, Submission::Imported).await?;
     } else {
         let name = project.name.clone();
+        let before = Stored::of_project(project_id).await;
         project.store().await?;
 
         let target = project_id.to_string();
@@ -607,6 +612,17 @@ async fn write(
         if !has_page {
             create_page_entity(project_id, &name, false).await?;
         }
+
+        let after = Stored::of_project(project_id).await;
+        before
+            .log_update(
+                &after,
+                PageChange::ProjectEdit,
+                None,
+                project_id,
+                "the Atlas of Living Australia",
+            )
+            .await?;
     }
 
     AlaImport {
