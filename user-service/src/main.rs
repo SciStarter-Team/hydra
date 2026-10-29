@@ -32,6 +32,7 @@ pub mod legacy_id;
 pub mod library;
 pub mod link_tokens;
 pub mod moore;
+pub mod people_finder;
 pub mod permissions;
 pub mod places;
 pub mod profile;
@@ -3606,6 +3607,14 @@ async fn main() {
     toplevel.spawn(handler!(library_group, "get", library::get));
     toplevel.spawn(handler!(library_group, "save", library::save));
     toplevel.spawn(handler!(library_group, "create", library::create));
+
+    let people_finder_group = service.group("user.people_finder");
+    toplevel.spawn(handler!(people_finder_group, "count", people_finder::count));
+    toplevel.spawn(handler!(
+        people_finder_group,
+        "recipients",
+        people_finder::recipients
+    ));
 
     let ambassador_group = service.group("user.ambassador");
     toplevel.spawn(handler!(ambassador_group, "get", ambassador::get));

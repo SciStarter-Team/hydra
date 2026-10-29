@@ -839,7 +839,8 @@ pub enum TriggerEvent {
     /// Sent when a user makes their first contribution to a project
     FirstContribution,
 
-    /// Sent to confirm a people finder request was submitted
+    /// Sent to the sender once their People Finder message is approved and
+    /// delivered, as orrery sends `people-finder-confirmation`.
     PeopleFinderConfirmation,
 
     /// Sent when a new people finder request needs approval
@@ -911,8 +912,8 @@ impl TriggerEvent {
             Self::ForumPostReply => "When someone replies to a forum post",
             Self::ForumPostEdited => "When a forum post is edited",
             Self::FirstContribution => "When a user makes their first contribution to a project",
-            Self::PeopleFinderConfirmation => "When a people finder request is submitted",
-            Self::PeopleFinderNewRequest => "When a new people finder request needs approval",
+            Self::PeopleFinderConfirmation => "When a People Finder message is approved and delivered",
+            Self::PeopleFinderNewRequest => "When a new People Finder message needs approval",
             Self::ActsOfScienceApplication => {
                 "When an Acts of Science Connected application is submitted"
             }

@@ -53,6 +53,7 @@ pub mod pagecontent;
 pub mod pages;
 pub mod participant_file;
 pub mod peering;
+pub mod people_finder;
 pub mod profile;
 pub mod profile_card;
 pub mod project;
@@ -554,6 +555,9 @@ fn user_facing() -> impl Endpoint {
             girlscouts::PATH,
             get(girlscouts::index).post(girlscouts::submit),
         )
+        .at(people_finder::PATH, get(people_finder::page))
+        .at(people_finder::COUNT_PATH, get(people_finder::count))
+        .at(people_finder::SEND_PATH, post(people_finder::send))
         .at("/projects/*slug", get(project_page))
         .at("/events/*slug", get(event_page))
         .at("/*slug", get(entity_page).post(entity_page))
@@ -784,9 +788,23 @@ async fn main() -> Result<(), Error> {
         tasks.join_all().await;
     });
 
+    // Who operates a published project or event, for forum-service to
+    // deliver an approved People Finder request with.
+    let people_finder_group = service.group("frontend.people_finder");
+    tokio::spawn(async move {
+        use common::handler;
+        let mut tasks = tokio::task::JoinSet::new();
+        tasks.spawn(handler!(
+            people_finder_group,
+            "operators",
+            people_finder::operators
+        ));
+        tasks.join_all().await;
+    });
+
     println!("Listening on {}", env!("LISTEN_ON"));
     println!(
-        "Frontend NATS service started: frontend.health.check, frontend.entity.summary_by_id, frontend.entity.summary_by_slug, frontend.inaturalist.projects"
+        "Frontend NATS service started: frontend.health.check, frontend.entity.summary_by_id, frontend.entity.summary_by_slug, frontend.inaturalist.projects, frontend.people_finder.operators"
     );
     // The id peer messages are tagged with, and the one the staff query
     // tool reports as having answered a query against this instance's

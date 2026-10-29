@@ -16,7 +16,7 @@ use ulid::Ulid;
 
 /// Minimal HTML escaping for interpolating message content into the staff
 /// review email.
-fn escape_html(s: &str) -> String {
+pub(crate) fn escape_html(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
@@ -97,7 +97,7 @@ async fn notify_reviewers_batch(subject: &str, body: &str, sender_id: &str, reci
 /// review queue sees the real handle, because a moderator cannot judge a
 /// message from an anonymous sender.
 #[derive(Clone, Copy, PartialEq, Debug)]
-enum NameAudience {
+pub(crate) enum NameAudience {
     Correspondent,
     Staff,
 }
@@ -108,7 +108,10 @@ enum NameAudience {
 /// projects and events are addressable message recipients just like
 /// users. Returns `None` only when the ULID is neither — an orphan
 /// (deleted account, or bogus id) that callers drop.
-async fn resolve_participant_name(id_str: &str, audience: NameAudience) -> Option<String> {
+pub(crate) async fn resolve_participant_name(
+    id_str: &str,
+    audience: NameAudience,
+) -> Option<String> {
     if let Ok(info) = nats_request::<BasicInfo>("user.basic_info.by_user_id", id_str).await {
         return Some(match audience {
             NameAudience::Correspondent => info.display_handle().to_string(),
@@ -129,7 +132,7 @@ async fn resolve_participant_name(id_str: &str, audience: NameAudience) -> Optio
 /// came from. A project or event sending to its participants is not a user
 /// at all, so the lookup fails and the send proceeds — the same reading
 /// orrery gives an entity sender.
-async fn check_sender_may_send(from_id: Ulid) -> Result<()> {
+pub(crate) async fn check_sender_may_send(from_id: Ulid) -> Result<()> {
     if let Ok(info) =
         nats_request::<BasicInfo>("user.basic_info.by_user_id", from_id.to_string()).await
         && !info.may_send_messages()
@@ -170,7 +173,7 @@ async fn ensure_personal_forum(user_id: Ulid) -> Result<()> {
 /// (`None` for a single send). This helper never notifies reviewers — the
 /// caller does that once per message, or once per batch. Returns the new
 /// `(topic_id, post_id)`.
-async fn create_conversation(
+pub(crate) async fn create_conversation(
     to_id: Ulid,
     from_id: Ulid,
     subject: &str,

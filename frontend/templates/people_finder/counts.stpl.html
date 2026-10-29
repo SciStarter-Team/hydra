@@ -1,0 +1,22 @@
+<% use crate::number::thousands; %>
+<% match self.tally { Tally::Unchosen => { %>
+  <p class="text-sm text-gray-600">Choose an area on the map to see how many people live there.</p>
+<% } Tally::Refused(reason) => { %>
+  <p class="text-sm text-red-600"><%= reason %></p>
+<% } Tally::Counted(counts) => { %>
+  <% if self.standing.may_send() { %>
+    <p class="font-semibold mb-2">Send to the people in this area:</p>
+    <label class="flex items-center gap-2 mb-1">
+      <input type="checkbox" name="participants" checked>
+      <span><b><%= thousands(counts.participants) %></b> participant<% if counts.participants != 1 { %>s<% } %></span>
+    </label>
+    <label class="flex items-center gap-2">
+      <input type="checkbox" name="operators" checked>
+      <span><b><%= thousands(counts.operators) %></b> project and event operator<% if counts.operators != 1 { %>s<% } %></span>
+    </label>
+  <% } else { %>
+    <p class="font-semibold mb-2">In this area:</p>
+    <p><b><%= thousands(counts.participants) %></b> participant<% if counts.participants != 1 { %>s<% } %></p>
+    <p><b><%= thousands(counts.operators) %></b> project and event operator<% if counts.operators != 1 { %>s<% } %></p>
+  <% } %>
+<% } } %>

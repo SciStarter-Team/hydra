@@ -1,0 +1,142 @@
+<%
+  let filters = self.filters();
+  let (min_radius, max_radius, default_radius) = self.radius_range();
+%>
+<div class="ss-container mx-auto py-8">
+  <div class="max-w-3xl mb-6">
+    <h1 class="text-primary-dark mb-2">People Finder</h1>
+    <p>Use our People Finder tool to find and invite members of the SciStarter community to participate in your project or event.</p>
+  </div>
+
+  <form id="people-finder" hx-post="<%= crate::people_finder::SEND_PATH %>" hx-target="#people-finder-compose" hx-swap="outerHTML"
+        class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_24rem] gap-6">
+    <div>
+      <p id="people-finder-hint" class="text-sm mb-2">Click or tap the map to choose the area you're interested in.</p>
+      <div id="people-finder-map" class="w-full h-[60vh] min-h-[320px] rounded-sm border border-linework"></div>
+    </div>
+
+    <div>
+      <div class="border border-linework bg-primary-light rounded-sm p-4">
+        <%# The area and filters only: a change to any of them is a new count. %>
+        <fieldset id="people-finder-area">
+          <legend class="sr-only">Area</legend>
+          <input type="hidden" name="latitude">
+          <input type="hidden" name="longitude">
+          <label class="block">
+            <span class="block text-sm font-semibold mb-1">Within <output id="people-finder-radius-shown" for="people-finder-radius"><%= default_radius %></output> miles</span>
+            <input type="range" id="people-finder-radius" name="radius_miles" min="<%= min_radius %>" max="<%= max_radius %>" step="5" value="<%= default_radius %>" class="w-full">
+          </label>
+
+          <% if !filters.is_empty() { %>
+            <div class="mt-4">
+              <p class="text-sm font-semibold mb-1">Staff filters: only reach</p>
+              <% for filter in filters { %>
+                <label class="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="filter" value="<%= filter.as_ref() %>">
+                  <span><%= filter.label() %></span>
+                </label>
+              <% } %>
+            </div>
+          <% } %>
+        </fieldset>
+
+        <div id="people-finder-counts" class="mt-4" aria-live="polite"
+             hx-get="<%= crate::people_finder::COUNT_PATH %>"
+             hx-trigger="pf-recount, change from:#people-finder-area"
+             hx-include="#people-finder-area">
+          <%+ self.counts %>
+        </div>
+      </div>
+
+      <%+ self.compose %>
+    </div>
+  </form>
+</div>
+
+<script>
+  (function () {
+    if (typeof maplibregl === "undefined") return;
+
+    var form = document.getElementById("people-finder");
+    var latitude = form.elements.latitude;
+    var longitude = form.elements.longitude;
+    var radius = form.elements.radius_miles;
+    var shown = document.getElementById("people-finder-radius-shown");
+    var counts = document.getElementById("people-finder-counts");
+    var hint = document.getElementById("people-finder-hint");
+    var EARTH_RADIUS_MILES = 3958.8;
+
+    // The chosen area as a polygon: MapLibre draws circles in pixels, not
+    // miles.
+    function circle(lat, lng, miles) {
+      var d = miles / EARTH_RADIUS_MILES;
+      var phi = lat * Math.PI / 180;
+      var lambda = lng * Math.PI / 180;
+      var ring = [];
+      for (var i = 0; i <= 64; i++) {
+        var bearing = 2 * Math.PI * i / 64;
+        var phi2 = Math.asin(Math.sin(phi) * Math.cos(d) + Math.cos(phi) * Math.sin(d) * Math.cos(bearing));
+        var lambda2 = lambda + Math.atan2(Math.sin(bearing) * Math.sin(d) * Math.cos(phi),
+                                          Math.cos(d) - Math.sin(phi) * Math.sin(phi2));
+        ring.push([lambda2 * 180 / Math.PI, phi2 * 180 / Math.PI]);
+      }
+      return { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } };
+    }
+
+    var map = new maplibregl.Map({
+      container: "people-finder-map",
+      style: "https://tiles.openfreemap.org/styles/liberty",
+      bounds: [[-128.99107, 22.62724], [-63.35107, 50.26125]],
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
+
+    // Set once the map can draw the area.
+    var source = null;
+
+    function draw(fit) {
+      if (!source || !latitude.value) return;
+      var area = circle(parseFloat(latitude.value), parseFloat(longitude.value), parseFloat(radius.value));
+      source.setData(area);
+      if (fit) {
+        var bounds = new maplibregl.LngLatBounds();
+        area.geometry.coordinates[0].forEach(function (point) { bounds.extend(point); });
+        map.fitBounds(bounds, { padding: 40 });
+      }
+    }
+
+    radius.addEventListener("input", function () {
+      shown.textContent = radius.value;
+      draw(false);
+    });
+    radius.addEventListener("change", function () { draw(true); });
+
+    map.on("load", function () {
+      map.addSource("people-finder-area", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "people-finder-area-fill",
+        type: "fill",
+        source: "people-finder-area",
+        paint: { "fill-color": "#0071b8", "fill-opacity": 0.2 },
+      });
+      map.addLayer({
+        id: "people-finder-area-line",
+        type: "line",
+        source: "people-finder-area",
+        paint: { "line-color": "#0071b8", "line-width": 2 },
+      });
+      source = map.getSource("people-finder-area");
+
+      map.on("click", function (e) {
+        var at = e.lngLat.wrap();
+        latitude.value = at.lat.toFixed(6);
+        longitude.value = at.lng.toFixed(6);
+        hint.textContent = "Change the radius, or click elsewhere to move the area.";
+        draw(true);
+        htmx.trigger(counts, "pf-recount");
+      });
+    });
+  })();
+</script>

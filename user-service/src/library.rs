@@ -12,7 +12,7 @@
 //! in a Google Sheet and imported through `/staff/google-authorize`. Unlike the
 //! signups, this service owns it.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use anyhow::Error;
 use async_nats::service::Request;
@@ -23,10 +23,10 @@ use common::{
     },
     organizations,
     service::decode_structured_message,
-    shared::db,
+    shared::{db, hash_identifier_lower},
     timestring::TimeString,
 };
-use sqlx::{QueryBuilder, Row, Sqlite};
+use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
 use ulid::Ulid;
 
 /// Kept in step with `LibraryNetworkSignup.HAVE_ACCOUNT` in orrery's
@@ -373,6 +373,51 @@ pub async fn create(req: &Request) -> Result<(), Error> {
     .await?;
 
     Ok(())
+}
+
+/// Every account in the Library Network: those a sign-up names, by its
+/// account link or, for a sign-up made signed out, by the address it gives.
+///
+/// The address is matched case-insensitively against each account's primary
+/// address only, as orrery's `LibraryNetworkSignup.accounts_among` matches
+/// `User.QUERY_EMAIL`, so the two sites agree on who is in the network. The
+/// match goes through `emails.hash_lower`, which is indexed; `users` has no
+/// case-insensitive index on its address, and scanning it is not cheap.
+pub async fn network_accounts(pool: &SqlitePool) -> Result<BTreeSet<String>, Error> {
+    let signups =
+        sqlx::query!(r#"SELECT "user_id", "email" AS "email!" FROM "library_network_signups""#)
+            .fetch_all(pool)
+            .await?;
+
+    let mut accounts = BTreeSet::new();
+    let mut hashes = Vec::new();
+
+    for signup in signups {
+        if let Some(user_id) = signup.user_id {
+            accounts.insert(user_id);
+        }
+
+        let email = signup.email.trim();
+        if !email.is_empty() {
+            hashes.push(hash_identifier_lower(email));
+        }
+    }
+
+    let hashes = serde_json::to_string(&hashes)?;
+    let matched = sqlx::query_scalar!(
+        r#"SELECT e."user_id" AS "user_id!"
+             FROM "emails" e
+             JOIN "users" u ON u."user_id" = e."user_id"
+            WHERE e."hash_lower" IN (SELECT "value" FROM json_each(?))
+              AND lower(e."email") = lower(u."primary_email")"#,
+        hashes
+    )
+    .fetch_all(pool)
+    .await?;
+
+    accounts.extend(matched);
+
+    Ok(accounts)
 }
 
 /// Add one library to the directory (`user.library.directory_record`), unless

@@ -6,10 +6,19 @@
 //! both in this one page, as on orrery. Modeled on the ambassador contact
 //! queue (`admin::ambassadors`). Nested under the already-`StaffOnly`
 //! `admin::routes()`.
+//!
+//! People Finder requests are reviewed here too, in a section of their own:
+//! one is a message to everyone in an area rather than to named recipients,
+//! and who it reaches is only worked out when it is approved (see
+//! `crate::people_finder`).
 
 use crate::component::{AdminLayout, Component};
 use crate::middleware::authorization::Authenticated;
 use common::message::forum::{ReviewBatchDecision, ReviewMessageDecision, ReviewMessageRow};
+use common::message::people_finder::{
+    PeopleFinderCountRequest, PeopleFinderCounts, PeopleFinderDecided, PeopleFinderDecision,
+    PeopleFinderPendingRequest, PeopleFinderVerdict,
+};
 use common::service::request;
 use poem::{
     Endpoint, Route, get, handler, post,
@@ -81,7 +90,73 @@ fn group_rows(rows: Vec<ReviewMessageRow>) -> Vec<ReviewGroup> {
 #[derive(TemplateOnce)]
 #[template(path = "admin/message_review.stpl.html")]
 struct MessageReviewPage {
+    people_finder: Vec<PeopleFinderReviewRow>,
     groups: Vec<ReviewGroup>,
+}
+
+/// One pending People Finder request's `<tr>`.
+#[derive(TemplateOnce)]
+#[template(path = "admin/people_finder_review_row.stpl.html")]
+pub struct PeopleFinderReviewRow {
+    pub request: PeopleFinderPendingRequest,
+    /// How many people the request would reach if it were approved now.
+    pub reached: i64,
+}
+
+impl PeopleFinderReviewRow {
+    /// Every pending request, each with how many it would reach now.
+    async fn pending() -> Result<Vec<PeopleFinderReviewRow>, anyhow::Error> {
+        let pending: Vec<PeopleFinderPendingRequest> =
+            request("forum.people_finder.pending", ()).await?;
+
+        if pending.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let operators = crate::people_finder::operator_ids().await?;
+
+        futures::future::try_join_all(pending.into_iter().map(|pending| {
+            let operators = operators.clone();
+            async move {
+                let counts: PeopleFinderCounts = request(
+                    "user.people_finder.count",
+                    PeopleFinderCountRequest {
+                        audience: pending.audience.clone(),
+                        operators,
+                    },
+                )
+                .await?;
+
+                let reach = pending.reach;
+                let reached = if reach.includes_participants() {
+                    counts.participants
+                } else {
+                    0
+                } + if reach.includes_operators() {
+                    counts.operators
+                } else {
+                    0
+                };
+
+                Ok::<_, anyhow::Error>(PeopleFinderReviewRow {
+                    request: pending,
+                    reached,
+                })
+            }
+        }))
+        .await
+    }
+
+    /// The request's centre on OpenStreetMap, since coordinates alone say
+    /// little about where an area is.
+    fn map_href(&self) -> String {
+        let area = self.request.audience.area;
+        format!(
+            "https://www.openstreetmap.org/?mlat={lat:.4}&mlon={lon:.4}#map=9/{lat:.4}/{lon:.4}",
+            lat = area.latitude,
+            lon = area.longitude,
+        )
+    }
 }
 
 /// One pending single-message `<tr>`, rendered inside the page.
@@ -103,12 +178,14 @@ pub fn routes() -> impl Endpoint {
         .at("/", get(index))
         .at("/review/:id", post(review))
         .at("/review-batch/:batch", post(review_batch))
+        .at("/people-finder/:id", post(review_people_finder))
 }
 
 #[handler]
 async fn index(Authenticated(user_info): Authenticated) -> Result<poem::Response, anyhow::Error> {
     let rows: Vec<ReviewMessageRow> = request("forum.messaging.pending_list", ()).await?;
     let page = MessageReviewPage {
+        people_finder: PeopleFinderReviewRow::pending().await?,
         groups: group_rows(rows),
     };
     let prepared = AdminLayout::new("Message Review", page)
@@ -129,11 +206,16 @@ struct ReviewForm {
 
 /// The `<tr>` confirmation that replaces a reviewed row/batch after a decision.
 fn decision_row(accept: bool) -> String {
-    let label = if accept {
+    outcome_row(if accept {
         "Approved &amp; delivered"
     } else {
         "Rejected"
-    };
+    })
+}
+
+/// The `<tr>` that replaces a reviewed row, saying what became of it. `label`
+/// is HTML.
+fn outcome_row(label: &str) -> String {
     format!(
         "<tr class=\"border-t border-gray-100\">\
            <td colspan=\"5\" class=\"px-2 py-2 text-gray-500\">{}</td>\
@@ -178,6 +260,44 @@ async fn review_batch(
     Ok(poem::Response::builder()
         .content_type("text/html")
         .body(decision_row(accept)))
+}
+
+#[derive(Deserialize)]
+struct PeopleFinderReviewForm {
+    verdict: PeopleFinderVerdict,
+}
+
+/// Approve or deny a People Finder request. Approval starts its delivery,
+/// which forum-service does in the background.
+#[handler]
+async fn review_people_finder(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    Form(form): Form<PeopleFinderReviewForm>,
+) -> Result<poem::Response, anyhow::Error> {
+    let request_id = Ulid::from_string(&id)?;
+    let reviewer =
+        user_info.ok_or_else(|| anyhow::anyhow!("Reviewing needs a signed-in reviewer"))?;
+
+    let decided: PeopleFinderDecided = request(
+        "forum.people_finder.review",
+        PeopleFinderDecision {
+            request_id,
+            verdict: form.verdict,
+            reviewer_id: reviewer.user_id,
+        },
+    )
+    .await?;
+
+    let label = match (decided.decided, form.verdict) {
+        (false, _) => "Already decided by another reviewer",
+        (true, PeopleFinderVerdict::Approve) => "Approved &amp; being delivered",
+        (true, PeopleFinderVerdict::Deny) => "Denied",
+    };
+
+    Ok(poem::Response::builder()
+        .content_type("text/html")
+        .body(outcome_row(label)))
 }
 
 #[cfg(test)]

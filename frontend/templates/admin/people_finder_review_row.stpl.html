@@ -1,0 +1,27 @@
+<% use crate::number::thousands; %>
+<tr class="border-t border-gray-100 align-top">
+  <td class="px-2 py-2 whitespace-nowrap text-gray-500"><%= self.request.when %></td>
+  <td class="px-2 py-2"><%= self.request.sender %></td>
+  <td class="px-2 py-2 max-w-xs">
+    <div><%= self.request.audience.describe(self.request.reach) %></div>
+    <a href="<%= self.map_href() %>" target="_blank" rel="noopener" class="text-primary-action hover:underline">map</a>
+    <div class="mt-1 font-medium"><%= thousands(self.reached) %> <% if self.reached == 1 { %>person<% } else { %>people<% } %> now</div>
+  </td>
+  <td class="px-2 py-2 max-w-md">
+    <div class="font-medium"><%= self.request.subject %></div>
+    <div class="whitespace-pre-line text-gray-700"><%= self.request.body %></div>
+  </td>
+  <td class="px-2 py-2 whitespace-nowrap">
+    <div class="flex gap-2">
+      <button class="btn btn-accent !py-1 !px-2 text-xs"
+              hx-post="/-admin/messages/people-finder/<%= self.request.request_id |disp %>"
+              hx-vals='{"verdict":"Approve"}'
+              hx-confirm="Deliver this message to everyone in the area (<%= thousands(self.reached) %> now)?"
+              hx-target="closest tr" hx-swap="outerHTML">Approve</button>
+      <button class="btn !py-1 !px-2 text-xs"
+              hx-post="/-admin/messages/people-finder/<%= self.request.request_id |disp %>"
+              hx-vals='{"verdict":"Deny"}'
+              hx-target="closest tr" hx-swap="outerHTML">Deny</button>
+    </div>
+  </td>
+</tr>

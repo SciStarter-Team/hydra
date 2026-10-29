@@ -26,7 +26,7 @@
 //! awards); lists, whose views are the statistics their owners are shown; and
 //! the exchange and partner-embedded copies of project pages.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
 use anyhow::Error;
@@ -367,6 +367,8 @@ fn robots() -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use assert2::check;
     use sqlx::sqlite::SqlitePoolOptions;
 

@@ -2621,6 +2621,8 @@ mod tests {
 
         assert!(html.contains("Three Easy Steps!"));
         assert!(html.contains("paste your Zooniverse username below (case-sensitive)."));
+        assert!(html.contains("Sign up or sign in to Zooniverse</a> and copy your username."));
+        assert!(html.contains("the name after the @ under your name on the Zooniverse home page."));
         assert!(html.contains("even if you join more SciStarter Affiliate Zooniverse projects"));
     }
 
@@ -2649,6 +2651,7 @@ mod tests {
         assert!(!html.contains("disabled"));
         assert!(!html.contains("case-sensitive"));
         assert!(!html.contains("app links"));
+        assert!(html.contains("Sign up or sign in to iNaturalist</a> and copy your username.</p>"));
     }
 
     #[test]
@@ -2660,7 +2663,7 @@ mod tests {
         .render_once()
         .unwrap();
 
-        assert!(html.contains("or use the app links below"));
+        assert!(html.contains("Sign up or sign in to iNaturalist</a> (or use the app links below) and copy your username."));
     }
 
     #[test]
@@ -2672,7 +2675,7 @@ mod tests {
         .render_once()
         .unwrap();
 
-        assert!(html.contains("connected as <strong>Stargazer</strong>"));
+        assert!(html.contains("Linked to iNaturalist account <strong>Stargazer</strong>"));
         assert!(html.contains("<details"));
         assert!(html.contains(r#"value="Stargazer""#));
         assert!(!html.contains("Easy Steps!"));

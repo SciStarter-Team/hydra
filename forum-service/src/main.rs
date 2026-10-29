@@ -13,6 +13,7 @@ pub mod forums;
 pub mod health;
 pub mod messaging;
 pub mod moderation;
+pub mod people_finder;
 pub mod posts;
 pub mod sync;
 pub mod topics;
@@ -159,6 +160,13 @@ async fn main() {
     toplevel.spawn(handler!(messaging, "pending_list", messaging::pending_list));
     toplevel.spawn(handler!(messaging, "review", messaging::review_message));
     toplevel.spawn(handler!(messaging, "review_batch", messaging::review_batch));
+
+    // People Finder: messages to everyone in an area, held for staff review
+    let people_finder_group = service.group("forum.people_finder");
+    toplevel.spawn(handler!(people_finder_group, "submit", people_finder::submit));
+    toplevel.spawn(handler!(people_finder_group, "pending", people_finder::pending));
+    toplevel.spawn(handler!(people_finder_group, "review", people_finder::review));
+    toplevel.spawn(people_finder::delivery_worker());
 
     // Content filtering endpoints
     let filter = service.group("forum.filter");

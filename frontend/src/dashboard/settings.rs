@@ -90,7 +90,6 @@ pub struct GeneralForm {
     pub newsletter: Option<bool>,
     pub accept_messages: Option<bool>,
     pub accept_emails: Option<bool>,
-    pub ai_opt_out: Option<bool>,
 }
 
 #[handler]
@@ -137,7 +136,9 @@ pub async fn save_general(
         newsletter: Some(form.newsletter.unwrap_or(false)),
         accept_messages: Some(form.accept_messages.unwrap_or(false)),
         accept_emails: Some(form.accept_emails.unwrap_or(false)),
-        ai_opt_out: Some(form.ai_opt_out.unwrap_or(false)),
+        // AI recommendations are switched off, so the form no longer offers
+        // the opt-out. Left as None so an earlier opt-out stays recorded.
+        ai_opt_out: None,
         image: None,
         country_code: None,
         scientist: None,

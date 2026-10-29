@@ -62,11 +62,13 @@ pub trait PlatformCopy {
     /// does.
     fn eligible_projects_url(self) -> Option<String>;
 
-    /// "a" or "an", before the platform's name.
-    fn article(self) -> &'static str;
-
-    /// Where a visitor signs in to the platform to find their username.
+    /// Where a visitor signs up or signs in to the platform to find their
+    /// username.
     fn sign_in_url(self) -> &'static str;
+
+    /// Where on the platform, once signed in, the username is to be found,
+    /// when that is easy to mistake.
+    fn username_hint(self) -> Option<&'static str>;
 
     /// One unit of what the platform credits, and what a participant does to
     /// make one: an observation is uploaded, a classification made.
@@ -86,17 +88,19 @@ impl PlatformCopy for LinkedPlatform {
         }
     }
 
-    fn article(self) -> &'static str {
-        match self {
-            LinkedPlatform::INaturalist => "an",
-            LinkedPlatform::Zooniverse => "a",
-        }
-    }
-
     fn sign_in_url(self) -> &'static str {
         match self {
             LinkedPlatform::INaturalist => "https://www.inaturalist.org/login",
             LinkedPlatform::Zooniverse => "https://www.zooniverse.org/",
+        }
+    }
+
+    fn username_hint(self) -> Option<&'static str> {
+        match self {
+            LinkedPlatform::INaturalist => None,
+            // Their signed-in home page shows the username as @login,
+            // beneath a display name that is easily mistaken for it.
+            LinkedPlatform::Zooniverse => Some("It's the name after the @ under your name on the Zooniverse home page."),
         }
     }
 

@@ -4,7 +4,7 @@
 <div id="platform-account" class="mb-3">
   <% let connected = match &self.visitor { PlatformAccountVisitor::SignedIn(username) if !username.is_empty() && self.outcome != PlatformAccountOutcome::Blank => Some(username.as_str()), _ => None }; %>
   <% if let Some(username) = connected { %>
-  <p class="mb-3" role="status">Your <%= label %> account is connected as <strong><%= username %></strong>.</p>
+  <p class="mb-3" role="status">Linked to <%= label %> account <strong><%= username %></strong>.</p>
   <details class="mb-3">
     <summary class="cursor-pointer text-primary-action underline text-sm w-fit">Change</summary>
     <form class="mt-2" hx-post="/-detail/<%= &self.target_id %>/platform-account" hx-target="#platform-account" hx-swap="outerHTML">
@@ -25,7 +25,7 @@
       <%+ auth.clone() %>
     </li>
     <% } %>
-    <li><p>Get your <%= label %> username. Already have <%= self.platform.article() %> <%= label %> account? <a class="text-primary-action underline" href="<%= self.platform.sign_in_url() %>" target="_blank" rel="noopener">Sign in to <%= label %></a> and copy your username. New to <%= label %>? Click <q>Visit</q><% if self.has_app_links { %> or use the app links below<% } %> to create a free <%= label %> account, then copy your username.</p></li>
+    <li><p><a class="text-primary-action underline" href="<%= self.platform.sign_in_url() %>" target="_blank" rel="noopener">Sign up or sign in to <%= label %></a><% if self.has_app_links { %> (or use the app links below)<% } %> and copy your username.<% if let Some(hint) = self.platform.username_hint() { %> <%= hint %><% } %></p></li>
     <li><p>Return here and paste your <%= label %> username below<% if self.platform.username_case_sensitive() { %> (case-sensitive)<% } %>.</p></li>
   </ol>
   <form hx-post="/-detail/<%= &self.target_id %>/platform-account" hx-target="#platform-account" hx-swap="outerHTML">
