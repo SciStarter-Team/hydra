@@ -25,3 +25,6 @@ rand = "0.8"
 sha2 = "0.10.9"
 hex = "0.4.3"
 
+
+[dev-dependencies]
+assert2 = "0.3.16"

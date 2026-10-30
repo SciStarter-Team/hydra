@@ -9,7 +9,10 @@ use common::message::user::{
     UserMatchResponse, UserOpaqueIdRequest, UserOpaqueIdResponse, ValidateApiKeyRequest,
     ValidateApiKeyResponse,
 };
-use common::{service::decode_structured_message, shared::db};
+use common::{
+    service::decode_structured_message,
+    shared::{db, hash_identifier},
+};
 
 /// Match user by identifier (hashed email, opaque ID, email, or link token)
 pub async fn match_user(req: &Request) -> Result<UserMatchResponse, anyhow::Error> {
@@ -26,21 +29,34 @@ pub async fn match_user(req: &Request) -> Result<UserMatchResponse, anyhow::Erro
     Ok(UserMatchResponse { user_id })
 }
 
-/// Match user by hashed email
-/// Checks hash, hash_lower, and hash_capfirst variants
-async fn match_by_hashed_email(hash: &str) -> Result<Option<String>, anyhow::Error> {
-    let row = sqlx::query!(
-        "SELECT user_id FROM emails
-         WHERE hash = ? OR hash_lower = ? OR hash_capfirst = ?
-         LIMIT 1",
-        hash,
-        hash,
+/// The account a hashed address belongs to. Each address is kept as it was
+/// entered, in lowercase, and in lowercase with a capital first letter, and
+/// a hash can be one account's address as entered and another's derived
+/// spelling, so the spelling as entered wins, then lowercase -- the same
+/// precedence as orrery's `ProfileHash.best_match`.
+pub(crate) async fn match_by_hashed_email(hash: &str) -> Result<Option<String>, anyhow::Error> {
+    let as_entered = sqlx::query_scalar!(r#"SELECT user_id FROM emails WHERE hash = ?"#, hash)
+        .fetch_optional(db())
+        .await?;
+
+    if as_entered.is_some() {
+        return Ok(as_entered);
+    }
+
+    let lower = sqlx::query_scalar!(r#"SELECT user_id FROM emails WHERE hash_lower = ?"#, hash)
+        .fetch_optional(db())
+        .await?;
+
+    if lower.is_some() {
+        return Ok(lower);
+    }
+
+    Ok(sqlx::query_scalar!(
+        r#"SELECT user_id FROM emails WHERE hash_capfirst = ?"#,
         hash
     )
     .fetch_optional(db())
-    .await?;
-
-    Ok(row.map(|r| r.user_id))
+    .await?)
 }
 
 /// Match user by opaque_id
@@ -55,13 +71,10 @@ async fn match_by_opaque_id(opaque_id: &str) -> Result<Option<String>, anyhow::E
     Ok(row.map(|r| r.user_id))
 }
 
-/// Match user by plaintext email
-async fn match_by_email(email: &str) -> Result<Option<String>, anyhow::Error> {
-    let row = sqlx::query!("SELECT user_id FROM emails WHERE email = ? LIMIT 1", email)
-        .fetch_optional(db())
-        .await?;
-
-    Ok(row.map(|r| r.user_id))
+/// The account a plaintext address belongs to, found through its hash, so
+/// that it matches every spelling a hashed report of it would.
+pub(crate) async fn match_by_email(email: &str) -> Result<Option<String>, anyhow::Error> {
+    match_by_hashed_email(&hash_identifier(email)).await
 }
 
 /// Match user by link token
@@ -86,17 +99,6 @@ async fn match_by_ulid(ulid: &str) -> Result<Option<String>, anyhow::Error> {
     Ok(row.map(|r| r.user_id))
 }
 
-/// Generate a URL-safe random API key (similar to Python's secrets.token_urlsafe(64))
-fn generate_api_key() -> String {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let bytes: Vec<u8> = (0..64).map(|_| rng.r#gen()).collect();
-
-    // Use URL-safe base64 encoding (no padding)
-    use base64::Engine;
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&bytes)
-}
-
 /// Get user's API key, generating one if it doesn't exist
 pub async fn get_api_key(req: &Request) -> Result<UserApiKeyResponse, anyhow::Error> {
     let request: UserApiKeyRequest = decode_structured_message(req.message.clone())?;
@@ -112,7 +114,7 @@ pub async fn get_api_key(req: &Request) -> Result<UserApiKeyResponse, anyhow::Er
         existing_key
     } else {
         // Generate a new API key
-        let new_key = generate_api_key();
+        let new_key = crate::secret_code::generate(crate::secret_code::API_KEY_BYTES);
 
         // Save it to the database
         sqlx::query!(
@@ -152,32 +154,8 @@ pub async fn lookup_profile_id(req: &Request) -> Result<ProfileIdLookupResponse,
 
     // First resolve to a user_id
     let user_id = match request.identifier_type {
-        ProfileIdLookupType::Email => {
-            sqlx::query_scalar!(
-                r#"SELECT u.user_id
-                   FROM emails e
-                   JOIN users u ON e.user_id = u.user_id
-                   WHERE e.email = ?
-                   LIMIT 1"#,
-                request.identifier
-            )
-            .fetch_optional(db())
-            .await?
-        }
-        ProfileIdLookupType::Hashed => {
-            sqlx::query_scalar!(
-                r#"SELECT u.user_id
-                   FROM emails e
-                   JOIN users u ON e.user_id = u.user_id
-                   WHERE e.hash = ? OR e.hash_lower = ? OR e.hash_capfirst = ?
-                   LIMIT 1"#,
-                request.identifier,
-                request.identifier,
-                request.identifier
-            )
-            .fetch_optional(db())
-            .await?
-        }
+        ProfileIdLookupType::Email => match_by_email(&request.identifier).await?,
+        ProfileIdLookupType::Hashed => match_by_hashed_email(&request.identifier).await?,
         ProfileIdLookupType::LegacyProfileId => {
             let profile_id: i64 = request.identifier.parse().unwrap_or(0);
             sqlx::query_scalar!(
@@ -225,17 +203,18 @@ pub async fn lookup_profile_id(req: &Request) -> Result<ProfileIdLookupResponse,
 pub async fn api_create_user(req: &Request) -> Result<ApiCreateUserResponse, anyhow::Error> {
     let request: ApiCreateUserRequest = decode_structured_message(req.message.clone())?;
 
-    // Check if user already exists by email
-    let existing = sqlx::query!(
-        r#"SELECT u.user_id, u.legacy_v3_profile_id, u.opaque_id
-           FROM emails e
-           JOIN users u ON e.user_id = u.user_id
-           WHERE e.email = ?
-           LIMIT 1"#,
-        request.email
-    )
-    .fetch_optional(db())
-    .await?;
+    // An address that matches an account's in any of its spellings is that
+    // account's: signing it up again would collide with the spellings kept.
+    let existing =
+        match match_by_email(&request.email).await? {
+            Some(user_id) => sqlx::query!(
+                r#"SELECT user_id, legacy_v3_profile_id, opaque_id FROM users WHERE user_id = ?"#,
+                user_id
+            )
+            .fetch_optional(db())
+            .await?,
+            None => None,
+        };
 
     if let Some(user) = existing {
         return Ok(ApiCreateUserResponse {

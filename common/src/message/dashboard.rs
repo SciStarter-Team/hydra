@@ -1096,26 +1096,45 @@ pub struct UserPlaceDelete {
     pub id: Ulid,
 }
 
-/// A user-issued API link token. Returned by `user.link_tokens.list`.
+/// The longest label a Link Token may have, as orrery's `LinkToken.name`.
+pub const LINK_TOKEN_LABEL_LENGTH: usize = 64;
+
+/// The label a Link Token gets when it is made without one, as on orrery.
+pub const DEFAULT_LINK_TOKEN_LABEL: &str = "default";
+
+/// A Link Token: a string an account holder gives an affiliate project, which
+/// the project sends back with each contribution it reports, to say whose it
+/// is. Returned by `user.link_tokens.list_by_user`, oldest first.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkToken {
     pub token: String,
     pub label: String,
     pub created: String,
-    pub expires: Option<String>,
 }
 
-/// Sent via `user.link_tokens.add`. The handler mints a new token
-/// string and returns the resulting `LinkToken`.
+/// Sent via `user.link_tokens.add`. The handler mints a new token for
+/// `user_id` and answers with a `LinkTokenAdded`. `label` is as the account
+/// holder typed it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkTokenAdd {
     pub user_id: Ulid,
     pub label: String,
-    pub expires: Option<String>,
 }
 
-/// Sent via `user.link_tokens.delete`. The handler verifies that the
-/// token belongs to `user_id` before deleting.
+/// The answer to `user.link_tokens.add`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LinkTokenAdded {
+    Added(LinkToken),
+
+    /// The account already has a token with this label.
+    LabelTaken(String),
+
+    /// The label is longer than `LINK_TOKEN_LABEL_LENGTH`.
+    LabelTooLong,
+}
+
+/// Sent via `user.link_tokens.delete`. Deletes the token only if it belongs
+/// to `user_id`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkTokenDelete {
     pub user_id: Ulid,

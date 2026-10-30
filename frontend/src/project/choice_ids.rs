@@ -81,6 +81,15 @@ pub fn named(choices: &[(i64, &'static str)], value: &Value) -> Option<&'static 
         .map(|(_, name)| *name)
 }
 
+/// orrery's id for the choice value `name`, or None if `choices` has no
+/// value by that name.
+pub fn id_of(choices: &[(i64, &'static str)], name: &str) -> Option<i64> {
+    choices
+        .iter()
+        .find(|(_, held)| *held == name)
+        .map(|(id, _)| *id)
+}
+
 /// The choice values a partner's field names, in order and without
 /// repeats. A list names one value per item; anything else names one value.
 /// Values that name nothing are dropped, as orrery drops them.

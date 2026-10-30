@@ -23,6 +23,7 @@ use poem::{
 use sailfish::TemplateOnce;
 use serde::Deserialize;
 
+pub mod legacy_api;
 mod orrery;
 
 /// A search result for public entity search
@@ -676,6 +677,32 @@ fn finder_page_href(filter_params: &str, page: u32) -> String {
 
 const FINDER_PER_PAGE: u32 = 24;
 
+/// Which page of a finder search to fetch, and how many results a page holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ResultPage {
+    /// Counting from 1.
+    pub(crate) number: u32,
+    pub(crate) size: u32,
+}
+
+impl ResultPage {
+    /// Page `number` as the `/finder` page shows it.
+    pub(crate) fn finder(number: u32) -> Self {
+        ResultPage {
+            number,
+            size: FINDER_PER_PAGE,
+        }
+    }
+
+    fn limit(self) -> i64 {
+        self.size as i64
+    }
+
+    fn offset(self) -> i64 {
+        (self.number.max(1) - 1) as i64 * self.size as i64
+    }
+}
+
 /// Load available filter options from the database
 pub(crate) async fn load_filter_options() -> Result<(Vec<String>, Vec<String>, Vec<String>), Error>
 {
@@ -973,11 +1000,11 @@ fn build_event_count_text<'a>(
 /// Search all published entities with no text or location filter, just pagination and sidebar filters
 async fn search_all(
     fq: &FinderQuery,
-    page: u32,
+    page: ResultPage,
     kinds: SearchKinds,
 ) -> Result<FinderSearchResult, Error> {
-    let limit = FINDER_PER_PAGE as i64;
-    let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
+    let limit = page.limit();
+    let offset = page.offset();
     let window = EventWindow::from_query(fq);
 
     // Count
@@ -1101,14 +1128,14 @@ async fn search_all(
 
 async fn search_text_only(
     fq: &FinderQuery,
-    page: u32,
+    page: ResultPage,
     style: FtsTermStyle,
     kinds: SearchKinds,
 ) -> Result<FinderSearchResult, Error> {
     let q = fq.q.as_deref().unwrap_or("");
     let search_term = style.term_for(q);
-    let limit = FINDER_PER_PAGE as i64;
-    let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
+    let limit = page.limit();
+    let offset = page.offset();
     let window = EventWindow::from_query(fq);
 
     // Count
@@ -1247,7 +1274,7 @@ async fn search_with_location(
     fq: &FinderQuery,
     lat: f64,
     lng: f64,
-    page: u32,
+    page: ResultPage,
     style: FtsTermStyle,
     kinds: SearchKinds,
 ) -> Result<FinderSearchResult, Error> {
@@ -1273,8 +1300,8 @@ async fn search_with_location(
     };
     let total = (proj_count + evt_count) as u32;
 
-    let limit = FINDER_PER_PAGE as i64;
-    let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
+    let limit = page.limit();
+    let offset = page.offset();
     let window = EventWindow::from_query(fq);
 
     // Build UNION ALL with spatial columns. Distance ranks first, as the
@@ -1735,7 +1762,7 @@ async fn search_location_only(
     fq: &FinderQuery,
     lat: f64,
     lng: f64,
-    page: u32,
+    page: ResultPage,
     kinds: SearchKinds,
 ) -> Result<FinderSearchResult, Error> {
     // Count
@@ -1757,8 +1784,8 @@ async fn search_location_only(
     };
     let total = (proj_count + evt_count) as u32;
 
-    let limit = FINDER_PER_PAGE as i64;
-    let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
+    let limit = page.limit();
+    let offset = page.offset();
 
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
 
@@ -1781,7 +1808,7 @@ async fn search_location_only(
 /// with the query's facet filters applied in every case.
 pub(crate) async fn run_finder_search(
     query: &FinderQuery,
-    page: u32,
+    page: ResultPage,
     style: FtsTermStyle,
     kinds: SearchKinds,
 ) -> Result<FinderSearchResult, Error> {
@@ -1850,15 +1877,20 @@ pub async fn handle_finder(
     // left it when they narrow the search back to its kind.
     let searched = query.as_offered(kinds, SingleKindFilters::CURRENT);
 
-    let search_result = run_finder_search(&searched, page, FtsTermStyle::Phrase, kinds)
-        .await
-        .unwrap_or_else(|e| {
-            tracing::error!("Finder search error: {}", e);
-            FinderSearchResult {
-                results: Vec::new(),
-                total: 0,
-            }
-        });
+    let search_result = run_finder_search(
+        &searched,
+        ResultPage::finder(page),
+        FtsTermStyle::Phrase,
+        kinds,
+    )
+    .await
+    .unwrap_or_else(|e| {
+        tracing::error!("Finder search error: {}", e);
+        FinderSearchResult {
+            results: Vec::new(),
+            total: 0,
+        }
+    });
 
     // Log search event
     {

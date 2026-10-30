@@ -33,28 +33,7 @@
     </div>
     <% } %>
 
-    <section class="mb-8">
-        <div class="flex items-baseline justify-between mb-3">
-            <h2 class="font-semibold text-lg mb-0">Link tokens</h2>
-        </div>
-        <% if self.link_tokens.is_empty() { %>
-        <p class="ss-card !p-4 text-sm opacity-70 mb-0">
-            Link tokens let external apps record contributions on your behalf.
-            You haven't created any yet.
-        </p>
-        <% } else { %>
-        <ul class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <% for token in &self.link_tokens { %>
-            <li class="ss-card !p-4 flex items-center justify-between">
-                <div>
-                    <div class="font-semibold text-sm"><%= token.label %></div>
-                    <div class="text-xs opacity-60">Created <%= token.created %><% if let Some(expires) = &token.expires { %> · expires <%= expires %><% } %></div>
-                </div>
-            </li>
-            <% } %>
-        </ul>
-        <% } %>
-    </section>
+    <%+ self.link_tokens %>
 
     <% if self.show_empty_state { %>
     <section class="ss-card !p-8 text-center">

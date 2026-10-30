@@ -3,15 +3,16 @@ use async_nats::service::Request;
 use common::{
     badge::Badge,
     message::user::{
-        AdminPasswordResetRequest, AdminPasswordResetResponse, BadgeHolderInfo,
-        BadgeHoldersRequest, BadgeHoldersResponse, BasicInfo, InterestedRequest, InterestedUser,
-        MasqueradeRequest, PRIVATE_DISPLAY_NAME, PageManagerSyncRequest, PageManagerSyncResponse,
-        PageManagerUpdateRequest, PageManagerUpdateResponse, TagCohortMember, TagCohortRequest,
-        UserAndBadge, UserBadge, UserDetails, UserDetailsBatchGetRequest,
-        UserDetailsBatchGetResponse, UserDetailsCreateRequest, UserDetailsDeleteRequest,
-        UserDetailsDeleteResponse, UserDetailsExportRequest, UserDetailsExportResponse,
-        UserDetailsGetRequest, UserDetailsListRequest, UserDetailsListResponse,
-        UserDetailsResponse, UserDetailsSearchRequest, UserDetailsUpdateRequest, UserDisplayInfo,
+        AccountEmail, AccountEmails, AdminPasswordResetRequest, AdminPasswordResetResponse,
+        BadgeHolderInfo, BadgeHoldersRequest, BadgeHoldersResponse, BasicInfo, EmailDrop,
+        EmailDropped, InterestedRequest, InterestedUser, MasqueradeRequest, PRIVATE_DISPLAY_NAME,
+        PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest,
+        PageManagerUpdateResponse, TagCohortMember, TagCohortRequest, UserAndBadge, UserBadge,
+        UserDetails, UserDetailsBatchGetRequest, UserDetailsBatchGetResponse,
+        UserDetailsCreateRequest, UserDetailsDeleteRequest, UserDetailsDeleteResponse,
+        UserDetailsExportRequest, UserDetailsExportResponse, UserDetailsGetRequest,
+        UserDetailsListRequest, UserDetailsListResponse, UserDetailsResponse,
+        UserDetailsSearchRequest, UserDetailsUpdateRequest, UserDisplayInfo,
         UserDisplayInfoBatchRequest, UserDisplayInfoBatchResponse, UserEmail, UserEmailAddRequest,
         UserEmailDeleteRequest, UserEmailInfo, UserEmailInfoRequest, UserEmailResponse,
         UserEmailToggleVerifiedRequest, UserEmailUpdateRequest, UserNameMapping, UserPointsRequest,
@@ -760,7 +761,11 @@ pub async fn add_user_email(req: &Request) -> Result<(), Error> {
         update_user_verified_status(user_ulid).await.ok();
     }
 
-    // Get all current emails and notify log service
+    announce_user_emails(&user_id).await
+}
+
+/// Tell the log service's cache what addresses the account now has.
+pub(crate) async fn announce_user_emails(user_id: &str) -> Result<(), Error> {
     let emails = sqlx::query_scalar!(
         r#"SELECT "email" FROM "emails" WHERE "user_id" = ? ORDER BY "email""#,
         user_id
@@ -768,9 +773,126 @@ pub async fn add_user_email(req: &Request) -> Result<(), Error> {
     .fetch_all(db())
     .await?;
 
-    send("log.cache.user_emails_update", (user_id, emails)).await?;
+    send(
+        "log.cache.user_emails_update",
+        (user_id.to_string(), emails),
+    )
+    .await?;
 
     Ok(())
+}
+
+/// The addresses on an account, primary first, and those its owner has
+/// asked to add.
+pub async fn account_emails(req: &Request) -> Result<AccountEmails, Error> {
+    let user_id: String = flexbuffers::from_slice(&req.message.payload)?;
+
+    account_emails_in(db(), &user_id).await
+}
+
+async fn account_emails_in(pool: &SqlitePool, user_id: &str) -> Result<AccountEmails, Error> {
+    let primary = sqlx::query_scalar!(
+        r#"SELECT "primary_email" FROM "users" WHERE "user_id" = ?"#,
+        user_id
+    )
+    .fetch_optional(pool)
+    .await?
+    .unwrap_or_default();
+
+    let mut addresses: Vec<AccountEmail> = sqlx::query!(
+        r#"SELECT "email", "verified" FROM "emails" WHERE "user_id" = ? ORDER BY "email""#,
+        user_id
+    )
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|row| AccountEmail {
+        primary: row.email == primary,
+        email: row.email,
+        verified: row.verified,
+    })
+    .collect();
+
+    // Stable, so the rest keep their order.
+    addresses.sort_by_key(|address| !address.primary);
+
+    Ok(AccountEmails {
+        addresses,
+        pending: crate::email_verification::pending_additions(pool, user_id).await?,
+    })
+}
+
+/// Take an address off an account at its owner's asking, or stop waiting
+/// for one they asked to add. The primary address stays: mail goes to it.
+pub async fn drop_email(req: &Request) -> Result<EmailDropped, Error> {
+    let drop: EmailDrop = flexbuffers::from_slice(&req.message.payload)?;
+    let user_id = drop.user_id.to_string();
+
+    let dropped = drop_email_in(db(), &user_id, &drop.email).await?;
+
+    if dropped == EmailDropped::Dropped {
+        update_user_verified_status(drop.user_id).await?;
+        announce_user_emails(&user_id).await?;
+
+        log_activity(
+            None,
+            "email-deleted",
+            drop.user_id,
+            None,
+            format!("email={}", drop.email),
+        )
+        .await
+        .ok();
+    }
+
+    Ok(dropped)
+}
+
+async fn drop_email_in(
+    pool: &SqlitePool,
+    user_id: &str,
+    email: &str,
+) -> Result<EmailDropped, Error> {
+    let mut tx = Immediate::begin_with_retry(pool, None, None).await?;
+
+    let primary = sqlx::query_scalar!(
+        r#"SELECT "primary_email" FROM "users" WHERE "user_id" = ?"#,
+        user_id
+    )
+    .fetch_optional(&mut tx)
+    .await?;
+
+    if primary.as_deref() == Some(email) {
+        tx.rollback().await?;
+        return Ok(EmailDropped::Primary);
+    }
+
+    let removed = sqlx::query!(
+        r#"DELETE FROM "emails" WHERE "user_id" = ? AND "email" = ?"#,
+        user_id,
+        email
+    )
+    .execute(&mut tx)
+    .await?
+    .rows_affected();
+
+    // Whatever links are out for the address have nothing left to do.
+    let withdrawn = sqlx::query!(
+        r#"DELETE FROM "email_verification_codes" WHERE "user_id" = ? AND "email" = ?"#,
+        user_id,
+        email
+    )
+    .execute(&mut tx)
+    .await?
+    .rows_affected();
+
+    tx.commit().await?;
+
+    Ok(if removed + withdrawn > 0 {
+        EmailDropped::Dropped
+    } else {
+        EmailDropped::NotFound
+    })
 }
 
 /// Remove an email address from a user
@@ -791,17 +913,7 @@ pub async fn remove_user_email(req: &Request) -> Result<(), Error> {
         update_user_verified_status(user_ulid).await.ok();
     }
 
-    // Get all current emails and notify log service
-    let emails = sqlx::query_scalar!(
-        r#"SELECT "email" FROM "emails" WHERE "user_id" = ? ORDER BY "email""#,
-        user_id
-    )
-    .fetch_all(db())
-    .await?;
-
-    send("log.cache.user_emails_update", (user_id, emails)).await?;
-
-    Ok(())
+    announce_user_emails(&user_id).await
 }
 
 #[derive(serde::Deserialize)]
@@ -2349,5 +2461,148 @@ pub async fn page_manager_update(req: &Request) -> Result<PageManagerUpdateRespo
             Ok(PageManagerUpdateResponse { success })
         }
         Err(e) => Err(anyhow::anyhow!("Failed to update page manager status: {}", e).into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert2::check;
+
+    const ADA: &str = "01JGEDS64C0ECBWR472V7788BF";
+    const PRIMARY: &str = "ada@example.invalid";
+    const SECOND: &str = "countess@example.invalid";
+    const ASKED: &str = "lovelace@example.invalid";
+
+    /// As much of the account tables as the address list reads and writes,
+    /// with an account holding two addresses and waiting on a third.
+    async fn fixture() -> SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("pool");
+
+        sqlx::raw_sql(
+            r#"create table "users" (
+                 "user_id" text primary key not null,
+                 "primary_email" text not null
+               );
+               create table "emails" (
+                 "user_id" text not null references "users" ("user_id") on delete cascade,
+                 "email" text not null unique,
+                 "verified" boolean not null
+               );"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("accounts");
+
+        for migration in [
+            include_str!("../migrations/20261006154600_email_verification_codes.up.sql"),
+            include_str!("../migrations/20261030230418_email_codes_that_add_addresses.up.sql"),
+        ] {
+            sqlx::raw_sql(migration)
+                .execute(&pool)
+                .await
+                .expect("schema");
+        }
+
+        sqlx::query(r#"insert into "users" ("user_id", "primary_email") values (?, ?)"#)
+            .bind(ADA)
+            .bind(PRIMARY)
+            .execute(&pool)
+            .await
+            .expect("user");
+
+        for (email, verified) in [(SECOND, false), (PRIMARY, true)] {
+            sqlx::query(
+                r#"insert into "emails" ("user_id", "email", "verified") values (?, ?, ?)"#,
+            )
+            .bind(ADA)
+            .bind(email)
+            .bind(verified)
+            .execute(&pool)
+            .await
+            .expect("address");
+        }
+
+        sqlx::query(
+            r#"insert into "email_verification_codes" ("code", "user_id", "email", "issued", "adds_address")
+               values ('code', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1)"#,
+        )
+        .bind(ADA)
+        .bind(ASKED)
+        .execute(&pool)
+        .await
+        .expect("code");
+
+        pool
+    }
+
+    #[tokio::test]
+    async fn the_list_puts_the_primary_address_first_and_names_those_asked_for() {
+        let pool = fixture().await;
+
+        check!(
+            account_emails_in(&pool, ADA).await.unwrap()
+                == AccountEmails {
+                    addresses: vec![
+                        AccountEmail {
+                            email: PRIMARY.to_string(),
+                            verified: true,
+                            primary: true,
+                        },
+                        AccountEmail {
+                            email: SECOND.to_string(),
+                            verified: false,
+                            primary: false,
+                        },
+                    ],
+                    pending: vec![ASKED.to_string()],
+                }
+        );
+    }
+
+    #[tokio::test]
+    async fn the_primary_address_cannot_be_dropped() {
+        let pool = fixture().await;
+
+        check!(drop_email_in(&pool, ADA, PRIMARY).await.unwrap() == EmailDropped::Primary);
+        check!(account_emails_in(&pool, ADA).await.unwrap().addresses.len() == 2);
+    }
+
+    #[tokio::test]
+    async fn another_address_can() {
+        let pool = fixture().await;
+
+        check!(drop_email_in(&pool, ADA, SECOND).await.unwrap() == EmailDropped::Dropped);
+        check!(account_emails_in(&pool, ADA).await.unwrap().addresses.len() == 1);
+    }
+
+    #[tokio::test]
+    async fn dropping_an_address_asked_for_spends_its_link() {
+        let pool = fixture().await;
+
+        check!(drop_email_in(&pool, ADA, ASKED).await.unwrap() == EmailDropped::Dropped);
+        check!(
+            account_emails_in(&pool, ADA)
+                .await
+                .unwrap()
+                .pending
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn an_address_the_account_never_had_is_not_found() {
+        let pool = fixture().await;
+
+        check!(
+            drop_email_in(&pool, ADA, "stranger@example.invalid")
+                .await
+                .unwrap()
+                == EmailDropped::NotFound
+        );
     }
 }

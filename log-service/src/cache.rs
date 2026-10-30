@@ -1,8 +1,50 @@
+use crate::database::tables::ParticipationRow;
 use crate::error::Result;
 use common::{shared::db, transaction::Immediate};
+use sqlx::SqlitePool;
 
 /// SQLite-based cache system for user data following user-service patterns
 /// Uses the same database connection pool and transaction patterns as the user-service
+
+// ================================
+// PROJECT PARTICIPATION CACHE
+// ================================
+
+/// Note that the row's account has taken part in the row's project, and
+/// say whether this is its first contribution to it: the first row that
+/// reports more than joining.
+pub async fn note_participation(row: &ParticipationRow) -> Result<bool> {
+    note_participation_in(db(), row).await
+}
+
+async fn note_participation_in(pool: &SqlitePool, row: &ParticipationRow) -> Result<bool> {
+    let Some(user_id) = &row.user_id else {
+        return Ok(false);
+    };
+
+    let contributed = !row.joins_project();
+
+    // A row is written when the account is new to the project, and turned
+    // from joined to contributed by its first contribution; either change
+    // is a first contribution exactly when this row is one.
+    let changed = sqlx::query!(
+        r#"
+        INSERT INTO "project_participations_cache" ("user_id", "project_id", "contributed")
+        VALUES (?, ?, ?)
+        ON CONFLICT ("user_id", "project_id") DO UPDATE
+        SET "contributed" = 1
+        WHERE excluded."contributed" = 1 AND "contributed" = 0
+        "#,
+        user_id,
+        row.entity_id,
+        contributed,
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    Ok(contributed && changed > 0)
+}
 
 // ================================
 // USER TAGS CACHE
@@ -437,4 +479,115 @@ pub async fn cleanup_old_cache_entries(days_old: i64) -> Result<()> {
     // Cleanup completed successfully - no output needed for library function
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert2::check;
+
+    const ADA: &str = "01JGEDS64C0ECBWR472V7788BF";
+    const PROJECT: &str = "01JGEDS64C0ECBWR472V7788BG";
+
+    /// The cache table as its migrations make it.
+    async fn fixture() -> SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("pool");
+
+        for migration in [
+            include_str!("../migrations/20251104121415_evolveme_completion_cache.sql"),
+            include_str!("../migrations/20261030225326_contributions_in_participation_cache.sql"),
+        ] {
+            sqlx::raw_sql(migration)
+                .execute(&pool)
+                .await
+                .expect("schema");
+        }
+
+        pool
+    }
+
+    fn row(task_name: &str) -> ParticipationRow {
+        ParticipationRow {
+            origin: 3,
+            when: "2026-10-30T12:00:00Z".to_string(),
+            duration: 0.0,
+            where_point: None,
+            magnitude: 1,
+            authenticated: true,
+            extra: String::new(),
+            fidelity: 0.5,
+            entity_id: PROJECT.to_string(),
+            user_id: Some(ADA.to_string()),
+            task_name: Some(task_name.to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn the_first_contribution_is_first() {
+        let pool = fixture().await;
+
+        check!(
+            note_participation_in(&pool, &row("collection"))
+                .await
+                .unwrap()
+        );
+        check!(
+            !note_participation_in(&pool, &row("collection"))
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn joining_is_no_contribution() {
+        let pool = fixture().await;
+
+        check!(!note_participation_in(&pool, &row("signup")).await.unwrap());
+        check!(
+            !note_participation_in(&pool, &row("Joined the project"))
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn the_first_contribution_after_joining_is_first() {
+        let pool = fixture().await;
+
+        note_participation_in(&pool, &row("signup")).await.unwrap();
+
+        check!(
+            note_participation_in(&pool, &row("classification"))
+                .await
+                .unwrap()
+        );
+        check!(!note_participation_in(&pool, &row("signup")).await.unwrap());
+        check!(
+            !note_participation_in(&pool, &row("classification"))
+                .await
+                .unwrap()
+        );
+    }
+
+    /// Joining still makes the account one of the project's participants.
+    #[tokio::test]
+    async fn joining_is_noted() {
+        let pool = fixture().await;
+
+        note_participation_in(&pool, &row("signup")).await.unwrap();
+
+        let participants: i64 = sqlx::query_scalar(
+            r#"select count(*) from "project_participations_cache" where "project_id" = ?"#,
+        )
+        .bind(PROJECT)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        check!(participants == 1);
+    }
 }

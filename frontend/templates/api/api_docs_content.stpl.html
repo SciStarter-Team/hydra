@@ -4,13 +4,13 @@
   <div class="tabs-bar-wrapper mb-8">
     <div class="tabs-wrapper no-shadow">
       <div class="tabs tabs-bar" role="tablist" aria-label="SciStarter API">
-        <button class="tab" role="tab" aria-selected="true" aria-controls="panel-about" id="tab-about">About</button>
-        <button class="tab" role="tab" aria-selected="false" aria-controls="panel-docs" id="tab-docs">Documentation</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="panel-about" id="tab-about">About</button>
+        <button class="tab" role="tab" aria-selected="true" aria-controls="panel-docs" id="tab-docs">Documentation</button>
       </div>
     </div>
     <div class="tab-panels border border-linework border-t-0 p-4">
 
-      <div class="tab-panel" id="panel-about" role="tabpanel" aria-hidden="false">
+      <div class="tab-panel" id="panel-about" role="tabpanel" aria-hidden="true">
 
         <div class="flex flex-col md:flex-row items-center gap-6 mb-8">
           <img src="/-static/img/api/ai-robot.svg" alt="" class="w-32 shrink-0" />
@@ -18,7 +18,7 @@
             <h2 class="text-neutral-dark">SciStarter provides <span class="text-primary">2 free tools</span> to benefit project owners, participants, organizations, and researchers!</h2>
             <p>
               New to SciStarter's Affiliate Program?
-              <a href="https://blog.scistarter.org/2021/12/citizen-science-project-leaders-heres-how-and-why-to-become-a-scistarter-affiliate/">Read How and Why to Become a SciStarter Affiliate</a>
+              <a href="https://pages.scistarter.org/citizen-science-project-leaders-heres-how-and-why-to-become-a-scistarter-affiliate/">Read How and Why to Become a SciStarter Affiliate</a>
               for a quick overview.
             </p>
           </div>
@@ -26,8 +26,8 @@
 
         <div class="border border-linework border-l-4 border-l-accent1 bg-primary-light p-4 mb-8">
           <h2 class="text-xl text-neutral-dark mt-0 mb-2">Is your project on Zooniverse or iNaturalist?</h2>
-          <p class="mb-2">Projects hosted on Zooniverse, iNaturalist, Anecdata.org, or CitSci.org can become SciStarter affiliates without any programming.</p>
-          <a href="#docs-other" class="font-bold">Other Integrations, including Zooniverse and iNaturalist</a>
+          <p class="mb-2">Zooniverse and iNaturalist projects can become SciStarter affiliates without any programming.</p>
+          <a href="#docs-other" class="font-bold">Connect a Zooniverse or iNaturalist project</a>
         </div>
 
         <div class="grid gap-6 lg:grid-cols-2 mb-12">
@@ -46,7 +46,7 @@
               <a href="#docs-first" class="font-bold">View documentation</a>
             </div>
             <div class="bg-neutral-xlight p-4 text-sm">
-              <a href="https://blog.scistarter.com/2019/08/scistarter-affiliate-tools/">Read about how Anecdata.org and Stall Catchers by EyesOnAlz use the Participation API.</a>
+              <a href="https://pages.scistarter.org/scistarter-affiliate-tools/">Read about how Anecdata.org and Stall Catchers by EyesOnAlz use the Participation API.</a>
             </div>
           </div>
 
@@ -64,7 +64,7 @@
               <a href="#docs-widget" class="font-bold">View documentation</a>
             </div>
             <div class="bg-neutral-xlight p-4 text-sm">
-              <a href="https://blog.scistarter.com/2019/08/scistarter-affiliate-tools/">Read about how Cornerstones of Science and Science Connected use the Project Finder Widget.</a>
+              <a href="https://pages.scistarter.org/scistarter-affiliate-tools/">Read about how Cornerstones of Science and Science Connected use the Project Finder Widget.</a>
             </div>
           </div>
 
@@ -116,26 +116,170 @@
 
       </div>
 
-      <div class="tab-panel" id="panel-docs" role="tabpanel" aria-hidden="true">
+      <div class="tab-panel" id="panel-docs" role="tabpanel" aria-hidden="false">
 
-        <p>If your project uses Qualtrics or similar form-based surveys and services, contact <a href="mailto:info@scistarter.org">info@SciStarter.org</a> to explore affiliate connections.</p>
+        <p>
+          Projects on <a href="https://anecdata.org/">Anecdata.org</a> become SciStarter affiliates
+          automatically. If your project is listed on <a href="https://citsci.org/">CitSci.org</a>,
+          be sure to opt in to have your project listed on SciStarter and for it to become an
+          Affiliate.
+        </p>
 
-        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-first">
+        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-other">
           <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
-            <span>First Steps</span>
+            <span>Zooniverse and iNaturalist projects</span>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
           </summary>
           <div class="accordion__panel bg-white p-4">
-            <h3 class="mt-0">First Step - Your API Key</h3>
+            <h3 class="mt-0">Become a SciStarter Affiliate</h3>
+            <p>
+              Help more people discover your project and give volunteers credit for their
+              participation across projects and websites!
+            </p>
+            <p>
+              Many volunteers participate in multiple projects on different platforms. SciStarter
+              brings their participation together in one dashboard, helping them track their
+              activities and qualify for certificates, badges, rewards, and course credit when
+              offered through SciStarter programs or instructors.
+            </p>
+            <h4>Why become an Affiliate?</h4>
+            <ul class="list-disc ml-6 mb-4">
+              <li><strong>Reach more volunteers</strong> through SciStarter.</li>
+              <li><strong>Recognize participation</strong> across multiple projects and websites in one place.</li>
+              <li><strong>Support learning and rewards</strong> by helping volunteers document participation toward certificates, badges, incentives, and course credit.</li>
+              <li><strong>Encourage continued engagement</strong> in your project and others.</li>
+            </ul>
+            <h3>Zooniverse and iNaturalist</h3>
+            <p>
+              <strong>Participation tracking requires two separate opt-ins:</strong> project leaders
+              choose to connect their projects, and volunteers independently opt in by adding their
+              iNaturalist or Zooniverse usernames to their SciStarter profiles. Each is a one-time
+              setup: a project is connected once, and a volunteer connects their username once per
+              platform.
+            </p>
+            <h4>Zooniverse Project Leaders</h4>
+            <p>We'll help you connect your project securely.</p>
+            <ol class="list-decimal ml-6 mb-4">
+              <li><strong>Add your project</strong> to SciStarter at <a href="/add/project">scistarter.org/add-project</a>.</li>
+              <li>
+                <strong>Email your Zooniverse Project ID</strong> to
+                <a href="mailto:info@scistarter.org">info@scistarter.org</a>. This is the number at
+                the end of your Project Builder URL (e.g., zooniverse.org/lab/12345).
+              </li>
+              <li>
+                <strong>Authorize the connection.</strong> For security, we'll email you our
+                SciStarter username to add under the Collaborators tab of your Zooniverse project's
+                editing page.
+              </li>
+              <li>
+                <strong>Let us know when it's done.</strong> We'll complete the connection and
+                confirm when your project is ready.
+              </li>
+            </ol>
+            <p>
+              <strong>Your project stays under your control.</strong> SciStarter uses its
+              collaborator access strictly for read-only verification of participation. We do not
+              edit your project, change settings, store or use your project's scientific data, or
+              take any other actions.
+            </p>
+            <h4>iNaturalist Project Leaders</h4>
+            <p>iNaturalist projects connect automatically!</p>
+            <ol class="list-decimal ml-6 mb-4">
+              <li><strong>Add your project</strong> to SciStarter at <a href="/add/project">scistarter.org/add-project</a>. Select <strong>Project</strong>, not Event.</li>
+              <li>
+                <strong>Enter your iNaturalist project URL</strong>
+                (e.g., https://www.inaturalist.org/projects/<em>your-project</em>) as the Project URL.
+              </li>
+              <li>
+                <strong>That's it!</strong> SciStarter recognizes the URL and automatically connects
+                your project. No email or additional authorization is needed.
+              </li>
+            </ol>
+            <p>
+              <strong>Already listed?</strong> Update your SciStarter listing with your iNaturalist
+              project URL. Projects on other iNaturalist Network sites, such as NaturaLista, work the
+              same way.
+            </p>
+            <h4>How Volunteers Opt In</h4>
+            <p>
+              Connecting your project does not automatically track your volunteers. Each person must
+              opt in separately.
+            </p>
+            <p>
+              Volunteers give SciStarter permission to recognize their participation by adding their
+              iNaturalist or Zooniverse username to their SciStarter profile, and your project's
+              SciStarter page walks them through it. Zooniverse usernames must be entered exactly as
+              they appear on Zooniverse, including capitalization.
+            </p>
+            <p>
+              Once connected, SciStarter can recognize eligible participation and display it on their
+              personal dashboards.
+            </p>
+            <p><strong>What SciStarter tracks:</strong></p>
+            <ul class="list-disc ml-6 mb-4">
+              <li>The participant's username</li>
+              <li>The project ID</li>
+              <li>The date and time of each iNaturalist observation or Zooniverse classification</li>
+            </ul>
+            <p>
+              <strong>What SciStarter does NOT track:</strong> The observations, classifications, or
+              scientific data volunteers submit or analyze.
+            </p>
+            <p>
+              <strong>Good to know:</strong> Volunteers connect their username only once per
+              platform. Participation is credited from that point forward (not retroactively) and may
+              take up to 24 hours to appear. All iNaturalist projects qualify; Zooniverse projects
+              must complete the Affiliate connection process.
+            </p>
+            <h4>Spreading the Word</h4>
+            <p>
+              Volunteers connect on SciStarter, so the work on your side is letting them know. Your
+              project's SciStarter page walks them through connecting, so link to it wherever your
+              volunteers will see it:
+            </p>
+            <ul class="bullets">
+              <li>Your Zooniverse project's About page and external links, and a post on its Talk boards</li>
+              <li>Your iNaturalist project's description, and a journal post</li>
+              <li>Newsletters, welcome emails, and the instructions for an event, bioblitz, or class</li>
+            </ul>
+            <p>
+              For example: <em>&ldquo;Keep track of your contributions to our project alongside your
+              other citizen science: connect your Zooniverse username on SciStarter at
+              scistarter.org/<em>your-project</em>.&rdquo;</em>
+            </p>
+            <p>
+              Participation counts from the moment a volunteer connects, so ask volunteers to connect
+              before an event, campaign, or course begins rather than after it.
+            </p>
+            <p>
+              <strong>Questions?</strong> Contact
+              <a href="mailto:info@scistarter.org">info@scistarter.org</a>.
+            </p>
+          </div>
+        </details>
+
+        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-first">
+          <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
+            <span>Getting started: your API key</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
+          </summary>
+          <div class="accordion__panel bg-white p-4">
             <ol class="list-decimal ml-6 mb-4">
               <li>Create a SciStarter account and <a href="/api/key">retrieve your API key</a></li>
               <li>Register your <a href="/add/project">project on SciStarter</a>
                 <ul class="bullets">
-                  <li>(If you have an inventory of projects to upload, you can do a bulk upload of projects using API calls and your API key. See "Adding Bulk Projects to SciStarter" below.)</li>
+                  <li>(If you have an inventory of projects to upload, you can do a bulk upload of projects using API calls and your API key. See "Add projects in bulk" below.)</li>
                 </ul>
               </li>
               <li>Our editors will review your project and either email you with questions or approve and publish your project. You'll hear from us either way.</li>
-              <li>Integrate participation reporting. For most projects, reporting with email hashes (the next section) is the recommended approach; the other integrations cover more specialized situations.</li>
+              <li>Choose how to report participation:
+                <ul class="bullets">
+                  <li><strong>A Zooniverse or iNaturalist project:</strong> there's nothing to build. See <a href="#docs-other">Zooniverse and iNaturalist projects</a>.</li>
+                  <li><strong>An app or website that has your volunteers' email addresses:</strong> <a href="#docs-hashed">report with email hashes</a>. This is the recommended approach for most projects.</li>
+                  <li><strong>An app or website that doesn't collect email addresses</strong>, or one where you'd rather volunteers choose for themselves whether to connect: <a href="#docs-token">report with Link Tokens</a>.</li>
+                  <li><strong>A Qualtrics survey:</strong> <a href="#docs-email">report from the survey</a>, with no code to write.</li>
+                </ul>
+              </li>
             </ol>
           </div>
         </details>
@@ -249,10 +393,26 @@
               success response.
             </p>
 
+            <h3>Where it fits in your app</h3>
+            <p>Your app reports at moments it already notices:</p>
+            <ul class="bullets">
+              <li><strong>When a volunteer joins.</strong> When someone creates an account with your project or signs up for it, send a report with type <strong>signup</strong>.</li>
+              <li><strong>When a contribution is saved.</strong> Once your server has stored an observation, classification, transcription, or other contribution, send a report with type <strong>collection</strong> or <strong>classification</strong>. Reporting after the save, rather than when the volunteer presses Submit, means only the contributions you keep are counted.</li>
+            </ul>
+            <p>Some things to keep in mind:</p>
+            <ul class="bullets">
+              <li><strong>Send reports from your server</strong>, not from a web page or a mobile app. Reports carry your API key, and anyone can read a key that is built into a page or an app.</li>
+              <li><strong>Don't make volunteers wait.</strong> Send the report in the background, after your app has answered the volunteer. If SciStarter can't be reached, keep the report and try again later, with <strong>when</strong> set to the time of the contribution. Resend only reports that got no answer: sending one again after SciStarter has answered counts it twice.</li>
+              <li><strong>Busy apps can send fewer reports.</strong> Instead of one report per contribution, send one per volunteer per session or per day, with <strong>count</strong> set to the number of contributions, <strong>duration</strong> to the average time each one took, and <strong>when</strong> to the time of the session.</li>
+              <li><strong>Report every volunteer.</strong> You don't need to know who has a SciStarter account: reports about anyone else are discarded. Volunteers who join SciStarter later are credited from the day they join, not before, so reporting everyone from the start means nobody is missed.</li>
+              <li><strong>Hash the address the volunteer uses on SciStarter.</strong> Credit reaches a volunteer only when their SciStarter account has the same email address you hashed. If volunteers might use a different address with you, add an optional &ldquo;Email address you use on SciStarter&rdquo; field to their settings, and hash that address whenever it's filled in. Volunteers can also add the address they use with you to their SciStarter account settings.</li>
+            </ul>
+
             <p>
               When using this integration mechanism, the participant might not realize that the
               integration is happening, unless you tell them, so it's very important to display some
-              form of notification. For example:
+              form of notification. Mention it where volunteers sign up and in your privacy policy, and
+              consider offering a setting that turns it off. For example:
             </p>
             <img class="max-w-[600px] w-full border border-dotted border-neutral-mid" title="Notification as displayed on Stall Catchers" alt="A notification reading 'Your participation will be recorded on SciStarter'" src="/-static/img/api/notify.png">
           </div>
@@ -264,26 +424,127 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
           </summary>
           <div class="accordion__panel bg-white p-4">
+            <h3 class="mt-0">What is a Link Token?</h3>
+            <p>
+              A Link Token is a code that a volunteer creates on their SciStarter dashboard and pastes
+              into your app or website. With it, your app can let SciStarter know each time that person
+              takes part in your project, and SciStarter adds the contribution to their dashboard.
+            </p>
+            <p>
+              Link Tokens are built to protect privacy. You don't need the volunteer's email address or
+              any other personal information, and the token itself says nothing about who they are.
+              The volunteer decides whether to connect, and can disconnect at any time.
+            </p>
+            <p>
+              Link Tokens are a good fit if you don't collect your volunteers' email addresses, or if
+              you'd rather your volunteers choose for themselves whether to connect. If you do have
+              their email addresses, you can
+              <a href="#docs-hashed">report participation with email hashes</a> instead, with
+              nothing for them to set up.
+            </p>
+
+            <h3>How it works</h3>
+            <ol class="list-decimal ml-6 mb-4">
+              <li>
+                <strong>The volunteer creates a token.</strong> While signed in to SciStarter, they open
+                their dashboard at <a href="/dashboard">scistarter.org/dashboard</a>, type a name for
+                the token (your project's name works well, so they'll recognize it later), and click
+                <strong>Create a Link Token</strong>. The new token appears next to the name.
+              </li>
+              <li>
+                <strong>They give it to your app.</strong> They copy the token and paste it into a place
+                your app provides for it, such as a "Connect to SciStarter" field in their account
+                settings.
+              </li>
+              <li>
+                <strong>Your app saves it.</strong> Keep the token with that volunteer's account. It
+                doesn't expire, so you only need to ask once.
+              </li>
+              <li>
+                <strong>Your app reports each contribution.</strong> When the volunteer takes part, your
+                app sends SciStarter a short report that includes the token (see <em>Sending a
+                report</em>, below). The contribution then appears on their SciStarter dashboard.
+              </li>
+              <li>
+                <strong>The volunteer stays in control.</strong> They can delete the token from their
+                dashboard whenever they like. From then on SciStarter refuses reports that carry it,
+                until they create a new token and give it to you.
+              </li>
+            </ol>
+            <p>
+              A volunteer can create as many tokens as they like, each with its own name. Encourage
+              them to make a separate one for each app, so that disconnecting one doesn't affect the
+              others.
+            </p>
+
+            <h3>What SciStarter receives</h3>
+            <p>
+              Only what your report contains: which project, what kind of participation, and, if you
+              choose to send them, when and where it happened, how long it took, and how many
+              contributions it covers. SciStarter does not receive the observations, classifications,
+              or other data volunteers submit to your project.
+            </p>
+            <p>
+              Volunteers may not notice the connection at work unless you tell them, so say so in your
+              app. For example: "Each time you submit an observation, we'll let SciStarter know, so it
+              shows up on your SciStarter dashboard."
+            </p>
+
+            <h3>Where it fits in your app</h3>
+            <p>
+              Your app needs three things: a place for volunteers to connect, a few well-chosen moments
+              to suggest it, and a report each time a connected volunteer takes part.
+            </p>
+
+            <h4>A place to connect</h4>
+            <p>
+              Add a SciStarter section to the volunteer's account settings, or to your app's settings
+              screen if volunteers don't have accounts with you. It needs:
+            </p>
+            <ul class="bullets">
+              <li>A sentence saying what connecting does, for example: &ldquo;Connect to SciStarter to see your contributions to our project on your SciStarter dashboard, alongside the rest of your citizen science.&rdquo;</li>
+              <li>A link to <a href="/dashboard">scistarter.org/dashboard</a>, opening in a new tab or the device's browser, where the volunteer creates the token. Volunteers who don't have a SciStarter account yet can make one there first.</li>
+              <li>A field to paste the token into, and a <strong>Connect</strong> button.</li>
+              <li>Once connected, a line saying so, and a <strong>Disconnect</strong> button that forgets the token.</li>
+            </ul>
+            <p>
+              When the volunteer presses Connect, send a report with type <strong>signup</strong>
+              straight away. If SciStarter answers with success, the token works: show the volunteer
+              that they're connected, and their SciStarter dashboard now shows that they joined your
+              project. If SciStarter answers &ldquo;Provided token is invalid&rdquo;, ask them to copy
+              the token again.
+            </p>
+
+            <h4>Moments to suggest it</h4>
+            <p>
+              Connecting should always be optional, never a condition of taking part. Suggest it where
+              volunteers will notice:
+            </p>
+            <ul class="bullets">
+              <li>As an optional step when they join, which they can skip</li>
+              <li>Right after their first contribution: &ldquo;Want this to count on SciStarter too?&rdquo;</li>
+              <li>In welcome emails and newsletters, linking to the settings section</li>
+            </ul>
+
+            <h4>Reporting contributions</h4>
+            <ul class="bullets">
+              <li>When your app saves a contribution from a connected volunteer, send a report with the volunteer's token. Send nothing for volunteers who haven't connected.</li>
+              <li>Send reports in the background, after your app has answered the volunteer. If SciStarter can't be reached, keep the report and try again later, with <strong>when</strong> set to the time of the contribution. Resend only reports that got no answer: sending one again after SciStarter has answered counts it twice.</li>
+              <li>Busy apps can send one report per volunteer per session or per day, with <strong>count</strong> set to the number of contributions, <strong>duration</strong> to the average time each one took, and <strong>when</strong> to the time of the session.</li>
+              <li>Send reports from your server if your app has one, since reports carry your API key. An app that reports straight from volunteers' devices should leave the key out, because anyone can read a key that is built into an app; reports without a key are still recorded, marked as unverified.</li>
+              <li>When SciStarter answers &ldquo;Provided token is invalid&rdquo;, the volunteer has disconnected on SciStarter. Forget the token, and show the SciStarter section as not connected.</li>
+            </ul>
+
+            <h3>Before you start</h3>
             <p><strong>Get your API key</strong>. The keys are associated with people, rather than projects, and you'll need to use the key of somebody who is authorized to manage the project page on SciStarter. You can fetch your key by logging in as such a user and visiting <a href="/api/key">https://scistarter.org/api/key</a>. Please email <a href="mailto:info@scistarter.org">info@SciStarter.org</a> with questions.</p>
-
-            <h3>Recording participation</h3>
             <p>
-              If email-hash reporting isn't a good fit for your application &mdash; for example,
-              because you don't collect your users' email addresses at all &mdash; you can record
-              user participation using your API key and a Link Token instead. A Link Token is an
-              opaque value generated by SciStarter at the request of the user, which the user can
-              copy and paste into your application to establish the connection between your app and
-              SciStarter. The token can be re-used any number of times, so you can store it as part
-              of your user account data, and send it when reporting participation.
+              <strong>Find your project slug</strong>. The project slug is the identifier used for the
+              project's SciStarter page. If a project's SciStarter URL is
+              https://scistarter.org/an-example then the slug is <strong>an-example</strong>.
             </p>
 
-            <p>
-              This process is designed to protect user privacy, while still giving credit to users
-              for their participation. A Link Token contains no information about the user, and is
-              entirely under the user's control.
-            </p>
-
-            <p>It works by sending an HTTP POST to</p>
+            <h3>Sending a report</h3>
+            <p>Send an HTTP POST to</p>
             <code class="api-endpoint">https://scistarter.org/api/participation/link-token/<em>PROJECT-SLUG</em>?key=<em>API-KEY</em></code>
 
             <p>The parameters of the POST, sent in application/x-www-form-urlencoded format, are:</p>
@@ -304,7 +565,7 @@
                   <td>string</td>
                   <td>yes</td>
                   <td></td>
-                  <td>The link token generated by the user (on their SciStarter dashboard) and provided to you</td>
+                  <td>The Link Token the volunteer gave you, exactly as they gave it</td>
                 </tr>
                 <tr>
                   <td>type</td>
@@ -318,7 +579,7 @@
                   <td>real number</td>
                   <td>yes</td>
                   <td></td>
-                  <td>How long did the user spend on this participation, or if count &gt; 1 the mean time per participation. If this information is not available, please provide an estimate</td>
+                  <td>How long the volunteer spent on this participation, in seconds, or if count &gt; 1 the mean time per participation. If this information is not available, please provide an estimate</td>
                 </tr>
                 <tr>
                   <td>fidelity</td>
@@ -332,14 +593,14 @@
                   <td>GeoJSON point (not a feature, just an object containing "type": "Point" and a "coordinates" attribute)</td>
                   <td></td>
                   <td>no location</td>
-                  <td>Location where the participation took place</td>
+                  <td>Location where the participation took place, for example <code>{"type": "Point", "coordinates": [-71.06, 42.36]}</code> (longitude first)</td>
                 </tr>
                 <tr>
                   <td>when</td>
-                  <td>YYYY-mm-ddThh:mm:ss (in UTC)</td>
+                  <td>ISO 8601 date and time, for example 2026-10-30T14:05:00Z</td>
                   <td><strong>Required</strong> if you send reports in batches rather than in real-time</td>
                   <td>current time</td>
-                  <td>Time when the participation took place</td>
+                  <td>Time when the participation took place. A time without a Z or a UTC offset is read as UTC. A time SciStarter can't read, or one in the future, is recorded as the moment the report arrived</td>
                 </tr>
                 <tr>
                   <td>count</td>
@@ -352,23 +613,69 @@
             </table>
 
             <p>
-              The project slug is the identifier used for the project's SciStarter page. If a
-              project's SciStarter URL is https://scistarter.org/an-example then the slug is
-              <strong>an-example</strong>.
+              For example, to report that a volunteer spent five minutes collecting data for the project
+              <strong>an-example</strong>:
             </p>
+            <pre class="api-example">curl -X POST "https://scistarter.org/api/participation/link-token/an-example?key=YOUR-API-KEY" \
+     --data-urlencode "token=THE-VOLUNTEERS-LINK-TOKEN" \
+     --data-urlencode "type=collection" \
+     --data-urlencode "duration=300" \
+     --data-urlencode "when=2026-10-30T14:05:00Z"</pre>
 
             <p>
-              The value of the <strong>token</strong> parameter should be the Link Token, exactly as
-              input into your app by the user. Capitalization matters. You should encourage the users
-              to use copy-and-paste from their SciStarter dashboard to input the Link Token into your
-              app.
+              A report may carry more than one <strong>token</strong> parameter, for instance when
+              several volunteers take part together. It is credited to every volunteer whose token
+              SciStarter recognizes.
             </p>
+
+            <h3>What SciStarter sends back</h3>
+            <table class="api-params">
+              <thead>
+                <tr>
+                  <th>status</th>
+                  <th>response</th>
+                  <th>meaning</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>200</td>
+                  <td><code>{"result": "success", "operation": "record"}</code></td>
+                  <td>The contribution was recorded.</td>
+                </tr>
+                <tr>
+                  <td>400</td>
+                  <td><code>{"error": "Provided token is invalid"}</code></td>
+                  <td>SciStarter doesn't recognize the token. Usually the volunteer deleted it, or only part of it was pasted. Sending it again won't help: stop using it and ask the volunteer to create a new one.</td>
+                </tr>
+                <tr>
+                  <td>400</td>
+                  <td><code>{"error": "The token value is required"}</code></td>
+                  <td>The report had no token.</td>
+                </tr>
+                <tr>
+                  <td>404</td>
+                  <td><code>{"error": "Project slug does not identify a project"}</code></td>
+                  <td>Check the project slug in the URL.</td>
+                </tr>
+              </tbody>
+            </table>
+            <p>
+              A missing or incorrect API key does not cause an error: the report is still recorded,
+              but marked as unverified. Check your key before you go live.
+            </p>
+
+            <h3>Storing the token</h3>
+            <ul class="bullets">
+              <li>Store the token as text, exactly as the volunteer pasted it apart from any spaces before or after it. Capitalization matters. Leave room for at least 64 characters.</li>
+              <li>Ask volunteers to copy and paste the token from their SciStarter dashboard rather than typing it.</li>
+            </ul>
           </div>
         </details>
 
         <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-email">
           <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
-            <span>Turn a Qualtrics survey into a SciStarter affiliate</span>
+            <span>Report participation from a Qualtrics survey</span>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
           </summary>
           <div class="accordion__panel bg-white p-4">
@@ -414,9 +721,22 @@
               <li>
                 Configure the Web Service to send the value of the email question as the
                 <strong>email</strong> body parameter (Qualtrics lets you map a piped survey field to
-                the parameter value).
+                the parameter value). Send the body URL-encoded (application/x-www-form-urlencoded),
+                not as JSON.
               </li>
             </ol>
+
+            <h3>Where it fits in your survey</h3>
+            <ul class="bullets">
+              <li><strong>At the end.</strong> Put the Web Service at the end of the survey flow, after the last block of questions, so that a response is credited only when the volunteer finishes the survey.</li>
+              <li><strong>Only when there's an address.</strong> Make the email question optional, and place the Web Service inside a Branch that runs only when the email question was answered, so nothing is sent for volunteers who skip it.</li>
+              <li><strong>Matching what the survey is for.</strong> Set <strong>type</strong> to <strong>collection</strong> for a survey that records observations or other data, or to <strong>signup</strong> for a registration survey. Leave it out for anything else.</li>
+              <li><strong>For repeated surveys, too.</strong> Each completed response counts as one contribution, so a survey that volunteers fill in again and again, such as a monitoring log, credits every response.</li>
+            </ul>
+            <p>
+              Other survey and form tools work the same way, as long as they can send a URL-encoded POST
+              (sometimes called a webhook) when a response is submitted.
+            </p>
 
             <p>The parameters of the POST, sent in application/x-www-form-urlencoded format, are:</p>
 
@@ -465,7 +785,7 @@
 
         <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-adding">
           <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
-            <span>Adding Bulk Projects to SciStarter</span>
+            <span>Add projects in bulk</span>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
           </summary>
           <div class="accordion__panel bg-white p-4">
@@ -474,7 +794,17 @@
 
             <p>After being successfully added, projects must pass an editorial review (usually less than 24 hours) before being published on SciStarter.</p>
 
-            <p>The POST body must be an object in JSON format, and must contain <strong>"key": "<em>your API key</em>"</strong> among its fields. The rest of the fields should be <a href="http://www.citsci.org/cwis438/websites/citsci/PPSR_Core_Documentation.php">PPSR fields and values</a>, or fields and values from the following list.</p>
+            <p>The POST body must be an object in JSON format, and must contain <strong>"key": "<em>your API key</em>"</strong> among its fields. The rest of the fields should come from the following list.</p>
+
+            <p>
+              A project already described in <a href="https://core.citizenscience.org/">PPSR Core</a>
+              terms may use these PPSR Core field names in place of their equivalents below:
+              ProjectGUID, ProjectName, ProjectDescription, ProjectURL, ProjectDataProvider,
+              ProjectContactName, ProjectContactEmail, ProjectContactPhone, ProjectContactAddress,
+              ProjectCoordinator, ProjectInstitutionName, ProjectOrganization, ProjectFacebook,
+              ProjectTwitter, ProjectKeywords, ProjectStatus, ProjectCoverageBoundary, and
+              ProjectDataLastUpdated.
+            </p>
 
             <dl class="api-fields">
               <dt>scistarter_id</dt>
@@ -501,8 +831,6 @@
               <dd>The contact person's mailing address (a string)</dd>
               <dt>presenting_org</dt>
               <dd>The organization sponsoring or presenting the project to the public (a string)</dd>
-              <dt>rsvp</dt>
-              <dd>The email address or URL to which participants should RSVP, if applicable</dd>
               <dt>address</dt>
               <dd>The street address where this project or event takes place, if applicable</dd>
               <dt>city</dt>
@@ -543,16 +871,14 @@
               <dd>Whether project participation takes place inside (boolean, default true)</dd>
               <dt>time_commitment</dt>
               <dd>A plain-language description of how much time will be asked of participants (a string)</dd>
-              <dt>project_type</dt>
-              <dd>Either 'Project' or 'Event' (default 'Project')</dd>
               <dt>audience</dt>
               <dd>A list containing one or more of 'Adults', 'College', 'Elementary school (6 - 10 years)', 'Families', 'Graduate students', 'High school (14 - 17 years)', 'Middle school (11 - 13 years)', 'Seniors'</dd>
+              <dt>topics</dt>
+              <dd>A list containing one or more topic names, as listed under "Search SciStarter's projects" (for example 'Birds')</dd>
+              <dt>activities</dt>
+              <dd>A list containing one or more activity names, as listed under "Search SciStarter's projects" (for example 'On a hike')</dd>
               <dt>regions</dt>
               <dd>A GeoJSON polygon or multipolygon representing the area of coverage for participating in this project, given either as a GeoJSON object or as a string containing one (a Feature, or a FeatureCollection whose areas are combined, is also accepted), <em>or</em> a string containing either the word <strong>online</strong>, <strong>anywhere</strong>, or <strong>address</strong> to indicate a project with online participation, global participation, or participation at a specific address (as defined by the address, city, state, zip, and country fields) respectively.</dd>
-              <dt>region_label</dt>
-              <dd>A short plain language description of the region or regions (a string; optional)</dd>
-              <dt>UN_regions</dt>
-              <dd>A list of <a href="http://unstats.un.org/unsd/methods/m49/m49regin.htm">UN geographical region</a> names or <code>{code: "FOO", name: "BAR"}</code> pairs</dd>
               <dt>entirely_online</dt>
               <dd>Send true if the project takes place entirely online (boolean, default false)</dd>
             </dl>
@@ -561,180 +887,68 @@
 
         <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-retrieving">
           <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
-            <span>Retrieving Project Information from SciStarter</span>
+            <span>Search SciStarter's projects</span>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
           </summary>
           <div class="accordion__panel bg-white p-4">
             <h3 class="mt-0" id="search">Searching for projects</h3>
-            <code class="api-endpoint"><strong>GET https://scistarter.org/p/finder?format=json&amp;key=</strong><em>API key</em><strong>&amp;q=</strong><em>search term</em></code>
-            <p>Instead of <strong>q</strong>, which is a very broad search, you can combine the following search parameters:</p>
+            <code class="api-endpoint"><strong>GET https://scistarter.org/p/finder?format=json&amp;q=</strong><em>search words</em></code>
+            <p>The answer is a page of up to ten matching projects, in JSON. Combine any of these parameters:</p>
             <ul class="bullets">
-              <li>phrase</li>
-              <li>topic</li>
-              <li>activity</li>
-              <li>url</li>
-              <li>lat - latitude in decimal degrees (lng must be provided as well)</li>
-              <li>lng - longitude in decimal degrees (lat must be provided as well)</li>
-              <li>UN - either the name or code of a <a href="http://unstats.un.org/unsd/methods/m49/m49regin.htm">UN geographical region</a>, to limit the search to projects explicitly in that region (if a project does not specify a UN region, it will be excluded)</li>
-              <li>jsonp - If you want the result in JSONP instead of plain JSON, set this parameter to the callback name.</li>
+              <li><strong>q</strong> &mdash; words to search for</li>
+              <li><strong>lat</strong> and <strong>lng</strong> &mdash; a point, in decimal degrees, to sort projects by distance from, nearest first (give both)</li>
+              <li><strong>topic</strong> &mdash; a topic number, from the list below</li>
+              <li><strong>activity</strong> &mdash; an activity number, from the list below</li>
+              <li><strong>page</strong> &mdash; which page of results to return, counting from 1</li>
             </ul>
+
+            <h4>Topics</h4>
+            <p class="text-sm">
+              3 Agriculture &middot; 20 Animals &middot; 13 Astronomy &amp; Space &middot; 22 Awards &middot;
+              12 Biology &middot; 11 Birds &middot; 10 Chemistry &middot; 27 Climate &amp; Weather &middot;
+              18 Computers &amp; Technology &middot; 7 Crowd Funding &middot; 203 Disaster Response &middot;
+              9 Ecology &amp; Environment &middot; 24 Education &middot; 4 Events &middot; 25 Food &middot;
+              2 Geography &middot; 19 Geology &amp; Earth Science &middot; 23 Health &amp; Medicine &middot;
+              15 History, Archeology &amp; Culture &middot; 16 Insects &amp; Pollinators &middot;
+              21 Nature &amp; Outdoors &middot; 14 Ocean, Water, Marine &amp; Terrestrial &middot;
+              8 Physics &middot; 5 Psychology &middot; 26 Science Policy &middot; 1 Social Science &middot;
+              17 Sound &middot; 6 Transportation
+            </p>
+
+            <h4>Activities</h4>
+            <p class="text-sm">
+              31 At a science center, zoo or aquarium &middot; 37 At home &middot; 30 At night &middot;
+              32 At school &middot; 29 At sports stadiums &middot; 35 At the beach &middot;
+              39 Emergency Response &middot; 34 Exclusively online &middot; 38 In the car &middot;
+              36 In snow or rain &middot; 42 In oceans, streams, rivers, lakes &middot; 40 On a hike &middot;
+              28 On a lunch break &middot; 33 On a walk, run &middot; 41 While fishing
+            </p>
 
             <h4>Example: Retrieving projects about butterflies (Python 3)</h4>
             <pre class="api-example">from json import load
 from urllib.request import urlopen
 
-with urlopen('https://scistarter.org/p/finder?format=json&amp;key=kjsdfh8fsao48u3...&amp;q=butterfly') as f:
+with urlopen('https://scistarter.org/p/finder?format=json&amp;q=butterfly') as f:
     data = load(f)</pre>
 
             <h4>Result: Dictionary of butterfly-related projects</h4>
-            <pre class="api-result">{'total': 123, 'page': 1, 'entities': [ ... ]}</pre>
+            <pre class="api-result">{'name': 'Matches',
+ 'total': 38,
+ 'page': 1,
+ 'entities': [{'id': 78,
+               'name': 'eButterfly',
+               'slug': 'ebutterfly',
+               'url': 'http://www.e-butterfly.org',
+               'goal': 'Help monitor butterfly populations worldwide using checklist surveys',
+               ...},
+              ...]}</pre>
 
-            <h4>Example: Retrieving space projects that contain the word 'amateur' (Python 3)</h4>
+            <h4>Example: Astronomy and space projects, nearest Raleigh, North Carolina first (Python 3)</h4>
             <pre class="api-example">from json import load
 from urllib.request import urlopen
 
-with urlopen('https://scistarter.org/p/finder?format=json&amp;key=kjsdfh8fsao48u3...&amp;topic=space&amp;phrase=amateur') as f:
+with urlopen('https://scistarter.org/p/finder?format=json&amp;topic=13&amp;lat=35.78&amp;lng=-78.64') as f:
     data = load(f)</pre>
-
-            <h4>Result: Dictionary of amateur space projects</h4>
-            <pre class="api-result">{'results':
- [{'id': 917,
-   'title': 'Independent Generation of Research',
-   ...
-  },
-  {'id': 871,
-   'title': 'Slooh',
-   ...
-  }, ...</pre>
-          </div>
-        </details>
-
-        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-other">
-          <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
-            <span>Other Integrations, including Zooniverse and iNaturalist</span>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
-          </summary>
-          <div class="accordion__panel bg-white p-4">
-            <h3 class="mt-0">Become a SciStarter Affiliate</h3>
-            <p>
-              Help more people discover your project and give volunteers credit for their
-              participation across projects and websites!
-            </p>
-            <p>
-              Many volunteers participate in multiple projects on different platforms. SciStarter
-              brings their participation together in one dashboard, helping them track their
-              activities and qualify for certificates, badges, rewards, and course credit when
-              offered through SciStarter programs or instructors.
-            </p>
-            <h4>Why become an Affiliate?</h4>
-            <ul class="list-disc ml-6 mb-4">
-              <li><strong>Reach more volunteers</strong> through SciStarter.</li>
-              <li><strong>Recognize participation</strong> across multiple projects and websites in one place.</li>
-              <li><strong>Support learning and rewards</strong> by helping volunteers document participation toward certificates, badges, incentives, and course credit.</li>
-              <li><strong>Encourage continued engagement</strong> in your project and others.</li>
-            </ul>
-            <h3>Anecdata.org and CitSci.org</h3>
-            <p>
-              We support integration with projects hosted on <a href="https://anecdata.org/">Anecdata.org</a>
-              and <a href="https://citsci.org/">CitSci.org</a>. If your project data form is hosted on
-              these platforms, a SciStarter profile is automatically created for you and your project
-              becomes an affiliate.
-            </p>
-            <h3>Zooniverse and iNaturalist</h3>
-            <p>
-              <strong>Participation tracking requires two separate opt-ins:</strong> project leaders
-              choose to connect their projects, and volunteers independently opt in by adding their
-              iNaturalist or Zooniverse usernames to their SciStarter profiles. Each is a one-time
-              setup: a project is connected once, and a volunteer connects their username once per
-              platform.
-            </p>
-            <h4>Zooniverse Project Leaders</h4>
-            <p>We'll help you connect your project securely.</p>
-            <ol class="list-decimal ml-6 mb-4">
-              <li><strong>Add your project</strong> to SciStarter at <a href="/add/project">scistarter.org/add-project</a>.</li>
-              <li>
-                <strong>Email your Zooniverse Project ID</strong> to
-                <a href="mailto:info@scistarter.org">info@scistarter.org</a>. This is the number at
-                the end of your Project Builder URL (e.g., zooniverse.org/lab/12345).
-              </li>
-              <li>
-                <strong>Authorize the connection.</strong> For security, we'll email you our
-                SciStarter username to add under the Collaborators tab of your Zooniverse project's
-                editing page.
-              </li>
-              <li>
-                <strong>Let us know when it's done.</strong> We'll complete the connection and
-                confirm when your project is ready.
-              </li>
-            </ol>
-            <p>
-              <strong>Your project stays under your control.</strong> SciStarter uses its
-              collaborator access strictly for read-only verification of participation. We do not
-              edit your project, change settings, store or use your project's scientific data, or
-              take any other actions.
-            </p>
-            <h4>iNaturalist Project Leaders</h4>
-            <p>iNaturalist projects connect automatically!</p>
-            <ol class="list-decimal ml-6 mb-4">
-              <li><strong>Add your project</strong> to SciStarter at <a href="/add/project">scistarter.org/add-project</a>. Select <strong>Project</strong>, not Event.</li>
-              <li>
-                <strong>Enter your iNaturalist project URL</strong>
-                (e.g., https://www.inaturalist.org/projects/<em>your-project</em>) as the Project URL.
-              </li>
-              <li>
-                <strong>That's it!</strong> SciStarter recognizes the URL and automatically connects
-                your project. No email or additional authorization is needed.
-              </li>
-            </ol>
-            <p>
-              <strong>Already listed?</strong> Update your SciStarter listing with your iNaturalist
-              project URL. Projects on other iNaturalist Network sites, such as NaturaLista, work the
-              same way.
-            </p>
-            <h4>How Volunteers Opt In</h4>
-            <p>
-              Connecting your project does not automatically track your volunteers. Each person must
-              opt in separately.
-            </p>
-            <p>
-              Volunteers give SciStarter permission to recognize their participation by adding their
-              iNaturalist or Zooniverse username to their SciStarter profile, and your project's
-              SciStarter page walks them through it. Zooniverse usernames must be entered exactly as
-              they appear on Zooniverse, including capitalization.
-            </p>
-            <p>
-              Once connected, SciStarter can recognize eligible participation and display it on their
-              personal dashboards.
-            </p>
-            <p><strong>What SciStarter tracks:</strong></p>
-            <ul class="list-disc ml-6 mb-4">
-              <li>The participant's username</li>
-              <li>The project ID</li>
-              <li>The date and time of each iNaturalist observation or Zooniverse classification</li>
-            </ul>
-            <p>
-              <strong>What SciStarter does NOT track:</strong> The observations, classifications, or
-              scientific data volunteers submit or analyze.
-            </p>
-            <p>
-              <strong>Good to know:</strong> Volunteers connect their username only once per
-              platform. Participation is credited from that point forward (not retroactively) and may
-              take up to 24 hours to appear. All iNaturalist projects qualify; Zooniverse projects
-              must complete the Affiliate connection process.
-            </p>
-            <p>
-              Encourage your volunteers to add their usernames to their SciStarter profiles so their
-              participation can be recognized!
-            </p>
-            <h3>People Finder</h3>
-            <p>
-              Our People Finder tool lets project operators communicate with people by region,
-              selecting an area and sending a message to all SciStarter users within it.
-            </p>
-            <p>
-              <strong>Questions?</strong> Contact
-              <a href="mailto:info@scistarter.org">info@scistarter.org</a>.
-            </p>
           </div>
         </details>
 
@@ -746,221 +960,6 @@ with urlopen('https://scistarter.org/p/finder?format=json&amp;key=kjsdfh8fsao48u
           <div class="accordion__panel bg-white p-4">
             <p>Use our <a href="https://scistarter.org/widget/new">widget builder</a> to generate your widget and embed code. The example shown here is a widget for a single project with a header.</p>
             <iframe src="https://scistarter.org/ui/widget?widget=1&amp;style=header&amp;layout=single-project&amp;type=featured" width="202" height="306" title="Example SciStarter project finder widget"></iframe>
-          </div>
-        </details>
-
-        <details class="ss-accordion-accessible border border-linework rounded-sm bg-primary-light mb-4" id="docs-deprecated">
-          <summary class="accordion__summary !flex justify-between items-center text-lg p-4 m-0 text-primary-dark">
-            <span>Deprecated 2020-02-24</span>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-4 fill-primary-action"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z"/></svg>
-          </summary>
-          <div class="accordion__panel bg-white p-4">
-            <h3 class="mt-0" id="project">Retrieving project data in JSON</h3>
-            <code class="api-endpoint"><strong>GET https://scistarter.org/api/project/</strong><em>project-id</em><strong>?key=</strong><em>API key</em></code>
-
-            <h4>Example: Retrieving the LepiMAP project (Python 3)</h4>
-            <pre class="api-example">from json import load
-from urllib.request import urlopen
-
-with urlopen('https://scistarter.org/api/project/899?key=kjsdfh8fsao48u3...') as f:
-    data = load(f)</pre>
-
-            <h4>Result: Dictionary of project fields</h4>
-            <pre class="api-result">{'activities': ['While fishing',
-                'On a hike',
-                'At home',
-                'On a walk, run',
-                'At school',
-                'At night'],
- 'description': "LepiMAP is the African butterfly and moth mapping project. LepiMAP is a joint project of the...",
- 'tags': ['africa', 'biodiversity', 'butterflies', 'butterfly', 'conservation',
-          'lepidoptera', 'mapping', 'moths', 'science'],
- 'title': 'LepiMAP',
- 'topics': ['Nature &amp; Outdoors', 'Animals', 'Ecology &amp; Environment', 'Education', 'Biology'],
- 'url': 'https://scistarter.org/project/899-LepiMAP',
- 'UN_regions': [{'code': '001', 'name': 'World'},
-                {'code': '019', 'name': 'Americas'},
-                {'code': '021', 'name': 'Northern America'}],
- 'regions': [
-    { # LepiMAP has no region, so this is just to show the structure
-        'name': 'LepiMAP region',
-        'osm_id': 0,   # Open Street Map ID, if we have one available
-        'legal': '',   # Legal terms that apply to the geometry, if different from SciStarter TOS
-        'geometry': {} # GeoJSON formatted geometry information
-    }
- ]}</pre>
-
-            <h3 id="profiles">Retrieving Profile IDs</h3>
-            <p>There are several ways of retrieving a profile number as described on this page and in more detail on your project page dashboard (click "Tools" from the top navigation bar on your project page on SciStarter).</p>
-            <p>Note: We've considered skipping the profile id step and using hashed emails directly in the recording activity step, and we're able to allow that on a case-by-case basis. However, doing it that way costs extra CPU time for both you and us, and we don't encourage it in most cases.</p>
-
-            <h3 id="profile-by-email-hash">Option 1: By Hashed Email Address</h3>
-            <p>
-              We immediately hash the emails sent to us through <a href="#profile-by-email">option 2</a>,
-              and discard the plaintext, but if you're more comfortable or legally required to, you
-              can hash the email yourself and send us only the hash digest. <strong>We won't have any
-              idea what the email address actually is</strong>, unless it belongs to somebody who has
-              explicitly given us permission to know, by registering their email with us.
-            </p>
-            <p>
-              All calls to this endpoint succeed, whether the hash matches a SciStarter member or
-              not. A profile id is returned either way, and that profile id will be consistent each
-              time the same hash is used. If the hash doesn't match a current SciStarter user, we
-              have no idea who the person actually is, but if they later join SciStarter, we will
-              assign that profile id to them. Thus, it does not matter whether they sign up for
-              SciStarter before or after your project; either way, the user experience is the same.
-            </p>
-            <p>
-              Even though all calls to the endpoint succeed and return a profile id, you may want to
-              know whether the person is actually a SciStarter participant. You can examine the
-              <strong>known</strong> attribute of the API call result to determine that. If the known
-              value is true, the person is a SciStarter member. If it is false, we do not recognize
-              them. You can use that information to decide how to handle the user's activity, and we
-              do recommend doing so. There's no need to report activity for people who are not
-              SciStarter members.
-            </p>
-            <p>
-              We discard data sent to us regarding profiles that are not known SciStarter members.
-              Anonymous profiles only exist to smooth out the user experience when people join an
-              affiliate project, and then join SciStarter later.
-            </p>
-            <p>
-              To use this feature, you need to use the SHA256 hash function, and send us the
-              lowercase hexadecimal-encoded digest.
-            </p>
-            <p>
-              Note: The URL for a user's "profile page" contains a number, but that number is
-              <em>not</em> that user's profile id.
-            </p>
-            <code class="api-endpoint"><strong>GET https://scistarter.org/api/profile/id?hashed=</strong><em>HEX(SHA256(email address))</em><strong>&amp;key=</strong><em>API key</em></code>
-
-            <h4>Example: Retrieving a profile number by hashed email address (Python 3)</h4>
-            <pre class="api-example">from json import load
-from hashlib import sha256
-from urllib.request import urlopen
-
-hashed = sha256('example@example.com'.lower().encode('utf8')).hexdigest()
-with urlopen(f'https://scistarter.org/api/profile/id?hashed={hashed}&amp;key=kjsdfh8fsao48u3...') as f:
-    data = load(f)</pre>
-
-            <h4>Result: Dictionary containing the profile number</h4>
-            <pre class="api-result">{"scistarter_profile_id": 42006, "result": "success", "known": true}</pre>
-
-            <h3 id="profile-by-email">Option 2: By Email Address</h3>
-            <p>
-              Using a user's email address is the simplest way to get their profile number. Using the
-              email address and your API key, you can retrieve the ID in a single GET request.
-              <strong>We only store a hash of the email</strong>, unless it belongs to one of our
-              registered users, and we require that the encrypted HTTPS protocol is used for
-              communication.
-            </p>
-            <code class="api-endpoint"><strong>GET https://scistarter.org/api/profile/id?identifier=</strong><em>email address</em><strong>&amp;key=</strong><em>API key</em></code>
-
-            <h4>Example: Retrieving a profile number by email address (Python 3)</h4>
-            <pre class="api-example">from json import load
-from urllib.request import urlopen
-
-with urlopen('https://scistarter.org/api/profile/id?identifier=example%40example.com&amp;key=kjsdfh8fsao48u3...') as f:
-    data = load(f)</pre>
-
-            <h4>Result: Dictionary containing the profile number</h4>
-            <pre class="api-result">{"scistarter_profile_id": 42006, "result": "success", "known": true}</pre>
-
-            <h3 id="profile-from-oauth">Option 3: After OpenID Connect Authorization</h3>
-            <p>
-              You can also use an OpenID Connect token to retrieve the ID. For help setting up OpenID
-              Connect integration with your site, please contact us directly at
-              <a href="mailto:info@scistarter.org">info@scistarter.org</a>.
-            </p>
-            <p>
-              This method requires the user to explicitly authorize you, which means they must create
-              a SciStarter account if they don't have one already. Once a user has authorized you via
-              OpenID Connect, you can retrieve that user's profile number with a single additional
-              request. We recommend that you store it rather than going through the process of
-              retrieving it multiple times.
-            </p>
-            <p>
-              To use this method, you must have requested, and the user must have granted you, the
-              <strong>profile</strong> scope. Minimally, that means you would have used
-              <strong>openid&nbsp;profile</strong> for your requested scope value when retrieving
-              your access token, since the openid scope is always required.
-            </p>
-            <code class="api-endpoint"><strong>GET https://scistarter.org/userinfo</strong> (requires Authorization header)</code>
-
-            <h4>Example: Retrieving a profile number after OpenID authorization (Python 3)</h4>
-            <pre class="api-example">from json import load
-from urllib.request import Request, urlopen
-
-req = Request('https://scistarter.org/userinfo',
-              headers={'Authorization': 'Bearer <em>[OpenID token]</em>'})
-with urlopen(req) as f:
-    data = load(f)</pre>
-
-            <h4>Result: Dictionary containing the profile number and some other information</h4>
-            <pre class="api-result">{
-    "profile_id": 42006,
-    <em>... other information ...</em>
-}</pre>
-
-            <h3 id="record">Recording a user activity event to a user's profile</h3>
-            <code class="api-endpoint"><strong>POST https://scistarter.org/api/record_event?key=</strong><em>API key</em></code>
-            <p>
-              We <em>highly recommend</em> performing this request asynchronously, in a worker
-              process or by some other asynchronous mechanism. There is no need for your site to wait
-              for the result of this call before proceeding with processing the user's interactions.
-              Tools such as <a target="_blank" href="http://www.celeryproject.org/">Celery (Python)</a>,
-              <a target="_blank" href="https://bernard.readthedocs.io/">Bernard (PHP)</a>, or
-              <a target="_blank" href="https://www.hangfire.io/">Hangfire (.NET)</a> make it easy to
-              perform asynchronous operations.
-            </p>
-            <p>
-              The proper time to make this call is after a user has contributed meaningfully to the
-              project. That can mean either immediately after, or shortly after (no more than 24
-              hours delay at most, please).
-            </p>
-            <p>
-              In addition to the API key as a GET parameter, the POST body must contain at least the
-              following items, in application/x-www-form-urlencoded format:
-            </p>
-            <dl class="api-fields">
-              <dt>profile_id</dt>
-              <dd>The user's profile number, as retrieved above</dd>
-              <dt>project_id</dt>
-              <dd>
-                Your project's SciStarter id number. Once your project is added to SciStarter, sign
-                in and go to your dashboard and select your project page on SciStarter. Click the
-                "Tools" tab on the top navigation where you will find your Project ID #.
-              </dd>
-              <dt>type</dt>
-              <dd>What did the participant actually do? One of <strong>classification</strong> (Classification / Transcription), <strong>collection</strong> (Data collection), <strong>signup</strong> (Joined the project)</dd>
-              <dt>duration</dt>
-              <dd>The duration of the reported user participation, in seconds, in integer or real number format. Preferably this is an actual measurement, but an estimate based on your local knowledge of the task is acceptable.</dd>
-            </dl>
-            <p>
-              There are also several optional fields you can provide in order to better identify the
-              user activity:
-            </p>
-            <dl class="api-fields">
-              <dt>where</dt>
-              <dd>GeoJSON or WKT encoding of the geographic point where the activity occurred</dd>
-              <dt>when</dt>
-              <dd>The time at which the activity occurred, in ISO yyyy-mm-ddThh:mm:ss format (note the T separating date and time). UTC times preferred.</dd>
-              <dt>magnitude</dt>
-              <dd>Integer representing how valuable this particular contribution was, as defined by you</dd>
-              <dt>extra</dt>
-              <dd>Any additional data you want to attach to the event. JSON recommended. Limited to 64k</dd>
-            </dl>
-
-            <h4>Example: Recording a data collection event (Python 3)</h4>
-            <pre class="api-example">from json import load
-from urllib.request import urlopen
-
-with urlopen('https://scistarter.org/api/record_event?key=kjsdfh8fsao48u3...',
-             data=b'profile_id=42006&amp;project_id=1979&amp;type=collection&amp;duration=300') as f:
-    data = load(f)</pre>
-
-            <h4>Result: Dictionary indicating success or error</h4>
-            <pre class="api-result">{"event_id": <em>[This event's unique id]</em>, "result": "success"}</pre>
           </div>
         </details>
 

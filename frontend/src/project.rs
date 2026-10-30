@@ -62,6 +62,34 @@ impl ProjectStatus {
         ProjectStatus::PeriodicallyActive,
         ProjectStatus::Hiatus,
     ];
+
+    /// The status's name, as the database and orrery spell it.
+    pub fn label(self) -> &'static str {
+        match self {
+            ProjectStatus::Pending => "Pending",
+            ProjectStatus::Active => "Active",
+            ProjectStatus::PeriodicallyActive => "Periodically Active",
+            ProjectStatus::Hiatus => "Hiatus",
+            ProjectStatus::Complete => "Complete",
+            ProjectStatus::Hidden => "Hidden",
+            ProjectStatus::Expired => "Expired",
+        }
+    }
+
+    /// orrery's number for the status (`Project.status`), or None for
+    /// Expired, which orrery has no status for: it reads a project's end
+    /// date instead.
+    pub fn orrery_code(self) -> Option<i64> {
+        match self {
+            ProjectStatus::Pending => Some(0),
+            ProjectStatus::Active => Some(1),
+            ProjectStatus::PeriodicallyActive => Some(2),
+            ProjectStatus::Hiatus => Some(3),
+            ProjectStatus::Complete => Some(4),
+            ProjectStatus::Hidden => Some(5),
+            ProjectStatus::Expired => None,
+        }
+    }
 }
 
 /// Narrow a query over `projects p` to the projects that may be listed, and

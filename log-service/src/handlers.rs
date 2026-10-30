@@ -926,20 +926,19 @@ pub async fn handle_articulate_completion_record(req: &async_nats::service::Requ
 /// engagement segment, so it has to be written whenever the mail goes out;
 /// writing it refreshes this service's copy of the account's tags too, so a
 /// second contribution arriving moments later sees it.
-async fn announce_first_contribution(
-    user_id: &str,
-    record: &ProjectParticipationRecord,
-) -> Result<()> {
+async fn announce_first_contribution(user_id: Ulid, project_id: &str) -> Result<()> {
     const TAG: &str = "first-contribution";
 
+    let user_id_str = user_id.to_string();
+
     if matches!(
-        crate::project_ids::slug_of(&record.project_id).await?,
+        crate::project_ids::slug_of(project_id).await?,
         Some(crate::project_ids::FOUNDATIONS_MODULE | crate::project_ids::ISEECHANGE)
     ) {
         return Ok(());
     }
 
-    if log_service::cache::get_user_tags(user_id)
+    if log_service::cache::get_user_tags(&user_id_str)
         .await?
         .iter()
         .any(|tag| tag == TAG)
@@ -950,11 +949,11 @@ async fn announce_first_contribution(
     // The mail names the project and links its page, so the id alone is not
     // enough. The entity tables live in the frontend's database; ask it.
     let summary: Option<EntitySummary> =
-        nats_request("frontend.entity.summary_by_id", record.project_id.clone())
+        nats_request("frontend.entity.summary_by_id", project_id.to_string())
             .await
             .unwrap_or(None);
 
-    let mut fields = vec![("project_id".to_string(), record.project_id.clone())];
+    let mut fields = vec![("project_id".to_string(), project_id.to_string())];
 
     if let Some(summary) = summary {
         // The same two canonical paths the frontend's `entity_link` builds;
@@ -970,14 +969,9 @@ async fn announce_first_contribution(
         fields.push(("project_name".to_string(), summary.name));
     }
 
-    trigger_email(
-        TriggerEvent::FirstContribution,
-        record.user_id,
-        Some(&fields),
-    )
-    .await?;
+    trigger_email(TriggerEvent::FirstContribution, user_id, Some(&fields)).await?;
 
-    send("user.tags.add", (user_id.to_string(), TAG.to_string())).await?;
+    send("user.tags.add", (user_id_str, TAG.to_string())).await?;
 
     Ok(())
 }
@@ -987,27 +981,6 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
 
     let user_id_str = record.user_id.to_string();
 
-    // Insert into cache (ignore if already exists)
-    let cache_result = sqlx::query!(
-        r#"
-        INSERT OR IGNORE INTO project_participations_cache (user_id, project_id)
-        VALUES (?, ?)
-        "#,
-        user_id_str,
-        record.project_id
-    )
-    .execute(common::shared::db())
-    .await?;
-
-    // A new row means this is the account's first contribution to this
-    // project, which is the first of the two things the mail below asks.
-    if cache_result.rows_affected() > 0
-        && let Err(error) = announce_first_contribution(&user_id_str, &record).await
-    {
-        eprintln!("First contribution by {user_id_str} went unannounced: {error}");
-    }
-
-    // Record to participation table for permanent record
     use log_service::database::tables::ParticipationRow;
     let row = ParticipationRow {
         origin: record.origin.unwrap_or(0), // 0 = web
@@ -1029,6 +1002,15 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
         task_name: record.task_name,
     };
 
+    // The account's first contribution to this project is the first of the
+    // two things the mail below asks.
+    if log_service::cache::note_participation(&row).await?
+        && let Err(error) = announce_first_contribution(record.user_id, &record.project_id).await
+    {
+        eprintln!("First contribution by {user_id_str} went unannounced: {error}");
+    }
+
+    // Record to participation table for permanent record
     let when_str = row.when.clone();
 
     {

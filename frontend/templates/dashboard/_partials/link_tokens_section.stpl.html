@@ -1,0 +1,42 @@
+<section id="link-tokens" class="mb-8">
+    <div class="flex items-baseline justify-between mb-3">
+        <h2 class="font-semibold text-lg mb-0">Link Tokens</h2>
+    </div>
+    <p class="text-sm opacity-80 mb-3">
+        Link Tokens are a way of connecting your SciStarter account to
+        affiliate projects, so that you can see your contributions to those
+        projects here on your dashboard. Not all affiliates use Link Tokens,
+        since SciStarter provides several ways of connecting affiliates. If an
+        affiliate asks you for a Link Token, you can create and manage it here.
+    </p>
+    <% if !self.tokens.is_empty() { %>
+    <ul class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <% for token in &self.tokens { %>
+        <li class="ss-card !p-4 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="font-semibold text-sm"><%= token.label %></div>
+                <div class="font-mono text-sm break-all select-all"><%= token.token %></div>
+                <div class="text-xs opacity-60">Created <%- local_time(&token.created, TimeFormat::Date) %></div>
+            </div>
+            <form hx-post="/dashboard/link-tokens/delete" hx-target="#link-tokens" hx-swap="outerHTML">
+                <input type="hidden" name="token" value="<%= token.token %>">
+                <button type="submit" class="btn btn-secondary btn-small">Delete</button>
+            </form>
+        </li>
+        <% } %>
+    </ul>
+    <% } %>
+    <form hx-post="/dashboard/link-tokens" hx-target="#link-tokens" hx-swap="outerHTML"
+          class="flex flex-wrap items-end gap-2">
+        <label class="block">
+            <span class="block text-sm mb-1 font-semibold">Name</span>
+            <input type="text" name="label" value="<%= self.label %>"
+                   maxlength="<%= LINK_TOKEN_LABEL_LENGTH %>" placeholder="default"
+                   class="border rounded px-3 py-2">
+        </label>
+        <button type="submit" class="btn btn-primary">Create a Link Token</button>
+    </form>
+    <% if let Some(refusal) = &self.refusal { %>
+    <p class="text-sm text-red-600 mt-2 mb-0" role="alert"><%= refusal %></p>
+    <% } %>
+</section>

@@ -518,6 +518,18 @@ pub async fn record_event_link_token(
         form.key = query.key;
     }
 
+    // Checked in orrery's order, so that a request with more than one thing
+    // wrong is answered as orrery answered it.
+    let Ok(entity_id) = get_entity_id_for_slug(&slug).await else {
+        return Ok(project_not_found());
+    };
+
+    let authenticated = if let Some(ref key) = form.key {
+        check_api_key_permission(key, &entity_id).await?
+    } else {
+        false
+    };
+
     if tokens.is_empty() {
         return Ok(poem::web::Json(serde_json::json!({
             "error": "The token value is required"
@@ -525,16 +537,6 @@ pub async fn record_event_link_token(
         .with_status(poem::http::StatusCode::BAD_REQUEST)
         .into_response());
     }
-
-    let entity_id = get_entity_id_for_slug(&slug)
-        .await
-        .map_err(|_| anyhow::anyhow!("Project slug does not identify a project"))?;
-
-    let authenticated = if let Some(ref key) = form.key {
-        check_api_key_permission(key, &entity_id).await?
-    } else {
-        false
-    };
 
     // Record for every valid token's user (orrery records each in turn). The
     // response mirrors orrery's: the last recording result, or "invalid" if no

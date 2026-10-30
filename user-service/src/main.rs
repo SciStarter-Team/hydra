@@ -39,6 +39,7 @@ pub mod profile;
 pub mod project_joins;
 pub mod recipient_search;
 pub mod referrals;
+pub mod secret_code;
 pub mod sessions;
 pub mod stats;
 pub mod sync;
@@ -322,9 +323,6 @@ async fn users_synchronize() {
         profile_legacy_id: Option<i32>,
         profile_alias_id: Option<i32>,
         profile_identifier_username: Option<String>,
-        profile_identifier_username_normalized: Option<String>,
-        profile_identifier_email: Option<String>,
-        profile_identifier_additional: Option<String>,
         profile_anonymized: Option<String>,
         profile_extra: Option<String>,
     }
@@ -3104,6 +3102,39 @@ async fn ambassador_connections_synchronize() {
     }
 }
 
+/// Mirror orrery's Link Tokens, so that an affiliate holding one goes on
+/// reporting through it here.
+///
+/// A snapshot, like the ambassador connections: there are about a thousand,
+/// with no dates to page on, and a token deleted on orrery is deleted here
+/// when it is missing from the set. The tokens keep orrery's strings.
+async fn link_tokens_synchronize() {
+    loop {
+        let client = reqwest::Client::new();
+        let fetched = match client
+            .get("https://scistarter.org/staff/sync/link_tokens")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .send()
+            .await
+            .and_then(|response| response.error_for_status())
+        {
+            Ok(response) => response.json::<Vec<link_tokens::OrreryLinkToken>>().await,
+            Err(e) => Err(e),
+        };
+
+        match fetched {
+            Ok(tokens) => {
+                if let Err(e) = link_tokens::mirror_orrery(&tokens).await {
+                    eprintln!("Failed to save link tokens: {}", e);
+                }
+            }
+            Err(e) => eprintln!("Link tokens sync error: {}", e),
+        }
+
+        sleep(Duration::from_secs(60 * 60)).await;
+    }
+}
+
 /// Mirror orrery's Library Network signups into our own table.
 ///
 /// Orrery owns the signup form and remains the system of record, so every
@@ -3330,6 +3361,7 @@ async fn main() {
 
     let _library_signups_sync_task = spawn(library_signups_synchronize());
     let _ambassador_connections_sync_task = spawn(ambassador_connections_synchronize());
+    let _link_tokens_sync_task = spawn(link_tokens_synchronize());
 
     let _constant_contact_task = spawn(constant_contact::sweep_periodically());
 
@@ -3426,6 +3458,13 @@ async fn main() {
     toplevel.spawn(recv_handler!(emails, "set", users::set_user_emails));
     toplevel.spawn(recv_handler!(emails, "add", users::add_user_email));
     toplevel.spawn(recv_handler!(emails, "remove", users::remove_user_email));
+    toplevel.spawn(handler!(emails, "account", users::account_emails));
+    toplevel.spawn(handler!(
+        emails,
+        "request_add",
+        email_verification::request_add
+    ));
+    toplevel.spawn(handler!(emails, "drop", users::drop_email));
     toplevel.spawn(recv_handler!(
         emails,
         "bounced",

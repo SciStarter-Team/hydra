@@ -1,0 +1,58 @@
+<section id="email-addresses" class="ss-card !p-6 mt-6">
+    <h2 class="font-semibold text-lg mb-2">Email Addresses</h2>
+    <p class="text-sm opacity-80 mb-4">
+        Some projects let SciStarter know when you take part by sending us the email address
+        you use with them. Add every address you use with citizen science projects and apps,
+        so that your participation reaches your dashboard. You can sign in with any of them;
+        mail from SciStarter goes to your primary address.
+    </p>
+    <ul class="mb-4">
+        <% for address in &self.emails.addresses { %>
+        <li class="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-gray-200">
+            <span class="break-all">
+                <%= address.email %>
+                <% if address.primary { %><span class="ml-2 text-xs uppercase font-bold text-primary">Primary</span><% } %>
+                <% if !address.verified { %><span class="ml-2 text-xs uppercase font-bold opacity-60">Unconfirmed</span><% } %>
+            </span>
+            <% if !address.primary { %>
+            <form hx-post="/dashboard/emails/remove" hx-target="#email-addresses" hx-swap="outerHTML">
+                <input type="hidden" name="email" value="<%= address.email %>">
+                <button type="submit" class="btn btn-secondary btn-small">Remove</button>
+            </form>
+            <% } %>
+        </li>
+        <% } %>
+        <% for email in &self.emails.pending { %>
+        <li class="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-gray-200">
+            <span class="break-all">
+                <%= email %>
+                <span class="block text-xs opacity-60">Waiting for you to follow the link we sent to this address</span>
+            </span>
+            <span class="flex gap-2">
+                <form hx-post="/dashboard/emails" hx-target="#email-addresses" hx-swap="outerHTML">
+                    <input type="hidden" name="email" value="<%= email %>">
+                    <button type="submit" class="btn btn-secondary btn-small">Send again</button>
+                </form>
+                <form hx-post="/dashboard/emails/remove" hx-target="#email-addresses" hx-swap="outerHTML">
+                    <input type="hidden" name="email" value="<%= email %>">
+                    <button type="submit" class="btn btn-secondary btn-small">Cancel</button>
+                </form>
+            </span>
+        </li>
+        <% } %>
+    </ul>
+    <form hx-post="/dashboard/emails" hx-target="#email-addresses" hx-swap="outerHTML"
+          class="flex flex-wrap items-end gap-2">
+        <label class="block">
+            <span class="block text-sm mb-1 font-semibold">Add an address</span>
+            <input type="email" name="email" value="<%= self.entered %>" required
+                   class="border rounded px-3 py-2">
+        </label>
+        <button type="submit" class="btn btn-primary">Add</button>
+    </form>
+    <% match &self.notice { Some(Notice::Done(message)) => { %>
+    <p class="text-sm mt-2 mb-0" role="status"><%= message %></p>
+    <% } Some(Notice::Refused(message)) => { %>
+    <p class="text-sm text-red-600 mt-2 mb-0" role="alert"><%= message %></p>
+    <% } None => {} } %>
+</section>

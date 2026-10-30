@@ -527,7 +527,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
             }
         }
         None => {
-            let code = crate::link_tokens::generate_token();
+            let code = crate::secret_code::generate(crate::secret_code::CODE_BYTES);
 
             sqlx::query!(
                 r#"insert into "pending_signups" (

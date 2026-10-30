@@ -32,7 +32,7 @@ use common::shared::db;
 use crate::concierge::TOOL_RESULTS_TO_MODEL;
 use crate::concierge::engine::json_to_document;
 use crate::geocode::geocode_address_to_point;
-use crate::search::{self, FinderQuery, FinderResult, FtsTermStyle, SearchKinds};
+use crate::search::{self, FinderQuery, FinderResult, FtsTermStyle, ResultPage, SearchKinds};
 
 /// The most-used project tags, minus any that duplicate a facet value.
 /// Tags are baked into the FTS summaries, so every one of these works as a
@@ -982,7 +982,9 @@ pub async fn dispatch_search(input: &serde_json::Value) -> Result<ToolCallResult
     };
 
     let finder_url = query.url();
-    let search_result = search::run_finder_search(&query, 1, FtsTermStyle::AllWords, kinds).await?;
+    let search_result =
+        search::run_finder_search(&query, ResultPage::finder(1), FtsTermStyle::AllWords, kinds)
+            .await?;
 
     let mut results = search_result.results;
     results.truncate(TOOL_RESULTS_TO_MODEL);

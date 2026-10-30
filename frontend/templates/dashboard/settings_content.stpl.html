@@ -51,11 +51,6 @@
                     <span class="block text-sm mb-1">Last Name</span>
                     <input type="text" name="last_name" value="<%= self.profile.last_name %>" class="w-full border rounded px-3 py-2" />
                 </label>
-
-                <label class="block mb-3">
-                    <span class="block text-sm mb-1">Signup Email</span>
-                    <input type="text" value="<%= self.profile.primary_email %>" class="w-full border rounded px-3 py-2 bg-gray-100" disabled />
-                </label>
             </fieldset>
 
             <fieldset class="ss-card !p-6">
@@ -191,6 +186,8 @@
                 <button type="submit" class="btn btn-primary">Save</button>
             </div>
         </form>
+
+        <%+ self.emails %>
     <% } SettingsTab::Ambassador => { %>
         <% if let Some(ambassador) = &self.ambassador { %>
         <form method="post" action="/dashboard/settings/ambassador" class="grid grid-cols-1 gap-6">

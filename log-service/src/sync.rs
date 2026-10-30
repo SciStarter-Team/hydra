@@ -907,20 +907,11 @@ pub async fn golink_synchronize(database: Arc<Database>, cancellation_token: Can
     }
 }
 
-/// Note that the row's account has participated in the row's project.
+/// Note that the row's account has participated in the row's project. A
+/// synced row is not announced as a first contribution: orrery, which
+/// recorded it, has already sent that mail.
 async fn note_participant(row: &ParticipationRow) -> Result<()> {
-    if let Some(user_id_str) = &row.user_id {
-        sqlx::query!(
-            r#"
-            INSERT OR IGNORE INTO project_participations_cache (user_id, project_id)
-            VALUES (?, ?)
-            "#,
-            user_id_str,
-            row.entity_id
-        )
-        .execute(common::shared::db())
-        .await?;
-    }
+    log_service::cache::note_participation(row).await?;
 
     Ok(())
 }

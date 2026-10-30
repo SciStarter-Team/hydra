@@ -152,6 +152,69 @@ pub struct VerifiedEmail {
     pub email: String,
 }
 
+/// One of an account's email addresses, as its owner sees it.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct AccountEmail {
+    pub email: String,
+    pub verified: bool,
+    /// The address the account signed up with, which mail is sent to.
+    pub primary: bool,
+}
+
+/// The response to `user.emails.account` (payload: the account's id): the
+/// addresses on the account, primary first, and the ones its owner has asked
+/// to add, which join it when the link mailed to them is followed.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Default, PartialEq, Eq)]
+pub struct AccountEmails {
+    pub addresses: Vec<AccountEmail>,
+    pub pending: Vec<String>,
+}
+
+/// Payload for `user.emails.request_add`: mail an address the link that adds
+/// it to the account.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct EmailAddRequest {
+    pub user_id: Ulid,
+    pub email: String,
+}
+
+/// What became of a request to add an address.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmailAddRequested {
+    /// The link that adds the address is on its way to it.
+    Sent,
+    /// That is not an address mail could be delivered to.
+    Invalid,
+    /// The account already has the address, in this or another spelling.
+    AlreadyYours,
+    /// Another account has the address.
+    Taken,
+    /// One was sent to the address less than a minute ago.
+    TooSoon,
+    /// As many were sent to the address in the last day as may be.
+    LimitReached,
+    /// The address is on the do-not-send list.
+    Undeliverable,
+}
+
+/// Payload for `user.emails.drop`: take an address off the account, or stop
+/// waiting for one to be confirmed.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct EmailDrop {
+    pub user_id: Ulid,
+    pub email: String,
+}
+
+/// What became of a request to drop an address.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmailDropped {
+    Dropped,
+    /// The primary address stays, since mail goes to it.
+    Primary,
+    /// The account has no such address, and is waiting for none.
+    NotFound,
+}
+
 /// Payload for `user.emails.bounced`: mail to this address has bounced, so it
 /// no longer counts as confirmed.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

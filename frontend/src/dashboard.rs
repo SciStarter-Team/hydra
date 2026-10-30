@@ -1,7 +1,9 @@
 pub mod bookmarks;
+pub mod email_addresses;
 pub mod entity_messages;
 pub mod entity_summary;
 pub mod interests;
+pub mod link_tokens;
 pub mod lists;
 pub mod main;
 pub mod messages;
@@ -218,6 +220,10 @@ pub fn routes() -> impl Endpoint {
     Route::new()
         .at("/", get(main::page))
         .at("/section/:section", get(main::section))
+        .at("/emails", post(email_addresses::add))
+        .at("/emails/remove", post(email_addresses::remove))
+        .at("/link-tokens", post(link_tokens::add))
+        .at("/link-tokens/delete", post(link_tokens::delete))
         .at("/profile/section/:section", get(profile::section))
         .at("/owned", get(owned::page))
         .at(

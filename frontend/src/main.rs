@@ -318,6 +318,7 @@ fn user_facing() -> impl Endpoint {
         .nest("/-search", search::routes())
         .nest("/-concierge", concierge::routes())
         .at("/finder", get(search::handle_finder))
+        .at("/p/finder", get(search::legacy_api::handle))
         .at("/data", get(pages::data::data_page))
         .at("/-news/:id/content", get(news::news_content))
         .nest("/list", entity_list::page::routes())

@@ -1,5 +1,5 @@
 use anyhow::{Error, anyhow};
-use common::message::dashboard::{EntitySummary, LinkToken, UserProfile};
+use common::message::dashboard::{EntitySummary, UserProfile};
 use common::message::log::{
     UserParticipationBreakdownRequest, UserParticipationBreakdownResponse,
     UserParticipationRequest, UserParticipationResponse, UserRecentVisitsRequest,
@@ -11,6 +11,7 @@ use sailfish::TemplateOnce;
 use serde::Deserialize;
 
 use crate::component::{Component, Head, StandardLayout};
+use crate::dashboard::link_tokens::LinkTokensSection;
 use crate::dashboard::{
     EntityCardModel, Pager, SECTION_PAGE_SIZE, clamp_page, entity_counts, entity_grid_section,
     entity_summary, fetch_bookmarked, fetch_joined, fetch_owned,
@@ -122,11 +123,6 @@ pub async fn page(
     let visited_cards: Vec<EntityCardModel> =
         visited.iter().map(EntityCardModel::from_summary).collect();
 
-    let link_tokens: Vec<LinkToken> =
-        common::service::request("user.link_tokens.list_by_user", user_id_str.clone())
-            .await
-            .unwrap_or_default();
-
     let (display_name, image) = match &profile {
         Some(profile) if !profile.first_name.is_empty() || !profile.last_name.is_empty() => (
             format!("{} {}", profile.first_name, profile.last_name)
@@ -144,11 +140,6 @@ pub async fn page(
         && joined.is_empty()
         && bookmarked_projects.is_empty()
         && bookmarked_events.is_empty();
-
-    let token_cards: Vec<LinkTokenCardModel> = link_tokens
-        .into_iter()
-        .map(LinkTokenCardModel::from)
-        .collect();
 
     let content = OverviewContent {
         display_name,
@@ -174,7 +165,7 @@ pub async fn page(
             my_events: my_events_section(&bookmarked_events, 0),
             visited: visited_cards,
         },
-        link_tokens: token_cards,
+        link_tokens: LinkTokensSection::load(user_id).await,
     };
 
     let layout = StandardLayout::new("/dashboard", content)
@@ -356,22 +347,6 @@ pub struct OwnedEntityRow {
     pub saves: i64,
 }
 
-pub struct LinkTokenCardModel {
-    pub label: String,
-    pub created: String,
-    pub expires: Option<String>,
-}
-
-impl From<LinkToken> for LinkTokenCardModel {
-    fn from(t: LinkToken) -> Self {
-        Self {
-            label: t.label,
-            created: t.created,
-            expires: t.expires,
-        }
-    }
-}
-
 #[derive(TemplateOnce)]
 #[template(path = "dashboard/_partials/owned_projects_section.stpl.html")]
 pub struct OwnedProjectsSection {
@@ -429,5 +404,5 @@ struct OverviewContent {
     show_empty_state: bool,
     leader: LeaderPanel,
     participant: ParticipantPanel,
-    link_tokens: Vec<LinkTokenCardModel>,
+    link_tokens: LinkTokensSection,
 }

@@ -166,6 +166,18 @@ pub struct ParticipationRow {
     pub task_name: Option<String>,
 }
 
+impl ParticipationRow {
+    /// Whether the row reports that the account joined the project, rather
+    /// than that it contributed anything. Partners name the task `signup`;
+    /// rows synced from orrery carry orrery's name for it.
+    pub fn joins_project(&self) -> bool {
+        matches!(
+            self.task_name.as_deref(),
+            Some("signup" | "Joined the project")
+        )
+    }
+}
+
 impl TableRow for ParticipationRow {
     const TABLE_NAME: &'static str = "participation";
 

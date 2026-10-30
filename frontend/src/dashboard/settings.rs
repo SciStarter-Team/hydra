@@ -16,6 +16,7 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::component::{Component, Head, StandardLayout};
+use crate::dashboard::email_addresses::EmailAddressesSection;
 use crate::middleware::authorization::Authenticated;
 use crate::project::linked_platform::{NamedAccount, name_account};
 
@@ -289,6 +290,7 @@ async fn render_settings(
         notice,
         profile,
         ambassador,
+        emails: EmailAddressesSection::load(user_info.user_id).await,
         user_id: user_info.user_id,
     };
 
@@ -319,6 +321,7 @@ struct SettingsContent {
     notice: Option<SettingsNotice>,
     profile: UserProfile,
     ambassador: Option<AmbassadorApplication>,
+    emails: EmailAddressesSection,
     #[allow(dead_code)]
     user_id: Ulid,
 }
