@@ -20,6 +20,8 @@ pub enum LinkedPlatform {
 }
 
 impl LinkedPlatform {
+    pub const ALL: [LinkedPlatform; 2] = [LinkedPlatform::INaturalist, LinkedPlatform::Zooniverse];
+
     pub fn label(self) -> &'static str {
         match self {
             LinkedPlatform::INaturalist => "iNaturalist",
@@ -27,19 +29,46 @@ impl LinkedPlatform {
         }
     }
 
-    /// Whether a username has to be given exactly as the platform spells it.
+    /// Whether people are asked to give a username exactly as the platform
+    /// spells it.
     ///
     /// iNaturalist's observation search matches a login regardless of case.
-    /// A Zooniverse classification is matched to an account by comparing the
-    /// Panoptes login with the stored username exactly, so a username that
-    /// differs only in capitalization is never credited.
+    /// Linking a Zooniverse login here looks it up on Panoptes regardless of
+    /// case too, and classifications are matched by the Panoptes id that
+    /// lookup finds, but capitalization matters on Zooniverse itself, so the
+    /// copy asks for the exact spelling.
     pub fn username_case_sensitive(self) -> bool {
         match self {
             LinkedPlatform::INaturalist => false,
             LinkedPlatform::Zooniverse => true,
         }
     }
+
+    /// The username somebody meant by `text` when naming their account on
+    /// this platform, before anything has been asked of the platform.
+    /// Mirrors orrery's `bridge.platforms.normalize_platform_username`.
+    pub fn normalize_username(self, text: &str) -> &str {
+        match self {
+            LinkedPlatform::INaturalist => text.trim(),
+            LinkedPlatform::Zooniverse => normalize_zooniverse_login(text),
+        }
+    }
 }
+
+/// The login somebody meant by `text` when naming their Zooniverse account.
+///
+/// Zooniverse shows a login as @login, and people copy it that way, along
+/// with whatever whitespace the copy picked up. Neither can be part of a
+/// login. Mirrors orrery's `bridge.platforms.normalize_zooniverse_login`.
+pub fn normalize_zooniverse_login(text: &str) -> &str {
+    let text = text.trim();
+    text.strip_prefix('@').unwrap_or(text).trim()
+}
+
+/// How long a login Panoptes didn't recognise is left before it is asked
+/// about again. Nearly all of them never will be -- display names, email
+/// addresses -- but somebody can create the account after naming it here.
+pub const ZOONIVERSE_LOOKUP_INTERVAL_HOURS: i64 = 24;
 
 /// The date the policy took effect.
 ///
@@ -112,6 +141,25 @@ mod tests {
     use super::*;
 
     const LINKED: &str = "2027-03-01T12:00:00Z";
+
+    #[test]
+    fn a_zooniverse_login_is_read_as_it_was_meant() {
+        assert_eq!(normalize_zooniverse_login("  @Stargazer "), "Stargazer");
+        assert_eq!(normalize_zooniverse_login("Stargazer"), "Stargazer");
+        assert_eq!(normalize_zooniverse_login(" @ "), "");
+    }
+
+    #[test]
+    fn only_a_zooniverse_login_loses_its_at() {
+        assert_eq!(
+            LinkedPlatform::Zooniverse.normalize_username(" @Ada "),
+            "Ada"
+        );
+        assert_eq!(
+            LinkedPlatform::INaturalist.normalize_username(" @Ada "),
+            "@Ada"
+        );
+    }
 
     #[test]
     fn activity_well_before_the_connection_does_not_count() {

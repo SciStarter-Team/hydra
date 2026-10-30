@@ -1697,13 +1697,17 @@ async fn format_display_value(
 
         // More Info accordion interior fields (sub-boxes)
         "video_url" => ribbon_subbox(
-            "Video",
+            "How-To Video",
             if empty {
                 not_set().to_string()
             } else {
+                let name = read_field_value(target_id, "name", kind)
+                    .await
+                    .unwrap_or_default();
                 format!(
-                    r#"<a href="{}" class="text-primary-action hover:underline" target="_blank" rel="noopener">Check out the how-to video</a>"#,
-                    esc()
+                    r#"<a href="{}" class="text-primary-action hover:underline" target="_blank" rel="noopener">How to do {}</a>"#,
+                    esc(),
+                    html_escape(&name)
                 )
             },
         ),

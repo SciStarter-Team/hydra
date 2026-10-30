@@ -2126,14 +2126,52 @@ pub struct ZooniverseListLinksRequest {
 /// One account's Zooniverse connection.
 ///
 /// The classification importer works from a project's whole history and has
-/// no `users` table of its own to consult, so it asks for these once per
-/// sweep and floors each credit against the matching entry.
+/// no `users` table of its own to consult, so it asks for these and floors
+/// each credit against the matching entry.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ZooniverseLink {
     pub user_id: Ulid,
     /// `None` means the connection predates the August 2026 policy; see
     /// `common::linked_platform`.
     pub zooniverse_linked_at: Option<String>,
+    /// The Panoptes account the username names, which is what a
+    /// classification is attributed to. `None` until it has been
+    /// identified, and an account that isn't identified is credited nothing.
+    #[serde(default)]
+    pub zooniverse_id: Option<i64>,
+    /// When the user sync brought `zooniverse_id` here from orrery. `None`
+    /// when it was found here, or arrived before this was recorded.
+    #[serde(default)]
+    pub zooniverse_id_received_at: Option<String>,
+}
+
+/// A Panoptes account: the id classifications are attributed to, and the
+/// login as its owner spells it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ZooniverseAccount {
+    pub id: i64,
+    pub login: String,
+}
+
+/// An account naming a Zooniverse login whose Panoptes account is unknown
+/// and due to be asked about. Answered by `user.zooniverse.to_identify`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ZooniverseIdentityQuestion {
+    pub user_id: Ulid,
+    pub zooniverse_username: String,
+}
+
+/// What Panoptes said about an account's Zooniverse login, for
+/// `user.zooniverse.record_identity`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ZooniverseIdentityAnswer {
+    pub user_id: Ulid,
+    /// The username as it stood when it was looked up. Nothing is recorded
+    /// unless the account still names it, so an answer about a username
+    /// somebody has since replaced can't land on its replacement.
+    pub looked_up: String,
+    /// `None` when Panoptes has no account with that login.
+    pub account: Option<ZooniverseAccount>,
 }
 
 // ============================================================================

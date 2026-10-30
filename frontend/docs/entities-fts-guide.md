@@ -1,271 +1,86 @@
-# Entities FTS Integration Guide
+# Entities FTS Guide
 
-This guide explains how to add new entity types to the hybrid FTS5 search system.
+`entities_fts` is the FTS5 index behind the finder's text search and the header
+search box. This guide explains how it is kept up to date and how to change what
+it indexes.
 
 ## Overview
 
-The entities system uses a **hybrid FTS approach**:
-- **Unified search**: `entities_fts` table for cross-type "search everything" functionality
-- **Type-specific search**: Individual `*_fts` tables (e.g., `projects_fts`, `events_fts`) for optimized searches
-- **Smart summaries**: Content + tags combined into searchable summaries
+Each published entity has one row in `entities_fts`:
 
-## Architecture
+| Column        | Indexed | Contents                                           |
+|---------------|---------|----------------------------------------------------|
+| `slug`        | no      | the entity's slug, used to join back to `entities` |
+| `entity_type` | no      | the entity's kind (`Project`, `Event`, `Wysiwyg`…) |
+| `entity_id`   | no      | the entity's target (project id, event id…)        |
+| `title`       | yes     | the entity's name                                  |
+| `summary`     | yes     | everything else that should be searchable          |
 
-```
-entities table (slug, kind, target) 
-    ↓
-entities_fts table (unified search)
-    ↓
-Individual *_fts tables (type-specific search)
-```
+`summary` is never displayed. It is the searchable text of the entity, with
+one field per line, so add a field to it rather than adding a column.
 
-## Adding a New Entity Type
+The separate `projects_fts` and `events_fts` tables serve the exchange and admin
+searches and are maintained by their own triggers.
 
-To add a new entity type (e.g., "Html", "Forum", "User"), you need to create **two new migrations**:
+## One definition: `entities_fts_documents`
 
-### 1. Create Type-Specific FTS Table (Optional but Recommended)
+The view `entities_fts_documents` defines the row every published entity should
+have, one `UNION ALL` arm per kind. Every trigger that maintains the index
+deletes the affected rows and re-inserts them from the view:
 
-Create a migration for the dedicated FTS table:
+- `entities` insert, update and delete refresh by slug.
+- `projects`, `events` and `pagecontent` insert, update and delete refresh by
+  entity type and id. Their update triggers have no column list, so any column
+  the view reads refreshes the entry.
 
-```bash
-cargo sqlx migrate add create_htmls_fts
-```
+Two helper views feed it:
 
-```sql
--- Migration: create_htmls_fts.sql
-CREATE VIRTUAL TABLE htmls_fts USING fts5(
-    html_id UNINDEXED,
-    title,
-    content_text,
-    meta_description,
-    tags_text,
-    content='htmls',
-    content_rowid='rowid'
-);
+- `entities_fts_descriptions` gives the plain text of project and event
+  descriptions. The detail-page editor stores Quill Delta JSON, whose text is
+  the `insert` strings of its ops. Other formats are indexed as stored.
+- `entities_fts_project_hosts` gives the host of each project's URL, which
+  names the platform the project runs on (zooniverse.org, inaturalist.org).
 
--- Populate and create triggers following existing patterns
--- (See projects_fts and events_fts migrations for examples)
-```
+## Changing what is indexed
 
-### 2. Integrate with Unified entities_fts System
-
-Create a migration to add the new entity type to the unified system:
-
-```bash
-cargo sqlx migrate add add_html_entities_to_fts
-```
-
-This migration must handle **four components**:
-
-#### A. Initial Population
+Write a migration that drops and recreates `entities_fts_documents` with the
+change, then rebuilds the index:
 
 ```sql
--- Populate entities_fts with existing HTML entities
-INSERT INTO entities_fts(slug, entity_type, entity_id, title, summary)
-SELECT 
-    e.slug,
-    'Html' as entity_type,  -- Match the entities.kind exactly
-    h.html_id,
-    h.title,
-    h.title || ': ' || 
-    CASE 
-        WHEN LENGTH(h.content_text) > 200 THEN SUBSTR(h.content_text, 1, 197) || '...'
-        ELSE h.content_text
-    END ||
-    CASE 
-        WHEN LENGTH(h.tags_text) > 0 THEN '. Tags: ' || h.tags_text
-        ELSE ''
-    END as summary
-FROM entities e
-JOIN htmls h ON e.target = h.html_id
-WHERE e.kind = 'Html';  -- Must match entities.kind case exactly
+DROP VIEW entities_fts_documents;
+CREATE VIEW entities_fts_documents (slug, entity_type, entity_id, title, summary) AS
+...;
+
+DELETE FROM entities_fts;
+INSERT INTO entities_fts (slug, entity_type, entity_id, title, summary)
+SELECT slug, entity_type, entity_id, title, summary FROM entities_fts_documents;
 ```
 
-#### B. Recreate Entity INSERT Trigger
+The triggers read the view when they fire, so they need no change.
 
-**Important**: You must DROP and CREATE the entire trigger, not edit it:
+## Adding an entity kind
 
-```sql
--- Drop existing trigger
-DROP TRIGGER IF EXISTS entities_fts_entity_insert;
+1. Add an arm to `entities_fts_documents` for the new kind. Match
+   `entities.kind` exactly (PascalCase). Keep the arm's
+   `e.kind NOT IN ('Redirect', 'WordPress', 'Placeholder')` term, which lets
+   lookups by target use the partial index `entities_by_target`.
+2. If the kind's content lives in a new table, add insert, update and delete
+   triggers on that table following the `projects` ones: delete the kind's rows
+   for the old id, then insert from the view for the new id.
+3. Rebuild the index as above.
 
--- Recreate with new entity type added
-CREATE TRIGGER IF NOT EXISTS entities_fts_entity_insert AFTER INSERT ON entities
-BEGIN
-    -- Handle project entities (copy existing logic)
-    INSERT INTO entities_fts(slug, entity_type, entity_id, title, summary)
-    SELECT ... FROM projects p WHERE NEW.kind = 'Project' AND ...;
-    
-    -- Handle event entities (copy existing logic) 
-    INSERT INTO entities_fts(slug, entity_type, entity_id, title, summary)
-    SELECT ... FROM events e WHERE NEW.kind = 'Event' AND ...;
-    
-    -- Add NEW entity type
-    INSERT INTO entities_fts(slug, entity_type, entity_id, title, summary)
-    SELECT 
-        NEW.slug, 'Html', h.html_id, h.title,
-        h.title || ': ' || SUBSTR(h.content_text, 1, 200) ||
-        CASE WHEN LENGTH(h.tags_text) > 0 THEN '. Tags: ' || h.tags_text ELSE '' END
-    FROM htmls h 
-    WHERE NEW.kind = 'Html' AND h.html_id = NEW.target;
-END;
-```
-
-#### C. Recreate Entity UPDATE Trigger
+## Testing
 
 ```sql
--- Drop existing trigger
-DROP TRIGGER IF EXISTS entities_fts_entity_update;
-
--- Recreate with new entity type (copy all existing logic + add new type)
-CREATE TRIGGER IF NOT EXISTS entities_fts_entity_update AFTER UPDATE ON entities
-BEGIN
-    DELETE FROM entities_fts WHERE slug = OLD.slug;
-    
-    -- Re-insert all entity types including new one
-    -- (Same INSERT logic as above)
-END;
-```
-
-#### D. Create Content UPDATE Trigger
-
-```sql
--- Create new trigger for HTML content changes
-CREATE TRIGGER IF NOT EXISTS entities_fts_html_update
-AFTER UPDATE OF title, content_text, tags_text ON htmls
-BEGIN
-    DELETE FROM entities_fts WHERE entity_type = 'Html' AND entity_id = NEW.html_id;
-    
-    INSERT INTO entities_fts(slug, entity_type, entity_id, title, summary)
-    SELECT 
-        e.slug, 'Html', NEW.html_id, NEW.title,
-        NEW.title || ': ' || SUBSTR(NEW.content_text, 1, 200) ||
-        CASE WHEN LENGTH(NEW.tags_text) > 0 THEN '. Tags: ' || NEW.tags_text ELSE '' END
-    FROM entities e 
-    WHERE e.kind = 'Html' AND e.target = NEW.html_id;
-END;
-```
-
-## Summary Format Guidelines
-
-Create meaningful, searchable summaries using this pattern:
-
-```sql
--- Projects: "Name by Presenter: Description. Tags: tag1 tag2"
-project_name || ' by ' || presenter || ': ' || description || '. Tags: ' || tags_text
-
--- Events: "Name at Location: Description. Tags: tag1 tag2" 
-event_name || ' at ' || location || ': ' || description || '. Tags: ' || tags_text
-
--- HTML: "Title: Content excerpt. Tags: tag1 tag2"
-title || ': ' || content_excerpt || '. Tags: ' || tags_text
-
--- Users: "Display Name: Bio excerpt. Interests: interest1 interest2"
-display_name || ': ' || bio_excerpt || '. Interests: ' || interests
-```
-
-**Key principles:**
-- Include the most identifying information first
-- Truncate long content (~200 chars max)
-- Always include tags/categories for searchability
-- Use natural language that users would search for
-
-## Migration Template
-
-Use this template for adding new entity types:
-
-```sql
--- Migration: add_[entity_type]_to_entities_fts.sql
-
--- Step 1: Add initial population
-INSERT INTO entities_fts(slug, entity_type, entity_id, title, summary)
-SELECT 
-    e.slug, '[EntityType]', t.id, t.title,
-    -- Create meaningful summary here
-FROM entities e
-JOIN [table_name] t ON e.target = t.id
-WHERE e.kind = '[EntityType]';
-
--- Step 2: Recreate entity INSERT trigger with new type
-DROP TRIGGER IF EXISTS entities_fts_entity_insert;
-CREATE TRIGGER IF NOT EXISTS entities_fts_entity_insert AFTER INSERT ON entities
-BEGIN
-    -- Copy ALL existing entity type logic from current trigger
-    -- Add new entity type logic
-END;
-
--- Step 3: Recreate entity UPDATE trigger with new type  
-DROP TRIGGER IF EXISTS entities_fts_entity_update;
-CREATE TRIGGER IF NOT EXISTS entities_fts_entity_update AFTER UPDATE ON entities
-BEGIN
-    -- Copy ALL existing entity type logic from current trigger
-    -- Add new entity type logic
-END;
-
--- Step 4: Create content update trigger
-CREATE TRIGGER IF NOT EXISTS entities_fts_[entity_type]_update
-AFTER UPDATE OF [relevant_fields] ON [table_name]
-BEGIN
-    DELETE FROM entities_fts WHERE entity_type = '[EntityType]' AND entity_id = NEW.id;
-    INSERT INTO entities_fts(...) SELECT ... FROM entities e WHERE ...;
-END;
-```
-
-## Finding Current Trigger Logic
-
-To get the current trigger definitions for copying:
-
-```sql
--- View current triggers
-.schema entities_fts_entity_insert
-.schema entities_fts_entity_update
-
--- Or check the latest migration files that created/modified these triggers
-```
-
-## Testing Your Integration
-
-After applying your migrations:
-
-```sql
--- 1. Check population
+-- One row per published entity, no duplicates
 SELECT entity_type, COUNT(*) FROM entities_fts GROUP BY entity_type;
+SELECT slug FROM entities_fts GROUP BY slug HAVING COUNT(*) > 1;
 
--- 2. Test search
-SELECT slug, entity_type, title 
-FROM entities_fts 
-WHERE entities_fts MATCH 'your_test_term' 
-LIMIT 5;
+-- Search the way the finder does (a quoted prefix phrase)
+SELECT slug, entity_type, title FROM entities_fts
+WHERE entities_fts MATCH '"zooniverse"*' LIMIT 5;
 
--- 3. Test content updates
-UPDATE htmls SET title = 'New Title' WHERE html_id = 'test_id';
--- Check that entities_fts was updated automatically
+-- Content edits refresh the entry
+UPDATE projects SET goal = 'quuxword' WHERE project_id = '...';
+SELECT slug FROM entities_fts WHERE entities_fts MATCH 'quuxword';
 ```
-
-## Best Practices
-
-1. **Case sensitivity**: Match `entities.kind` exactly (usually PascalCase)
-2. **Entity type naming**: Use consistent casing in `entity_type` field  
-3. **Summary length**: Keep summaries under 300 characters total
-4. **Tag integration**: Always include tags when available
-5. **Trigger recreation**: Always DROP and CREATE entire triggers, never edit
-6. **Copy existing logic**: When recreating triggers, copy ALL existing entity types
-7. **Test thoroughly**: Verify population, search, and content updates
-8. **Documentation**: Update this guide when adding new patterns
-
-## Troubleshooting
-
-**Empty entities_fts after migration?**
-- Check case sensitivity in WHERE clauses
-- Verify JOIN conditions match actual data
-- Test individual SELECT queries before running migration
-
-**Search not finding results?**
-- Check FTS5 syntax (use MATCH operator)
-- Verify summary content includes searchable terms
-- Test with simple terms first
-
-**Triggers not firing after recreation?**
-- Verify all existing entity types were copied correctly
-- Check trigger names for conflicts
-- Confirm UPDATE OF clause includes all relevant fields

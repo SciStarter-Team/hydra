@@ -1653,6 +1653,7 @@ dependencies = [
  "jiff",
  "num_enum 0.7.4",
  "pulldown-cmark 0.13.0",
+ "reqwest",
  "scraper 0.24.0",
  "serde",
  "serde_json",

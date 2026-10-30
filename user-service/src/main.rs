@@ -294,6 +294,10 @@ async fn users_synchronize() {
         zooniverse_username: String,
         #[serde(default)]
         zooniverse_linked_at: Option<String>,
+        // Absent from a payload orrery sent before it learned to carry it,
+        // and read as not yet identified.
+        #[serde(default)]
+        zooniverse_id: Option<i64>,
         degree: Option<String>,
         ethnicity: Option<String>,
         income: Option<String>,
@@ -330,15 +334,23 @@ async fn users_synchronize() {
             .await
             .expect("Retrieving sync bookmark failed")
             .unwrap_or_else(|| String::from("2000-01-01 00:00:00+00"));
+        // The last account read at `last`: a bulk update gives thousands of
+        // accounts the same `updated`, and a page can end partway through
+        // them. Zero for a bookmark saved before this was kept, which
+        // re-reads the accounts at that instant rather than skipping them.
+        let last_id: i32 = misc::get("user-sync-last-id")
+            .await
+            .expect("Retrieving sync last_id failed")
+            .unwrap_or(0);
 
-        println!("Syncing users since {}", &last);
+        println!("Syncing users since {} with last_id {}", &last, last_id);
 
         let client = reqwest::Client::new();
 
         let users: Vec<UserDataImport> = match client
             .get("https://scistarter.org/staff/sync/users")
             .bearer_auth(env!("SYNC_TOKEN"))
-            .query(&[("since", &last)])
+            .query(&[("since", &last), ("last_id", &last_id.to_string())])
             .send()
             .await
         {
@@ -378,12 +390,14 @@ async fn users_synchronize() {
 
         let db = db();
         let mut bookmark = last.clone();
+        let mut bookmark_id = last_id;
 
         let got_users = users.len();
 
         for user in users {
-            if user.updated > bookmark {
+            if user.updated > bookmark || (user.updated == bookmark && user.id > bookmark_id) {
                 bookmark = user.updated.clone();
+                bookmark_id = user.id;
             }
 
             let user_primary_email = match user.primary_email {
@@ -534,6 +548,37 @@ async fn users_synchronize() {
             .await
             .expect("Clearing a changed account's iNaturalist watermark failed");
 
+            // Likewise when Panoptes was last asked about the old Zooniverse
+            // username, which says nothing about when to ask about the new
+            // one. The id itself arrives with the account, from orrery.
+            sqlx::query!(
+                r#"UPDATE "users" SET "zooniverse_checked_at" = NULL
+                   WHERE "user_id" = ? AND COALESCE("zooniverse_username", '') != ?"#,
+                user.ulid,
+                user.zooniverse_username,
+            )
+            .execute(db)
+            .await
+            .expect("Clearing a changed account's Zooniverse lookup time failed");
+
+            // When a Panoptes id the account didn't have before arrives, for
+            // log-service's bridge: it can match the account's
+            // classifications only from now on, and orrery has been crediting
+            // them since it found the id. A new account is stamped by the
+            // insert below instead.
+            let zooniverse_id_received_at = user.zooniverse_id.map(|_| TimeString::now());
+
+            sqlx::query!(
+                r#"UPDATE "users" SET "zooniverse_id_received_at" = ?
+                   WHERE "user_id" = ? AND "zooniverse_id" IS NOT ?"#,
+                zooniverse_id_received_at,
+                user.ulid,
+                user.zooniverse_id,
+            )
+            .execute(db)
+            .await
+            .expect("Stamping a newly arrived Panoptes id failed");
+
             // I would really like to see keyword parameters in SQLx
             // for DBs that support them.
             //
@@ -631,7 +676,9 @@ async fn users_synchronize() {
                      "signup_tags",
                      "badge_allowed",
                      "constant_contact_dirty",
-                     "api_projects_notify_reviewers"
+                     "api_projects_notify_reviewers",
+                     "zooniverse_id",
+                     "zooniverse_id_received_at"
                    )
                    values (
                      ?1,
@@ -713,7 +760,9 @@ async fn users_synchronize() {
                      -- primary and this sync is running, and the digest it
                      -- sends says the record is current.
                      0,
-                     ?76
+                     ?76,
+                     ?77,
+                     ?78
                    )
                    on conflict ("user_id") do update set
                      "legacy_v2_id" = excluded."legacy_v2_id",
@@ -790,7 +839,8 @@ async fn users_synchronize() {
                      "signup_tags" = excluded."signup_tags",
                      "badge_allowed" = excluded."badge_allowed",
                      "constant_contact_dirty" = excluded."constant_contact_dirty",
-                     "api_projects_notify_reviewers" = excluded."api_projects_notify_reviewers"
+                     "api_projects_notify_reviewers" = excluded."api_projects_notify_reviewers",
+                     "zooniverse_id" = excluded."zooniverse_id"
                    "#,
                 user.ulid,
                 user.legacy_id,
@@ -868,6 +918,8 @@ async fn users_synchronize() {
                 user.signup_tags,
                 user.badge_allowed,
                 user_api_projects_notify_reviewers,
+                user.zooniverse_id,
+                zooniverse_id_received_at,
             )
             .execute(db)
             .await
@@ -1310,6 +1362,9 @@ async fn users_synchronize() {
         misc::set("user-sync-bookmark", bookmark)
             .await
             .expect("Saving sync bookmark failed");
+        misc::set("user-sync-last-id", bookmark_id)
+            .await
+            .expect("Saving sync last_id failed");
 
         if got_users == 500 {
             sleep(Duration::from_secs(60)).await;
@@ -3819,6 +3874,12 @@ async fn main() {
     // Zooniverse endpoints
     let zooniverse = service.group("user.zooniverse");
     toplevel.spawn(handler!(zooniverse, "list_links", zooniverse::list_links));
+    toplevel.spawn(handler!(zooniverse, "to_identify", zooniverse::to_identify));
+    toplevel.spawn(handler!(
+        zooniverse,
+        "record_identity",
+        zooniverse::record_identity
+    ));
 
     // Set up graceful shutdown
     use tokio::signal::unix::{SignalKind, signal};

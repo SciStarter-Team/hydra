@@ -1,10 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
-use common::message::user::{ZooniverseLink, ZooniverseListLinksRequest};
-use common::{contribution_time, linked_platform};
+use common::message::user::{
+    ZooniverseAccount, ZooniverseIdentityAnswer, ZooniverseIdentityQuestion, ZooniverseLink,
+    ZooniverseListLinksRequest,
+};
+use common::{contribution_time, linked_platform, panoptes};
 use jiff::Timestamp;
 use serde::Deserialize;
 use tokio::time::sleep;
@@ -15,7 +18,7 @@ use log_service::database::{
     Database, get_sync_last_id, set_sync_last_id, tables::ParticipationRow,
 };
 
-use super::Platform;
+use super::{Link, Platform};
 
 /// "Import" -- how the contribution reached us, which for a classification is
 /// a scheduled pull against the Panoptes API. Deliberately the same value as
@@ -31,23 +34,94 @@ const PAGE_SIZE: u32 = 200;
 const REQUEST_DELAY: Duration = Duration::from_millis(500);
 const LINK_PAGE_SIZE: i64 = 500;
 
-/// When each account connected its Zooniverse username, keyed by user id.
-///
-/// A missing key means we could not learn a time for an account the mapping
-/// table says claimed the Zooniverse account -- the two are synced
-/// separately and can disagree for a pass. That is "connected, when
-/// unknown", which floors at the cutover rather than dropping the credit.
-type LinkTimes = HashMap<String, Option<String>>;
-
-/// Every account's Zooniverse connection time.
+/// Every identified account's Zooniverse connection, as user-service holds
+/// it.
 ///
 /// A project's classification history is walked whole, and a project newly
 /// joining the affiliate program starts from classification zero -- so
-/// without this its entire back catalogue would land on everybody already
-/// connected. The importer has no `users` table of its own, so it takes the
-/// list from user-service once per sweep.
-async fn load_link_times() -> Result<LinkTimes> {
-    let mut links = LinkTimes::new();
+/// without the connection times its entire back catalogue would land on
+/// everybody already connected. The importer has no `users` table of its
+/// own, so it takes the list from user-service.
+struct Links {
+    /// Each account's connection, keyed by user id.
+    links: HashMap<String, Link>,
+
+    /// The accounts claiming each Panoptes account, which is how a
+    /// classification names its classifier. Nothing stops two accounts here
+    /// naming the same Zooniverse login, and each of them is credited. An
+    /// account whose login hasn't been identified is in no list.
+    by_zooniverse_id: HashMap<i64, Vec<String>>,
+}
+
+/// From when the bridge can match an account's classifications, if that is
+/// later than the account connected.
+///
+/// The project watermarks only move forward, so a classification read
+/// before the bridge knew who made it is passed over for good. orrery
+/// credits it all the same, and coverage leaves orrery's copy standing
+/// until here.
+///
+/// The bridge reads the connections again after fetching each page, so it
+/// knows an account from the moment user-service does -- which, for an id
+/// orrery found, is when the user sync brought it over. Before this release
+/// the bridge matched through a mapping orrery sent whole: an account it
+/// matched that way has always been matched, and any other only since this
+/// release began matching by the id on the account.
+struct Matching {
+    by_mapping: HashSet<(String, i64)>,
+    by_id_since: Timestamp,
+}
+
+impl Matching {
+    async fn load() -> Result<Matching> {
+        let by_mapping = sqlx::query!(
+            r#"SELECT user_id AS "user_id!", zooniverse_id AS "zooniverse_id!"
+               FROM zooniverse_matched_by_mapping"#
+        )
+        .fetch_all(common::shared::db())
+        .await?
+        .into_iter()
+        .map(|row| (row.user_id, row.zooniverse_id))
+        .collect();
+
+        let by_id_since =
+            sqlx::query_scalar!(r#"SELECT since AS "since!" FROM zooniverse_matching_by_id"#)
+                .fetch_one(common::shared::db())
+                .await?
+                .parse()?;
+
+        Ok(Matching {
+            by_mapping,
+            by_id_since,
+        })
+    }
+
+    /// When the bridge could first match `link`'s account, or `None` if it
+    /// could all along. An arrival time that can't be read means the
+    /// account can't be placed, and `Err` leaves it unmatched: orrery's copy
+    /// then stands for all of it.
+    fn since(&self, link: &ZooniverseLink, zooniverse_id: i64) -> Result<Option<Timestamp>> {
+        let received = link
+            .zooniverse_id_received_at
+            .as_deref()
+            .map(str::parse::<Timestamp>)
+            .transpose()?;
+
+        let by_id = (!self
+            .by_mapping
+            .contains(&(link.user_id.to_string(), zooniverse_id)))
+        .then_some(self.by_id_since);
+
+        Ok(received.max(by_id))
+    }
+}
+
+async fn load_links() -> Result<Links> {
+    let matching = Matching::load().await?;
+    let mut links = Links {
+        links: HashMap::new(),
+        by_zooniverse_id: HashMap::new(),
+    };
     let mut offset: i64 = 0;
 
     loop {
@@ -63,7 +137,36 @@ async fn load_link_times() -> Result<LinkTimes> {
         let page_len = page.len() as i64;
 
         for link in page {
-            links.insert(link.user_id.to_string(), link.zooniverse_linked_at);
+            let Some(zooniverse_id) = link.zooniverse_id else {
+                continue;
+            };
+
+            let matched_since = match matching.since(&link, zooniverse_id) {
+                Ok(since) => since,
+                Err(e) => {
+                    eprintln!(
+                        "Unreadable Panoptes id arrival {:?} for {}: {e}",
+                        link.zooniverse_id_received_at, link.user_id
+                    );
+                    continue;
+                }
+            };
+
+            let user_id = link.user_id.to_string();
+
+            links
+                .by_zooniverse_id
+                .entry(zooniverse_id)
+                .or_default()
+                .push(user_id.clone());
+
+            links.links.insert(
+                user_id,
+                Link {
+                    linked_at: link.zooniverse_linked_at,
+                    matched_since,
+                },
+            );
         }
 
         if page_len < LINK_PAGE_SIZE {
@@ -72,6 +175,50 @@ async fn load_link_times() -> Result<LinkTimes> {
 
         offset += LINK_PAGE_SIZE;
     }
+}
+
+/// Find the Panoptes account behind each Zooniverse login that hasn't been
+/// identified and is due to be asked about.
+///
+/// Run between fetching each page and matching it, because the project
+/// watermarks only move forward: a classification by somebody connected but
+/// not yet identified would be walked past for good. Linking identifies an
+/// account at once unless Panoptes was unreachable, so this usually finds
+/// nobody to ask about. Each login is asked about once however many
+/// accounts name it. A failure leaves the accounts not yet reached as they
+/// were.
+async fn identify_accounts(client: &reqwest::Client) -> Result<()> {
+    let questions: Vec<ZooniverseIdentityQuestion> =
+        common::service::request("user.zooniverse.to_identify", ()).await?;
+
+    let mut answers: HashMap<String, Option<ZooniverseAccount>> = HashMap::new();
+
+    for question in questions {
+        let key = linked_platform::normalize_zooniverse_login(&question.zooniverse_username)
+            .to_lowercase();
+
+        let account = match answers.get(&key) {
+            Some(account) => account.clone(),
+            None => {
+                sleep(REQUEST_DELAY).await;
+                let account = panoptes::find_account(client, &key).await?;
+                answers.insert(key, account.clone());
+                account
+            }
+        };
+
+        let _: () = common::service::request(
+            "user.zooniverse.record_identity",
+            ZooniverseIdentityAnswer {
+                user_id: question.user_id,
+                looked_up: question.zooniverse_username,
+                account,
+            },
+        )
+        .await?;
+    }
+
+    Ok(())
 }
 
 /// NATS `log.zooniverse.projects`: every project this bridge credits.
@@ -103,8 +250,8 @@ pub async fn handle_projects(_req: &async_nats::service::Request) -> Result<Vec<
 /// What this bridge credits; see [`BridgeCoverage`](super::BridgeCoverage).
 ///
 /// A classification is credited to every account that claims the Zooniverse
-/// account it was made by, so the accounts are those the mapping names, each
-/// with its connection time as the sweep reads it.
+/// account it was made by, so the accounts are those whose login has been
+/// identified, each with its connection as the sweep reads it.
 pub async fn coverage() -> Result<Platform> {
     let projects = sqlx::query!(
         r#"SELECT entity_id AS "entity_id!", MIN(credited_since) AS credited_since
@@ -130,18 +277,7 @@ pub async fn coverage() -> Result<Platform> {
     })
     .collect();
 
-    let link_times = load_link_times().await?;
-
-    let links = sqlx::query_scalar!("SELECT DISTINCT user_id FROM zooniverse_users")
-        .fetch_all(common::shared::db())
-        .await?
-        .into_iter()
-        .flatten()
-        .map(|user_id| {
-            let linked_at = link_times.get(&user_id).cloned().flatten();
-            (user_id, linked_at)
-        })
-        .collect();
+    let links = load_links().await?.links;
 
     Ok(Platform {
         orrery_origins: ORRERY_ORIGINS,
@@ -297,181 +433,16 @@ pub async fn zooniverse_sync_projects(
     }
 }
 
-/// Synchronize Zooniverse user mappings from orrery (full replace).
-///
-/// One Zooniverse account can be claimed by multiple SciStarter users; the
-/// orrery endpoint emits an array of matching user ULIDs per Zooniverse
-/// account. We store one row per (zooniverse_id, user_id) pair so the
-/// classification importer can fan participation out to all of them.
-///
-/// The download streams into `zooniverse_users_staging` and only replaces
-/// the live table once the full download succeeds. A failure mid-download
-/// leaves the previous live mapping intact.
-pub async fn zooniverse_sync_users(
-    _database: Arc<Database>,
-    cancellation_token: CancellationToken,
-) {
-    #[derive(Debug, Deserialize)]
-    struct ZooniverseUserData {
-        id: i32,
-        zooniverse_id: i64,
-        zooniverse_username: String,
-        user_ulids: Vec<String>,
-    }
-
-    loop {
-        if cancellation_token.is_cancelled() {
-            return;
-        }
-
-        let client = reqwest::Client::new();
-        let sync_token = env!("SYNC_TOKEN");
-
-        if let Err(e) = sqlx::query!("DELETE FROM zooniverse_users_staging")
-            .execute(common::shared::db())
-            .await
-        {
-            eprintln!("Error clearing zooniverse_users_staging: {}", e);
-            sleep(Duration::from_secs(60)).await;
-            continue;
-        }
-
-        let mut last_id: i32 = 0;
-        let mut download_ok = true;
-
-        loop {
-            if cancellation_token.is_cancelled() {
-                return;
-            }
-
-            let users: Vec<ZooniverseUserData> = match client
-                .get("https://scistarter.org/staff/sync/zooniverse_users")
-                .bearer_auth(sync_token)
-                .query(&[
-                    ("since", "1900-01-01T00:00:00Z"),
-                    ("last_id", &last_id.to_string()),
-                ])
-                .send()
-                .await
-            {
-                Ok(response) => match response.error_for_status() {
-                    Ok(resp) => match resp.json().await {
-                        Ok(data) => data,
-                        Err(e) => {
-                            eprintln!("JSON parsing error for zooniverse users: {}", e);
-                            download_ok = false;
-                            break;
-                        }
-                    },
-                    Err(e) => {
-                        eprintln!("HTTP error syncing zooniverse users: {}", e);
-                        download_ok = false;
-                        break;
-                    }
-                },
-                Err(e) => {
-                    eprintln!("Request error syncing zooniverse users: {}", e);
-                    download_ok = false;
-                    break;
-                }
-            };
-
-            if users.is_empty() {
-                break;
-            }
-
-            let batch_done = users.len() < 500;
-
-            let staged = async {
-                let mut tx = common::shared::db().begin().await?;
-                for user in &users {
-                    if user.user_ulids.is_empty() {
-                        // No SciStarter user has claimed this Zooniverse
-                        // account yet; record the username mapping with a
-                        // null user_id so we can still resolve the username
-                        // when one is added later.
-                        sqlx::query!(
-                            "INSERT OR IGNORE INTO zooniverse_users_staging \
-                                (zooniverse_id, zooniverse_username, user_id) \
-                             VALUES (?, ?, NULL)",
-                            user.zooniverse_id,
-                            user.zooniverse_username,
-                        )
-                        .execute(&mut *tx)
-                        .await?;
-                    } else {
-                        for user_ulid in &user.user_ulids {
-                            sqlx::query!(
-                                "INSERT OR IGNORE INTO zooniverse_users_staging \
-                                    (zooniverse_id, zooniverse_username, user_id) \
-                                 VALUES (?, ?, ?)",
-                                user.zooniverse_id,
-                                user.zooniverse_username,
-                                user_ulid,
-                            )
-                            .execute(&mut *tx)
-                            .await?;
-                        }
-                    }
-                }
-                tx.commit().await?;
-                Ok::<_, sqlx::Error>(())
-            }
-            .await;
-
-            if let Err(e) = staged {
-                eprintln!("Error staging zooniverse_users batch: {}", e);
-                download_ok = false;
-                break;
-            }
-
-            for user in &users {
-                if user.id > last_id {
-                    last_id = user.id;
-                }
-            }
-
-            if batch_done {
-                break;
-            }
-        }
-
-        if download_ok {
-            let swap = async {
-                let mut tx = common::shared::db().begin().await?;
-                sqlx::query!("DELETE FROM zooniverse_users")
-                    .execute(&mut *tx)
-                    .await?;
-                sqlx::query!(
-                    "INSERT INTO zooniverse_users (zooniverse_id, zooniverse_username, user_id) \
-                     SELECT zooniverse_id, zooniverse_username, user_id FROM zooniverse_users_staging"
-                )
-                .execute(&mut *tx)
-                .await?;
-                tx.commit().await?;
-                Ok::<_, sqlx::Error>(())
-            }
-            .await;
-
-            if let Err(e) = swap {
-                eprintln!("Error swapping zooniverse_users from staging: {}", e);
-            }
-        }
-
-        // Full-replace once a day.
-        tokio::select! {
-            _ = sleep(Duration::from_secs(24 * 60 * 60)) => {}
-            _ = cancellation_token.cancelled() => { return; }
-        }
-    }
-}
-
 /// Poll Zooniverse for new classifications and write participation rows.
 ///
 /// Pagination is `last_id`-only: each page advances the watermark, which we
 /// persist before fetching the next page. A crash caps re-imports at the
 /// in-flight page rather than the entire project history. Each classification
 /// is fanned out to every SciStarter user that claims the Zooniverse account.
+///
+/// While orrery is primary it identifies the Panoptes accounts and the user
+/// sync carries them here; once hydra is, the sweep identifies any due
+/// accounts itself before matching each page.
 pub async fn zooniverse_synchronize(
     database: Arc<Database>,
     cancellation_token: CancellationToken,
@@ -513,32 +484,12 @@ pub async fn zooniverse_synchronize(
             }
         };
 
-        // Without the connection times there is no way to tell which
-        // classifications predate a connection, so sit the sweep out rather
-        // than credit the lot.
-        let link_times = match load_link_times().await {
-            Ok(links) => links,
-            Err(e) => {
-                eprintln!("Error loading Zooniverse connection times: {}", e);
-                sleep(Duration::from_secs(60 * 5)).await;
-                continue;
-            }
-        };
-
         for project in projects {
             if cancellation_token.is_cancelled() {
                 return;
             }
 
-            sync_project(
-                &database,
-                &client,
-                &token,
-                project,
-                &link_times,
-                &cancellation_token,
-            )
-            .await;
+            sync_project(&database, &client, &token, project, &cancellation_token).await;
         }
 
         tokio::select! {
@@ -559,7 +510,6 @@ async fn sync_project(
     client: &reqwest::Client,
     token: &str,
     project: ProjectRow,
-    link_times: &LinkTimes,
     cancellation_token: &CancellationToken,
 ) {
     let ProjectRow {
@@ -578,7 +528,7 @@ async fn sync_project(
         let resp = match client
             .get("https://panoptes.zooniverse.org/api/classifications/project")
             .bearer_auth(token)
-            .header("Accept", "application/vnd.api+json; version=1")
+            .header("Accept", panoptes::ACCEPT)
             .query(&[
                 ("project_id", &zooniverse_id.to_string()),
                 ("page_size", &PAGE_SIZE.to_string()),
@@ -618,6 +568,29 @@ async fn sync_project(
             return;
         }
 
+        if common::primary::PRIMARY {
+            if let Err(e) = identify_accounts(client).await {
+                eprintln!(
+                    "Zooniverse account lookup failed, so project {zooniverse_id} sits this run out: {e}"
+                );
+                return;
+            }
+        }
+
+        // Read after the page rather than once per sweep, so that everybody
+        // connected before this page's classifications were fetched -- and
+        // so before any of them was made -- is matched. Without the
+        // connection times there is no way to tell which classifications
+        // predate a connection, so the project sits this run out rather
+        // than credit the lot.
+        let links = match load_links().await {
+            Ok(links) => links,
+            Err(e) => {
+                eprintln!("Error loading Zooniverse connections: {}", e);
+                return;
+            }
+        };
+
         let mut page_max_id = last_classification_id;
         let received = Timestamp::now();
         let sender = format!("Zooniverse project {zooniverse_id}");
@@ -655,27 +628,10 @@ async fn sync_project(
                 }
             };
 
-            let user_ids: Vec<Option<String>> = match sqlx::query_scalar!(
-                "SELECT user_id FROM zooniverse_users WHERE zooniverse_id = ?",
-                zoo_user_id,
-            )
-            .fetch_all(common::shared::db())
-            .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    eprintln!("Error looking up zooniverse user {}: {}", zoo_user_id, e);
-                    continue;
-                }
-            };
-
-            // Filter to mappings that resolve to a SciStarter user. If the
-            // Zooniverse user has no claimed SciStarter account, skip — a
-            // classification with no user to credit is not useful here.
-            let scistarter_users: Vec<String> = user_ids.into_iter().flatten().collect();
-            if scistarter_users.is_empty() {
+            // A classifier no SciStarter account claims has nobody to credit.
+            let Some(scistarter_users) = links.by_zooniverse_id.get(&zoo_user_id) else {
                 continue;
-            }
+            };
 
             // Unreadable is refused here as well as by the connection floor
             // below, which cannot credit a time it cannot place.
@@ -696,11 +652,11 @@ async fn sync_project(
                 // is not backfilled. The project watermark does not settle
                 // this on its own: it is per project, and a project joining
                 // the affiliate program starts at zero.
-                let linked_at = link_times
-                    .get(&user_id)
-                    .and_then(|linked_at| linked_at.as_deref());
-
-                if !linked_platform::credits_activity(linked_at, &classification.created_at) {
+                if !links
+                    .links
+                    .get(user_id)
+                    .is_some_and(|link| link.credits(&classification.created_at))
+                {
                     continue;
                 }
 
@@ -714,7 +670,7 @@ async fn sync_project(
                     extra: String::new(),
                     fidelity: 0.5,
                     entity_id: entity_id.clone(),
-                    user_id: Some(user_id),
+                    user_id: Some(user_id.clone()),
                     task_name: None,
                 };
 
@@ -757,5 +713,79 @@ async fn sync_project(
         if classifications.classifications.len() < PAGE_SIZE as usize {
             return;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use assert2::check;
+
+    use super::*;
+
+    const RELEASE: &str = "2026-10-30T12:00:00Z";
+
+    fn matching(mapped: &[(Ulid, i64)]) -> Matching {
+        Matching {
+            by_mapping: mapped
+                .iter()
+                .map(|(user_id, zooniverse_id)| (user_id.to_string(), *zooniverse_id))
+                .collect(),
+            by_id_since: RELEASE.parse().unwrap(),
+        }
+    }
+
+    fn link(user_id: Ulid, received_at: Option<&str>) -> ZooniverseLink {
+        ZooniverseLink {
+            user_id,
+            zooniverse_linked_at: Some("2026-09-01T00:00:00Z".to_string()),
+            zooniverse_id: Some(7),
+            zooniverse_id_received_at: received_at.map(str::to_string),
+        }
+    }
+
+    fn at(when: &str) -> Option<Timestamp> {
+        Some(when.parse().unwrap())
+    }
+
+    #[test]
+    fn an_account_the_old_mapping_matched_always_has_been() {
+        let user = Ulid::new();
+
+        check!(matching(&[(user, 7)]).since(&link(user, None), 7).unwrap() == None);
+    }
+
+    #[test]
+    fn any_other_account_known_before_the_release_is_matched_from_it() {
+        let user = Ulid::new();
+
+        check!(matching(&[]).since(&link(user, None), 7).unwrap() == at(RELEASE));
+
+        // The mapping vouches for the account it named, not another.
+        check!(matching(&[(user, 8)]).since(&link(user, None), 7).unwrap() == at(RELEASE));
+    }
+
+    #[test]
+    fn an_id_arriving_after_the_release_is_matched_from_its_arrival() {
+        let user = Ulid::new();
+        let arrived = "2026-11-02T08:00:00Z";
+
+        check!(matching(&[]).since(&link(user, Some(arrived)), 7).unwrap() == at(arrived));
+        check!(
+            matching(&[(user, 7)])
+                .since(&link(user, Some(arrived)), 7)
+                .unwrap()
+                == at(arrived)
+        );
+    }
+
+    #[test]
+    fn an_unreadable_arrival_leaves_the_account_unmatched() {
+        let user = Ulid::new();
+
+        check!(
+            matching(&[])
+                .since(&link(user, Some("whenever")), 7)
+                .is_err()
+        );
     }
 }

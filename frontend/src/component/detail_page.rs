@@ -40,7 +40,7 @@ use crate::middleware::authorization::Authenticated;
 use crate::participant_file::ParticipantFile;
 use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
-use crate::project::linked_platform::PlatformCopy;
+use crate::project::linked_platform::{NamedAccount, PlatformCopy, name_account};
 use common::quill::content_to_html;
 
 const DOMAIN: &str = env!("DOMAIN");
@@ -624,6 +624,19 @@ pub enum PlatformAccountOutcome {
     Unsubmitted,
     Saved,
     Blank,
+    /// The platform has no account with the username given.
+    Unknown,
+}
+
+impl PlatformAccountOutcome {
+    /// Whether the username given was refused, leaving the visitor to try
+    /// again.
+    pub fn refused(self) -> bool {
+        matches!(
+            self,
+            PlatformAccountOutcome::Blank | PlatformAccountOutcome::Unknown
+        )
+    }
 }
 
 /// The path a project's page is served at.
@@ -2102,6 +2115,9 @@ pub struct PlatformAccountSubmission {
 /// can only set the username the page asked for. Saving through
 /// `user.profile.save` stamps the connection time, the floor for importing
 /// that platform's activity.
+///
+/// The name is read, and a Zooniverse login looked up, by
+/// [`name_account`].
 #[handler]
 pub async fn connect_platform_account(
     Path(id): Path<String>,
@@ -2144,11 +2160,15 @@ pub async fn connect_platform_account(
     .map_err(internal)?
     .ok_or_else(|| poem::Error::from_status(poem::http::StatusCode::NOT_FOUND))?;
 
-    let username = submission.username.trim().to_string();
+    let named = name_account(platform, &submission.username).await;
 
-    let outcome = if username.is_empty() {
-        PlatformAccountOutcome::Blank
-    } else {
+    let (outcome, username) = match &named {
+        NamedAccount::Blank => (PlatformAccountOutcome::Blank, String::new()),
+        NamedAccount::Unknown(username) => (PlatformAccountOutcome::Unknown, username.clone()),
+        NamedAccount::Named { username, .. } => (PlatformAccountOutcome::Saved, username.clone()),
+    };
+
+    if outcome == PlatformAccountOutcome::Saved {
         let _: () = request(
             "user.profile.save",
             UserProfileUpdate::unchanged(user.user_id)
@@ -2157,8 +2177,8 @@ pub async fn connect_platform_account(
         .await
         .map_err(internal)?;
 
-        PlatformAccountOutcome::Saved
-    };
+        named.record(user.user_id).await;
+    }
 
     let html = PlatformAccountForm {
         target_id: id_str,
@@ -2692,6 +2712,22 @@ mod tests {
 
         assert!(html.contains("Two Easy Steps!"));
         assert!(html.contains("Please enter your iNaturalist username."));
+    }
+
+    #[test]
+    fn a_login_zooniverse_does_not_have_returns_to_the_steps_saying_so() {
+        let html = PlatformAccountForm {
+            outcome: PlatformAccountOutcome::Unknown,
+            visitor: PlatformAccountVisitor::SignedIn("Star Gazer".to_string()),
+            ..platform_form()
+        }
+        .render_once()
+        .unwrap();
+
+        assert!(html.contains("Two Easy Steps!"));
+        assert!(!html.contains("Linked to Zooniverse account"));
+        assert!(html.contains("Zooniverse has no account named <strong>Star Gazer</strong>. It"));
+        assert!(html.contains("the name after the @ under your name on the Zooniverse home page."));
     }
 
     #[test]

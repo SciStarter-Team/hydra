@@ -90,9 +90,8 @@ pub struct Platform {
     /// began crediting every account connected before the import policy, if
     /// it did.
     pub projects: HashMap<String, Option<Timestamp>>,
-    /// The accounts the bridge credits, by user id, with each one's connection
-    /// time; `None` is a connection that predates the August 2026 policy.
-    pub links: HashMap<String, Option<String>>,
+    /// The accounts the bridge credits, by user id.
+    pub links: HashMap<String, Link>,
 }
 
 impl Platform {
@@ -105,18 +104,48 @@ impl Platform {
             return false;
         }
 
-        let (Some(credited_since), Some(linked_at)) = (
+        let (Some(credited_since), Some(link)) = (
             self.projects.get(contribution.entity_id),
             self.links.get(user_id),
         ) else {
             return false;
         };
 
-        linked_platform::credits_activity(linked_at.as_deref(), contribution.when)
-            || (linked_at.is_none()
+        link.credits(contribution.when)
+            || (link.linked_at.is_none()
+                && link.matched_by(contribution.when)
                 && credited_since.is_some_and(|since| {
                     Timestamp::from_str(contribution.when).is_ok_and(|when| when >= since)
                 }))
+    }
+}
+
+/// An account's connection to a platform, as the bridge crediting it reads
+/// it. The bridge credits by this and coverage covers by it, so the two
+/// cannot disagree about whose a contribution is.
+#[derive(Debug, Clone, Default)]
+pub struct Link {
+    /// When the account connected; `None` is a connection that predates the
+    /// August 2026 policy.
+    pub linked_at: Option<String>,
+
+    /// When the bridge could first match the account's contributions, if
+    /// that came after it connected. orrery credited what came before, and
+    /// its copy is the one that stands.
+    pub matched_since: Option<Timestamp>,
+}
+
+impl Link {
+    /// Whether the bridge credits activity at `when` to the account.
+    pub fn credits(&self, when: &str) -> bool {
+        self.matched_by(when) && linked_platform::credits_activity(self.linked_at.as_deref(), when)
+    }
+
+    /// Whether the bridge could match the account's activity at `when`. An
+    /// unreadable `when` could not be matched, as it cannot be credited.
+    fn matched_by(&self, when: &str) -> bool {
+        self.matched_since
+            .is_none_or(|since| Timestamp::from_str(when).is_ok_and(|when| when >= since))
     }
 }
 
@@ -132,6 +161,12 @@ mod tests {
     const LINKED: &str = "01JKXMFYFZ0000000000LINKED";
     const LEGACY: &str = "01JKXMFYFZ0000000000LEGACY";
     const STRANGER: &str = "01JKXMFYFZ000000000STRANGE";
+    const LATE: &str = "01JKXMFYFZ00000000000LATE0";
+    const LATE_LEGACY: &str = "01JKXMFYFZ0000000000LATE1";
+
+    /// When the bridge could first match LATE and LATE_LEGACY, both well
+    /// after they connected.
+    const MATCHED: &str = "2026-10-01T00:00:00Z";
 
     fn platform() -> Platform {
         Platform {
@@ -144,8 +179,28 @@ mod tests {
                 ),
             ]),
             links: HashMap::from([
-                (LINKED.to_string(), Some("2026-09-10T12:00:00Z".to_string())),
-                (LEGACY.to_string(), None),
+                (
+                    LINKED.to_string(),
+                    Link {
+                        linked_at: Some("2026-09-10T12:00:00Z".to_string()),
+                        matched_since: None,
+                    },
+                ),
+                (LEGACY.to_string(), Link::default()),
+                (
+                    LATE.to_string(),
+                    Link {
+                        linked_at: Some("2026-09-10T12:00:00Z".to_string()),
+                        matched_since: Some(MATCHED.parse().unwrap()),
+                    },
+                ),
+                (
+                    LATE_LEGACY.to_string(),
+                    Link {
+                        linked_at: None,
+                        matched_since: Some(MATCHED.parse().unwrap()),
+                    },
+                ),
             ]),
         }
     }
@@ -181,6 +236,39 @@ mod tests {
             Some(LEGACY),
             "2026-08-02T00:00:00Z"
         ))));
+    }
+
+    #[test]
+    fn what_came_before_the_bridge_could_match_an_account_is_left_to_orrery() {
+        let late = &platform().links[LATE];
+
+        for (when, matched) in [
+            ("2026-09-20T00:00:00Z", false),
+            ("2026-10-02T00:00:00Z", true),
+        ] {
+            check!(late.credits(when) == matched);
+            check!(
+                platform().covers(Contribution::of_event(&event(5, PROJECT, Some(LATE), when)))
+                    == matched
+            );
+        }
+    }
+
+    #[test]
+    fn an_account_matched_late_has_no_earlier_era_either() {
+        for (when, matched) in [
+            ("2026-04-01T00:00:00Z", false),
+            ("2026-10-02T00:00:00Z", true),
+        ] {
+            check!(
+                platform().covers(Contribution::of_event(&event(
+                    5,
+                    EARLY,
+                    Some(LATE_LEGACY),
+                    when
+                ))) == matched
+            );
+        }
     }
 
     #[test]

@@ -16,7 +16,7 @@ mod sync;
 
 use bridges::{
     inaturalist::inaturalist_synchronize,
-    zooniverse::{zooniverse_sync_projects, zooniverse_sync_users, zooniverse_synchronize},
+    zooniverse::{zooniverse_sync_projects, zooniverse_synchronize},
 };
 use handlers::{
     handle_activity_log, handle_acts_of_science_create, handle_acts_to_date,
@@ -77,7 +77,6 @@ async fn main() -> Result<()> {
     let acts_cancel = CancellationToken::new();
     let exchange_events_cancel = CancellationToken::new();
     let zoo_projects_cancel = CancellationToken::new();
-    let zoo_users_cancel = CancellationToken::new();
     let zoo_sync_cancel = CancellationToken::new();
     let inat_cancel = CancellationToken::new();
     let compactor_cancel = CancellationToken::new();
@@ -167,14 +166,6 @@ async fn main() -> Result<()> {
     let zoo_projects_database = Arc::clone(&database);
     background_tasks.spawn(async move {
         zooniverse_sync_projects(zoo_projects_database, zoo_projects_cancel_clone).await;
-        Ok::<(), anyhow::Error>(())
-    });
-
-    // Spawn Zooniverse user sync task
-    let zoo_users_cancel_clone = zoo_users_cancel.clone();
-    let zoo_users_database = Arc::clone(&database);
-    background_tasks.spawn(async move {
-        zooniverse_sync_users(zoo_users_database, zoo_users_cancel_clone).await;
         Ok::<(), anyhow::Error>(())
     });
 
@@ -533,7 +524,6 @@ async fn main() -> Result<()> {
     acts_cancel.cancel();
     exchange_events_cancel.cancel();
     zoo_projects_cancel.cancel();
-    zoo_users_cancel.cancel();
     zoo_sync_cancel.cancel();
     inat_cancel.cancel();
     compactor_cancel.cancel();

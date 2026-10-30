@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Error;
+use common::linked_platform::LinkedPlatform;
 use common::message::dashboard::{
     AmbassadorApplication, AmbassadorApplicationUpdate, UserProfile, UserProfileUpdate,
 };
@@ -16,6 +17,7 @@ use ulid::Ulid;
 
 use crate::component::{Component, Head, StandardLayout};
 use crate::middleware::authorization::Authenticated;
+use crate::project::linked_platform::{NamedAccount, name_account};
 
 #[derive(Debug, Deserialize, Default)]
 pub struct SettingsQuery {
@@ -35,34 +37,16 @@ pub async fn page(
     let profile: UserProfile =
         common::service::request("user.profile.get", user_info.user_id.to_string()).await?;
 
-    let ambassador: Option<AmbassadorApplication> =
-        common::service::request("user.ambassador.get", user_info.user_id.to_string()).await?;
-
-    let mut available_tabs = vec![SettingsTab::General];
-    if ambassador.is_some() {
-        available_tabs.push(SettingsTab::Ambassador);
-    }
-
     let requested_tab = match query.tab.as_deref() {
         Some("ambassador") => SettingsTab::Ambassador,
         _ => SettingsTab::General,
     };
-    let active_tab = if available_tabs.contains(&requested_tab) {
-        requested_tab
-    } else {
-        SettingsTab::General
+    let notice = match query.saved.as_deref() {
+        Some("1") => Some(SettingsNotice::Saved),
+        _ => None,
     };
-    let saved = matches!(query.saved.as_deref(), Some("1"));
 
-    render_settings(
-        user_info,
-        profile,
-        ambassador,
-        available_tabs,
-        active_tab,
-        saved,
-    )
-    .await
+    render_settings(user_info, profile, requested_tab, notice).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,6 +76,91 @@ pub struct GeneralForm {
     pub accept_emails: Option<bool>,
 }
 
+impl GeneralForm {
+    /// The username this form names on `platform`, as typed.
+    fn platform_username(&self, platform: LinkedPlatform) -> &str {
+        match platform {
+            LinkedPlatform::INaturalist => &self.inat_username,
+            LinkedPlatform::Zooniverse => &self.zooniverse_username,
+        }
+    }
+
+    /// The save this form asks for, apart from the linked usernames, which
+    /// `save_general` reads for itself.
+    fn update(&self, user_id: Ulid) -> UserProfileUpdate {
+        UserProfileUpdate {
+            handle: Some(self.handle.clone()),
+            first_name: Some(self.first_name.clone()),
+            last_name: Some(self.last_name.clone()),
+            bio: Some(self.bio.clone()),
+            birthday: Some(self.birthday.clone()),
+            gender: Some(self.gender.clone()),
+            zipcode: Some(self.zipcode.clone()),
+            country: Some(self.country.clone()),
+            mailing_address: Some(self.mailing_address.clone()),
+            ethnicity: Some(self.ethnicity.clone()),
+            degree: Some(self.degree.clone()),
+            income: Some(self.income.clone()),
+            facebook_url: Some(self.facebook_url.clone()),
+            twitter_profile: Some(self.twitter_profile.clone()),
+            home_page: Some(self.home_page.clone()),
+            orcid: Some(self.orcid.clone()),
+            // Rendered disabled for a protected account, so it is not
+            // submitted and reads as unticked here. That is the right answer
+            // for them, and user.profile.save forces it either way.
+            public: Some(self.public.unwrap_or(false)),
+            // `protected` is not the account owner's to set. It says what
+            // the site has decided about the account -- a cohort signing up
+            // through a partner that enrolls minors -- and it used to ride on
+            // this form as a checkbox, which meant an unticked box cleared
+            // it. Left as None so the COALESCE in user.profile.save keeps
+            // whatever is stored.
+            track_contributions: Some(self.track_contributions.unwrap_or(false)),
+            // Hidden from a protected account rather than disabled, since
+            // the answer is always no; user.profile.save forces it off
+            // regardless.
+            newsletter: Some(self.newsletter.unwrap_or(false)),
+            accept_messages: Some(self.accept_messages.unwrap_or(false)),
+            accept_emails: Some(self.accept_emails.unwrap_or(false)),
+            // AI recommendations are switched off, so the form no longer
+            // offers the opt-out. Left as None so an earlier opt-out stays
+            // recorded.
+            ..UserProfileUpdate::unchanged(user_id)
+        }
+    }
+
+    /// `profile` as this form would have left it, for showing the form
+    /// again with what was typed when the save is refused.
+    fn applied_to(&self, profile: UserProfile) -> UserProfile {
+        UserProfile {
+            handle: self.handle.clone(),
+            first_name: self.first_name.clone(),
+            last_name: self.last_name.clone(),
+            bio: Some(self.bio.clone()),
+            birthday: Some(self.birthday.clone()),
+            gender: Some(self.gender.clone()),
+            zipcode: Some(self.zipcode.clone()),
+            country: Some(self.country.clone()),
+            mailing_address: Some(self.mailing_address.clone()),
+            ethnicity: Some(self.ethnicity.clone()),
+            degree: Some(self.degree.clone()),
+            income: Some(self.income.clone()),
+            facebook_url: Some(self.facebook_url.clone()),
+            twitter_profile: Some(self.twitter_profile.clone()),
+            home_page: Some(self.home_page.clone()),
+            inat_username: Some(self.inat_username.clone()),
+            zooniverse_username: self.zooniverse_username.clone(),
+            orcid: Some(self.orcid.clone()),
+            public: self.public.unwrap_or(false),
+            track_contributions: self.track_contributions.unwrap_or(false),
+            newsletter: self.newsletter.unwrap_or(false),
+            accept_messages: self.accept_messages.unwrap_or(false),
+            accept_emails: self.accept_emails.unwrap_or(false),
+            ..profile
+        }
+    }
+}
+
 #[handler]
 pub async fn save_general(
     _session: &Session,
@@ -99,55 +168,49 @@ pub async fn save_general(
     Form(form): Form<GeneralForm>,
 ) -> Result<Response, Error> {
     let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Login required"))?;
+    let user_id = user_info.user_id;
 
-    let update = UserProfileUpdate {
-        user_id: user_info.user_id,
-        handle: Some(form.handle),
-        first_name: Some(form.first_name),
-        last_name: Some(form.last_name),
-        bio: Some(form.bio),
-        birthday: Some(form.birthday),
-        gender: Some(form.gender),
-        zipcode: Some(form.zipcode),
-        country: Some(form.country),
-        mailing_address: Some(form.mailing_address),
-        ethnicity: Some(form.ethnicity),
-        degree: Some(form.degree),
-        income: Some(form.income),
-        facebook_url: Some(form.facebook_url),
-        twitter_profile: Some(form.twitter_profile),
-        home_page: Some(form.home_page),
-        inat_username: Some(form.inat_username),
-        zooniverse_username: Some(form.zooniverse_username),
-        orcid: Some(form.orcid),
-        // Rendered disabled for a protected account, so it is not submitted
-        // and reads as unticked here. That is the right answer for them, and
-        // user.profile.save forces it either way.
-        public: Some(form.public.unwrap_or(false)),
-        // Not the account owner's to set. It says what the site has decided
-        // about the account -- a cohort signing up through a partner that
-        // enrolls minors -- and it used to ride on this form as a checkbox,
-        // which meant an unticked box cleared it. Left as None so the
-        // COALESCE in user.profile.save keeps whatever is stored.
-        protected: None,
-        track_contributions: Some(form.track_contributions.unwrap_or(false)),
-        // Hidden from a protected account rather than disabled, since the
-        // answer is always no; user.profile.save forces it off regardless.
-        newsletter: Some(form.newsletter.unwrap_or(false)),
-        accept_messages: Some(form.accept_messages.unwrap_or(false)),
-        accept_emails: Some(form.accept_emails.unwrap_or(false)),
-        // AI recommendations are switched off, so the form no longer offers
-        // the opt-out. Left as None so an earlier opt-out stays recorded.
-        ai_opt_out: None,
-        image: None,
-        country_code: None,
-        scientist: None,
-        educator: None,
-        extra_skills: None,
-        extra_tools: None,
-    };
+    let profile: UserProfile =
+        common::service::request("user.profile.get", user_id.to_string()).await?;
+
+    // Before anything is saved, because naming a Zooniverse account it
+    // doesn't have refuses the whole save. The form posts every field back,
+    // so only a name that has changed is asked about: an account already
+    // naming a login Panoptes doesn't know can still save the rest of its
+    // settings.
+    let mut linked = Vec::new();
+
+    for platform in LinkedPlatform::ALL {
+        let typed = form.platform_username(platform);
+
+        if platform.normalize_username(typed) == profile.platform_username(platform) {
+            continue;
+        }
+
+        match name_account(platform, typed).await {
+            NamedAccount::Unknown(username) => {
+                let notice = SettingsNotice::UnknownAccount { platform, username };
+                let shown = form.applied_to(profile);
+
+                return render_settings(user_info, shown, SettingsTab::General, Some(notice)).await;
+            }
+            named => linked.push((platform, named)),
+        }
+    }
+
+    let mut update = form.update(user_id);
+
+    for (platform, named) in &linked {
+        if let Some(username) = named.username() {
+            update = update.with_platform_username(*platform, username.to_string());
+        }
+    }
 
     let _: () = common::service::request("user.profile.save", update).await?;
+
+    for (_, named) in &linked {
+        named.record(user_id).await;
+    }
 
     Ok(Redirect::see_other("/dashboard/settings?tab=general&saved=1").into_response())
 }
@@ -189,18 +252,41 @@ pub enum SettingsTab {
     Ambassador,
 }
 
+/// What the page says above the form about the last save.
+pub enum SettingsNotice {
+    Saved,
+    /// Nothing was saved, because the platform has no account by the
+    /// username given.
+    UnknownAccount {
+        platform: LinkedPlatform,
+        username: String,
+    },
+}
+
 async fn render_settings(
     user_info: Arc<BasicInfo>,
     profile: UserProfile,
-    ambassador: Option<AmbassadorApplication>,
-    available_tabs: Vec<SettingsTab>,
-    active_tab: SettingsTab,
-    saved: bool,
+    requested_tab: SettingsTab,
+    notice: Option<SettingsNotice>,
 ) -> Result<Response, Error> {
+    let ambassador: Option<AmbassadorApplication> =
+        common::service::request("user.ambassador.get", user_info.user_id.to_string()).await?;
+
+    let mut available_tabs = vec![SettingsTab::General];
+    if ambassador.is_some() {
+        available_tabs.push(SettingsTab::Ambassador);
+    }
+
+    let active_tab = if available_tabs.contains(&requested_tab) {
+        requested_tab
+    } else {
+        SettingsTab::General
+    };
+
     let content = SettingsContent {
         available_tabs,
         active_tab,
-        saved,
+        notice,
         profile,
         ambassador,
         user_id: user_info.user_id,
@@ -230,7 +316,7 @@ struct SettingsPage {
 struct SettingsContent {
     available_tabs: Vec<SettingsTab>,
     active_tab: SettingsTab,
-    saved: bool,
+    notice: Option<SettingsNotice>,
     profile: UserProfile,
     ambassador: Option<AmbassadorApplication>,
     #[allow(dead_code)]

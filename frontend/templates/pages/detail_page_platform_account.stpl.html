@@ -2,7 +2,7 @@
 <% use crate::project::linked_platform::PlatformCopy; %>
 <% let label = self.platform.label(); %>
 <div id="platform-account" class="mb-3">
-  <% let connected = match &self.visitor { PlatformAccountVisitor::SignedIn(username) if !username.is_empty() && self.outcome != PlatformAccountOutcome::Blank => Some(username.as_str()), _ => None }; %>
+  <% let connected = match &self.visitor { PlatformAccountVisitor::SignedIn(username) if !username.is_empty() && !self.outcome.refused() => Some(username.as_str()), _ => None }; %>
   <% if let Some(username) = connected { %>
   <p class="mb-3" role="status">Linked to <%= label %> account <strong><%= username %></strong>.</p>
   <details class="mb-3">
@@ -45,6 +45,9 @@
   </form>
   <% if self.outcome == PlatformAccountOutcome::Blank { %>
   <p class="text-sm text-red-700 mt-2" role="alert">Please enter your <%= label %> username.</p>
+  <% } %>
+  <% if let (PlatformAccountOutcome::Unknown, PlatformAccountVisitor::SignedIn(username)) = (self.outcome, &self.visitor) { %>
+  <p class="text-sm text-red-700 mt-2" role="alert"><%= label %> has no account named <strong><%= username %></strong>.<% if let Some(hint) = self.platform.username_hint() { %> <%= hint %><% } %></p>
   <% } %>
   <p class="mt-3">That's it! This is a one-time setup, even if you join more <% if self.platform.eligible_projects_url().is_some() { %>SciStarter Affiliate <% } %><%= label %> projects in the future!</p>
   <% } %>

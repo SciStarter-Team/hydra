@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use anyhow::Error;
 use common::linked_platform::LinkedPlatform;
+use common::message::user::{ZooniverseAccount, ZooniverseIdentityAnswer};
 use common::service::request;
 use ulid::Ulid;
 
@@ -100,7 +101,9 @@ impl PlatformCopy for LinkedPlatform {
             LinkedPlatform::INaturalist => None,
             // Their signed-in home page shows the username as @login,
             // beneath a display name that is easily mistaken for it.
-            LinkedPlatform::Zooniverse => Some("It's the name after the @ under your name on the Zooniverse home page."),
+            LinkedPlatform::Zooniverse => {
+                Some("It's the name after the @ under your name on the Zooniverse home page.")
+            }
         }
     }
 
@@ -115,6 +118,99 @@ impl PlatformCopy for LinkedPlatform {
         match self {
             LinkedPlatform::INaturalist => "uploaded",
             LinkedPlatform::Zooniverse => "made",
+        }
+    }
+}
+
+/// What a username somebody names as theirs on a platform comes to.
+pub enum NamedAccount {
+    /// Nothing was named, which disconnects the platform.
+    Blank,
+    /// Zooniverse has no account by this login.
+    Unknown(String),
+    /// The username to store, and the Panoptes account it was found to be
+    /// if it was looked up.
+    Named {
+        username: String,
+        zooniverse: Option<ZooniverseAccount>,
+    },
+}
+
+/// What to store when somebody names `text` as their account on `platform`.
+/// Every path that saves a linked username comes through here. Mirrors
+/// orrery's `bridge.platforms.name_platform_account`.
+///
+/// A Zooniverse login is looked up first, so that one Zooniverse doesn't
+/// have is refused while the person who typed it is still here, and one it
+/// does have is stored as the account spells it and identified at once:
+/// classifications are matched by Panoptes id alone. If Panoptes can't be
+/// reached the login is kept as typed, and identified later.
+pub async fn name_account(platform: LinkedPlatform, text: &str) -> NamedAccount {
+    let username = platform.normalize_username(text);
+
+    if username.is_empty() {
+        return NamedAccount::Blank;
+    }
+
+    if platform != LinkedPlatform::Zooniverse {
+        return NamedAccount::Named {
+            username: username.to_string(),
+            zooniverse: None,
+        };
+    }
+
+    match common::panoptes::find_account(&reqwest::Client::new(), username).await {
+        Ok(Some(found)) => NamedAccount::Named {
+            username: found.login.clone(),
+            zooniverse: Some(found),
+        },
+        Ok(None) => NamedAccount::Unknown(username.to_string()),
+        Err(e) => {
+            eprintln!("Zooniverse lookup of {username:?} failed: {e}");
+
+            NamedAccount::Named {
+                username: username.to_string(),
+                zooniverse: None,
+            }
+        }
+    }
+}
+
+impl NamedAccount {
+    /// The username to store, unless the name was refused.
+    pub fn username(&self) -> Option<&str> {
+        match self {
+            NamedAccount::Blank => Some(""),
+            NamedAccount::Unknown(_) => None,
+            NamedAccount::Named { username, .. } => Some(username),
+        }
+    }
+
+    /// Keep what was learned about the account, once `user_id` has been
+    /// saved naming it: the save forgets whatever was known about the
+    /// account the username named before. Should this fail, the username is
+    /// saved all the same and is identified later.
+    pub async fn record(&self, user_id: Ulid) {
+        let NamedAccount::Named {
+            username,
+            zooniverse: Some(account),
+        } = self
+        else {
+            return;
+        };
+
+        let recorded: Result<(), Error> = request(
+            "user.zooniverse.record_identity",
+            ZooniverseIdentityAnswer {
+                user_id,
+                looked_up: username.clone(),
+                account: Some(account.clone()),
+            },
+        )
+        .await;
+
+        if let Err(e) = recorded {
+            eprintln!("Recording the Zooniverse account of {user_id} failed: {e}");
         }
     }
 }

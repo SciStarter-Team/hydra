@@ -14,6 +14,8 @@ pub mod message;
 #[cfg(feature = "database")]
 pub mod misc;
 pub mod organizations;
+#[cfg(feature = "panoptes")]
+pub mod panoptes;
 pub mod primary;
 #[cfg(feature = "database")]
 pub mod query;

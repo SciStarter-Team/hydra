@@ -13,7 +13,7 @@ use tokio_util::sync::CancellationToken;
 use log_service::database::{Database, tables::ParticipationRow};
 use log_service::ledger::{self, Feed};
 
-use super::Platform;
+use super::{Link, Platform};
 
 const INATURALIST_ORIGIN: i16 = 5;
 
@@ -101,7 +101,16 @@ pub async fn coverage() -> anyhow::Result<Platform> {
         let page_len = users.len() as i64;
 
         for user in users {
-            links.insert(user.user_id.to_string(), user.inat_linked_at);
+            // Each account is walked from its own floor, whenever the
+            // bridge comes to know of it, so nothing it connected for is
+            // ever passed over.
+            links.insert(
+                user.user_id.to_string(),
+                Link {
+                    linked_at: user.inat_linked_at,
+                    matched_since: None,
+                },
+            );
         }
 
         if page_len < INAT_USER_PAGE_SIZE {

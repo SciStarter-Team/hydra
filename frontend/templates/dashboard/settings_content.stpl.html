@@ -1,12 +1,17 @@
-<% use crate::dashboard::settings::SettingsTab; %>
+<% use crate::dashboard::settings::{SettingsNotice, SettingsTab}; %>
+<% use crate::project::linked_platform::PlatformCopy; %>
 <div class="ss-container !pt-8 !pb-8 mx-auto">
     <h1>Account Settings</h1>
 
-    <% if self.saved { %>
+    <% match &self.notice { Some(SettingsNotice::Saved) => { %>
     <div class="ss-card !p-4 mb-4 bg-green-50 border border-green-200 text-green-800" role="status">
         Saved.
     </div>
-    <% } %>
+    <% } Some(SettingsNotice::UnknownAccount { platform, username }) => { %>
+    <div class="ss-card !p-4 mb-4 bg-red-50 border border-red-200 text-red-800" role="alert">
+        Nothing was saved. <%= platform.label() %> has no account named <strong><%= username %></strong>.<% if let Some(hint) = platform.username_hint() { %> <%= hint %><% } %>
+    </div>
+    <% } None => {} } %>
 
     <% if self.available_tabs.len() > 1 { %>
     <nav class="flex gap-2 border-b border-gray-200 mb-6" aria-label="Settings tabs">

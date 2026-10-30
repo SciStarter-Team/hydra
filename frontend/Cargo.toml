@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-common = { version = "0.1.0", path = "../common" }
+common = { version = "0.1.0", path = "../common", features = ["panoptes"] }
 async-nats = "0.42.0"
 aws-config = "1.8.8"
 aws-sdk-bedrockruntime = { version = "1", features = ["behavior-version-latest"] }

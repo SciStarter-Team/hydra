@@ -22,7 +22,7 @@ name = "participation-repair"
 path = "src/bin/participation-repair.rs"
 
 [dependencies]
-common = { version = "0.1.0", path = "../common" }
+common = { version = "0.1.0", path = "../common", features = ["panoptes"] }
 thiserror = "2.0"
 anyhow = "1.0.99"
 async-nats = { version = "0.42.0", features = ["service"] }

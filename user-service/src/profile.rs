@@ -106,7 +106,8 @@ pub async fn get(req: &Request) -> Result<UserProfile, Error> {
 /// is a new connection, and that account's history is no more ours to
 /// backfill than the last one's was. Clearing the username unsets the time,
 /// so reconnecting later starts from later. The iNaturalist importer's
-/// watermark belonged to the old account too, and is cleared with it.
+/// watermark belonged to the old account too, and is cleared with it, as is
+/// what Panoptes told us about the old Zooniverse account.
 ///
 /// Run first, while the stored username is still the old one, and written as
 /// its own statement per platform rather than a CASE inside the save: sqlx
@@ -136,7 +137,9 @@ async fn stamp_platform_links(
         let linked_at = (!username.is_empty()).then(TimeString::now);
 
         sqlx::query!(
-            r#"UPDATE "users" SET "zooniverse_linked_at" = ?
+            r#"UPDATE "users" SET "zooniverse_linked_at" = ?,
+                   "zooniverse_id" = NULL, "zooniverse_checked_at" = NULL,
+                   "zooniverse_id_received_at" = NULL
                WHERE "user_id" = ? AND COALESCE("zooniverse_username", '') != ?"#,
             linked_at,
             user_id,

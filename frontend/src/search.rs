@@ -430,6 +430,23 @@ pub fn fts5_all_words_query(input: &str) -> String {
         .join(" ")
 }
 
+/// Whether an `entities_fts` match is in the entity's name: bm25 counting only
+/// the title column is negative exactly when the title matched. Name matches
+/// rank ahead of matches found only in the rest of the text, as on orrery.
+const FTS_TITLE_MATCH: &str = "(bm25(entities_fts, 0.0, 0.0, 0.0, 1.0, 0.0) < 0.0)";
+
+/// The relevance of an `entities_fts` match, lower being better: bm25 with the
+/// title weighted ten times the summary, which holds far more text.
+const FTS_RELEVANCE: &str = "bm25(entities_fts, 0.0, 0.0, 0.0, 10.0, 1.0)";
+
+/// Push the `title_match` and `relevance` columns that end each text-matched
+/// subquery of a finder search, for the outer query to order by.
+fn push_text_relevance(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>) {
+    qb.push(format!(
+        ", {FTS_TITLE_MATCH} AS title_match, {FTS_RELEVANCE} AS relevance"
+    ));
+}
+
 /// How free-text input is turned into an FTS5 query expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FtsTermStyle {
@@ -513,7 +530,7 @@ pub async fn search_entities(query: &str) -> Result<Vec<SearchResult>, Error> {
     // This selects columns directly from an FTS5 virtual table. The compile-time
     // `query!` macro cannot describe FTS5 virtual-table columns under sqlx 0.9
     // (the describe path recurses without terminating), so use the runtime
-    // `query_as` API with an explicit row type instead.
+    // builder with an explicit row type instead.
     #[derive(sqlx::FromRow)]
     struct EntityFtsRow {
         slug: Option<String>,
@@ -521,19 +538,18 @@ pub async fn search_entities(query: &str) -> Result<Vec<SearchResult>, Error> {
         title: Option<String>,
     }
 
-    let rows = sqlx::query_as::<_, EntityFtsRow>(
-        r#"SELECT f.slug, f.entity_type, f.title
-           FROM entities_fts f
-           JOIN entities e ON f.slug = e.slug
-           WHERE entities_fts MATCH ?
-             AND e.publish = 1
-           GROUP BY f.slug
-           ORDER BY rank
-           LIMIT 20"#,
-    )
-    .bind(search_term)
-    .fetch_all(db())
-    .await?;
+    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
+        "SELECT f.slug, f.entity_type, f.title \
+         FROM entities_fts f \
+         JOIN entities e ON f.slug = e.slug \
+         WHERE entities_fts MATCH ",
+    );
+    qb.push_bind(search_term);
+    qb.push(format!(
+        " AND e.publish = 1 ORDER BY {FTS_TITLE_MATCH} DESC, {FTS_RELEVANCE} LIMIT 20"
+    ));
+
+    let rows = qb.build_query_as::<EntityFtsRow>().fetch_all(db()).await?;
 
     let results = rows
         .into_iter()
@@ -1114,8 +1130,12 @@ async fn search_text_only(
     };
     let total = (proj_count + evt_count) as u32;
 
-    // Build UNION ALL query
-    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
+    // Build UNION ALL query. Name matches come first; within them, events
+    // rank by date as everywhere else; ties go to text relevance.
+    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
+        "SELECT slug, entity_type, title, description, image, goal, task, status, \
+         location_display, event_begin, geo_json, comparison_value FROM (",
+    );
 
     // Project subquery
     if kinds.projects() {
@@ -1130,8 +1150,11 @@ async fn search_text_only(
              CASE WHEN p.regions IS NOT NULL THEN AsGeoJSON(p.regions) \
                   WHEN p.point IS NOT NULL THEN AsGeoJSON(p.point) \
                   ELSE NULL END AS geo_json, \
-             0.0 AS comparison_value \
-             FROM entities_fts f \
+             0.0 AS comparison_value",
+        );
+        push_text_relevance(&mut qb);
+        qb.push(
+            " FROM entities_fts f \
              JOIN entities e ON f.slug = e.slug \
              JOIN projects p ON e.target = p.project_id \
              WHERE e.kind = 'Project' AND entities_fts MATCH",
@@ -1163,9 +1186,10 @@ async fn search_text_only(
                   ELSE NULL END AS geo_json, ",
         );
         push_event_delay(&mut qb, &window);
+        qb.push(" * 1.0 AS comparison_value");
+        push_text_relevance(&mut qb);
         qb.push(
-            " * 1.0 AS comparison_value \
-             FROM entities_fts f \
+            " FROM entities_fts f \
              JOIN entities e ON f.slug = e.slug \
              JOIN events ev ON e.target = ev.event_id \
              WHERE e.kind = 'Event' AND entities_fts MATCH ",
@@ -1175,7 +1199,7 @@ async fn search_text_only(
         apply_event_filters(&mut qb, fq);
     }
 
-    qb.push(") ORDER BY comparison_value LIMIT ");
+    qb.push(") ORDER BY title_match DESC, comparison_value, relevance LIMIT ");
     qb.push_bind(limit);
     qb.push(" OFFSET ");
     qb.push_bind(offset);
@@ -1253,8 +1277,13 @@ async fn search_with_location(
     let offset = ((page - 1) * FINDER_PER_PAGE) as i64;
     let window = EventWindow::from_query(fq);
 
-    // Build UNION ALL with spatial columns
-    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new("SELECT * FROM (");
+    // Build UNION ALL with spatial columns. Distance ranks first, as the
+    // visitor asked for nearby results; name matches break its ties (online
+    // projects all count as 200 km away), then text relevance.
+    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
+        "SELECT slug, entity_type, title, description, image, goal, task, status, \
+         location_display, event_begin, distance_km, geo_json, comparison_value FROM (",
+    );
 
     // Project subquery
     if kinds.projects() {
@@ -1275,6 +1304,7 @@ async fn search_with_location(
               ELSE NULL END AS geo_json, ",
         );
         push_project_comparison(&mut qb, lat, lng);
+        push_text_relevance(&mut qb);
         qb.push(
             " \
          FROM entities_fts f \
@@ -1285,7 +1315,6 @@ async fn search_with_location(
         qb.push_bind(search_term.clone());
         qb.push(" AND e.publish = 1");
         apply_project_filters(&mut qb, fq);
-        qb.push(" GROUP BY f.slug");
     }
 
     if kinds.projects() && kinds.events() {
@@ -1312,6 +1341,7 @@ async fn search_with_location(
               ELSE NULL END AS geo_json, ",
         );
         push_event_comparison(&mut qb, lat, lng, &window);
+        push_text_relevance(&mut qb);
         qb.push(
             " \
          FROM entities_fts f \
@@ -1322,10 +1352,9 @@ async fn search_with_location(
         qb.push_bind(search_term.clone());
         qb.push(" AND e.publish = 1");
         apply_event_filters(&mut qb, fq);
-        qb.push(" GROUP BY f.slug");
     }
 
-    qb.push(") ORDER BY comparison_value LIMIT ");
+    qb.push(") ORDER BY comparison_value, title_match DESC, relevance LIMIT ");
     qb.push_bind(limit);
     qb.push(" OFFSET ");
     qb.push_bind(offset);
@@ -2688,5 +2717,147 @@ mod tests {
                 "stale-draft"
             ]
         );
+    }
+
+    /// A scratch database with the columns `entities_fts_documents` reads and
+    /// the index, view and triggers as the migration that defines them leaves
+    /// them.
+    async fn fts_database() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(SqliteConnectOptions::new().filename(":memory:"))
+            .await
+            .unwrap();
+
+        sqlx::raw_sql(
+            "CREATE TABLE entities (slug TEXT, kind TEXT, target TEXT, publish BOOLEAN NOT NULL DEFAULT 1);
+             CREATE TABLE projects (project_id TEXT, name TEXT, presenter TEXT DEFAULT '',
+                 description TEXT DEFAULT '', goal TEXT DEFAULT '', task TEXT DEFAULT '',
+                 search_terms TEXT DEFAULT '', tags_text TEXT DEFAULT '', url TEXT DEFAULT '');
+             CREATE TABLE events (event_id TEXT, name TEXT, presenter TEXT DEFAULT '',
+                 entirely_online INTEGER DEFAULT 0, location_name TEXT DEFAULT '',
+                 description TEXT DEFAULT '', tags_text TEXT DEFAULT '');
+             CREATE TABLE pagecontent (pagecontent_id TEXT, content BLOB, name TEXT, kind TEXT);
+             CREATE VIRTUAL TABLE entities_fts USING fts5(
+                 slug UNINDEXED, entity_type UNINDEXED, entity_id UNINDEXED, title, summary);",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::raw_sql(include_str!(
+            "../migrations/20261029192813_entities_fts_documents.sql"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        pool
+    }
+
+    async fn add_project(pool: &SqlitePool, id: &str, name: &str, description: &str, url: &str) {
+        sqlx::query("INSERT INTO entities (slug, kind, target) VALUES (?, 'Project', ?)")
+            .bind(id)
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO projects (project_id, name, description, url) VALUES (?, ?, ?, ?)",
+        )
+        .bind(id)
+        .bind(name)
+        .bind(description)
+        .bind(url)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    /// The slugs `entities_fts` matches for `term`, a bare FTS5 query.
+    async fn fts_matches(pool: &SqlitePool, term: &str) -> Vec<String> {
+        sqlx::query_scalar("SELECT slug FROM entities_fts WHERE entities_fts MATCH ? ORDER BY slug")
+            .bind(term)
+            .fetch_all(pool)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn the_index_holds_description_text_and_url_hosts_and_follows_edits() {
+        let pool = fts_database().await;
+        add_project(
+            &pool,
+            "beluga",
+            "Beluga Bits",
+            r#"{"ops":[{"insert":"Classify "},{"insert":"whales","attributes":{"bold":true}},{"insert":{"image":"x.png"}},{"insert":"\n"}]}"#,
+            "https://www.zooniverse.org/projects/stephenresearch/beluga-bits?tab=about",
+        )
+        .await;
+
+        // The Delta's text is searchable; its JSON is not.
+        assert_eq!(fts_matches(&pool, "whales").await, ["beluga"]);
+        assert!(fts_matches(&pool, "attributes").await.is_empty());
+
+        // The URL's host is searchable; its path and query are not.
+        assert_eq!(fts_matches(&pool, "zooniverse").await, ["beluga"]);
+        assert!(fts_matches(&pool, "projects").await.is_empty());
+        assert!(fts_matches(&pool, "tab").await.is_empty());
+
+        sqlx::query("UPDATE projects SET goal = 'narwhals' WHERE project_id = 'beluga'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(fts_matches(&pool, "narwhals").await, ["beluga"]);
+
+        sqlx::query("UPDATE entities SET publish = 0 WHERE slug = 'beluga'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(fts_matches(&pool, "narwhals").await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn name_matches_rank_ahead_of_matches_elsewhere() {
+        let pool = fts_database().await;
+        add_project(
+            &pool,
+            "hosted",
+            "Kelp Quest",
+            "",
+            "https://www.zooniverse.org/projects/x/kelp",
+        )
+        .await;
+        add_project(
+            &pool,
+            "named",
+            "Zooniverse Classroom",
+            "",
+            "https://example.org/",
+        )
+        .await;
+        add_project(
+            &pool,
+            "mentioned",
+            "Penguin Watch",
+            "Classify penguins on Zooniverse. Zooniverse hosts it.",
+            "",
+        )
+        .await;
+
+        let ranked = sqlx::QueryBuilder::new(format!(
+            "SELECT slug, {title_match} FROM entities_fts WHERE entities_fts MATCH 'zooniverse' \
+             ORDER BY {title_match} DESC, {relevance}",
+            title_match = super::FTS_TITLE_MATCH,
+            relevance = super::FTS_RELEVANCE,
+        ))
+        .build_query_as::<(String, bool)>()
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(ranked[0], ("named".to_string(), true));
+        assert!(ranked[1..].iter().all(|(_, title_match)| !title_match));
+        assert_eq!(ranked.len(), 3);
     }
 }
