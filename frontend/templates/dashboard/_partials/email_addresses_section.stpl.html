@@ -14,12 +14,20 @@
                 <% if address.primary { %><span class="ml-2 text-xs uppercase font-bold text-primary">Primary</span><% } %>
                 <% if !address.verified { %><span class="ml-2 text-xs uppercase font-bold opacity-60">Unconfirmed</span><% } %>
             </span>
-            <% if !address.primary { %>
-            <form hx-post="/dashboard/emails/remove" hx-target="#email-addresses" hx-swap="outerHTML">
-                <input type="hidden" name="email" value="<%= address.email %>">
-                <button type="submit" class="btn btn-secondary btn-small">Remove</button>
-            </form>
-            <% } %>
+            <span class="flex gap-2">
+                <% if !address.verified { %>
+                <form hx-post="/dashboard/emails/confirm" hx-target="#email-addresses" hx-swap="outerHTML">
+                    <input type="hidden" name="email" value="<%= address.email %>">
+                    <button type="submit" class="btn btn-secondary btn-small">Send confirmation</button>
+                </form>
+                <% } %>
+                <% if !address.primary { %>
+                <form hx-post="/dashboard/emails/remove" hx-target="#email-addresses" hx-swap="outerHTML">
+                    <input type="hidden" name="email" value="<%= address.email %>">
+                    <button type="submit" class="btn btn-secondary btn-small">Remove</button>
+                </form>
+                <% } %>
+            </span>
         </li>
         <% } %>
         <% for email in &self.emails.pending { %>
@@ -31,7 +39,7 @@
             <span class="flex gap-2">
                 <form hx-post="/dashboard/emails" hx-target="#email-addresses" hx-swap="outerHTML">
                     <input type="hidden" name="email" value="<%= email %>">
-                    <button type="submit" class="btn btn-secondary btn-small">Send again</button>
+                    <button type="submit" class="btn btn-secondary btn-small">Add now</button>
                 </form>
                 <form hx-post="/dashboard/emails/remove" hx-target="#email-addresses" hx-swap="outerHTML">
                     <input type="hidden" name="email" value="<%= email %>">

@@ -222,6 +222,7 @@ pub fn routes() -> impl Endpoint {
         .at("/section/:section", get(main::section))
         .at("/emails", post(email_addresses::add))
         .at("/emails/remove", post(email_addresses::remove))
+        .at("/emails/confirm", post(email_addresses::confirm))
         .at("/link-tokens", post(link_tokens::add))
         .at("/link-tokens/delete", post(link_tokens::delete))
         .at("/profile/section/:section", get(profile::section))

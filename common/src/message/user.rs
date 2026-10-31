@@ -117,10 +117,16 @@ pub struct CompleteSignupResponse {
 }
 
 /// Payload for `user.auth.resend_email_verification`: send the account's
-/// confirmation email again, as the unconfirmed-email banner offers to.
+/// confirmation email again, as the unconfirmed-email banner offers to, or
+/// send one to another of its addresses, as the settings page offers to.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct ResendEmailVerification {
     pub user_id: Ulid,
+
+    /// The address to confirm, which must be one of the account's. None for
+    /// the account's primary address.
+    #[serde(default)]
+    pub email: Option<String>,
 }
 
 /// What became of a request to send the confirmation email again, which
@@ -136,6 +142,8 @@ pub enum EmailVerificationResend {
     /// The address is on the do-not-send list -- it bounced, complained, or
     /// unsubscribed -- so no email we send would reach it.
     Undeliverable,
+    /// The address named is not one of the account's, so nothing was sent.
+    NotOnAccount,
 }
 
 /// Payload for `user.auth.verify_email`: redeem the code from a confirmation
@@ -170,8 +178,29 @@ pub struct AccountEmails {
     pub pending: Vec<String>,
 }
 
+/// Payload for `user.emails.add_own`: add an address to the account at its
+/// owner's asking. It joins the account at once, unconfirmed.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct EmailAdd {
+    pub user_id: Ulid,
+    pub email: String,
+}
+
+/// What became of a request to add an address at once.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmailAdded {
+    Added,
+    /// That is not an address mail could be delivered to.
+    Invalid,
+    /// The account already has the address, in this or another spelling.
+    AlreadyYours,
+    /// Another account has the address, in this or another spelling.
+    Taken,
+}
+
 /// Payload for `user.emails.request_add`: mail an address the link that adds
-/// it to the account.
+/// it to the account, so that it joins only once its owner shows they read
+/// its mail.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct EmailAddRequest {
     pub user_id: Ulid,

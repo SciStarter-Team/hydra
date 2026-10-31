@@ -96,6 +96,8 @@ impl From<EmailVerificationResend> for ResendState {
             EmailVerificationResend::TooSoon => ResendState::TooSoon,
             EmailVerificationResend::LimitReached => ResendState::LimitReached,
             EmailVerificationResend::Undeliverable => ResendState::Undeliverable,
+            // The banner names no address, so its own is the account's.
+            EmailVerificationResend::NotOnAccount => ResendState::Failed,
         }
     }
 }
@@ -170,6 +172,7 @@ pub async fn resend_verification_action(
                 "user.auth.resend_email_verification",
                 ResendEmailVerification {
                     user_id: user.user_id,
+                    email: None,
                 },
             )
             .await

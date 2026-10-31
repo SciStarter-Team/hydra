@@ -3499,6 +3499,7 @@ async fn main() {
         "request_add",
         email_verification::request_add
     ));
+    toplevel.spawn(handler!(emails, "add_own", users::add_own_email));
     toplevel.spawn(handler!(emails, "drop", users::drop_email));
     toplevel.spawn(recv_handler!(
         emails,

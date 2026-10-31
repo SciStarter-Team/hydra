@@ -4,7 +4,8 @@
 //! code, and following the link marks the address -- and so the account --
 //! verified. Until then the account is not sent ordinary email and its badges
 //! are withheld, so every page shows it a banner offering to send the link
-//! again.
+//! again. The settings page offers the same for each of an account's
+//! addresses that is unverified, as one that bounced is.
 //!
 //! The same links add an address to an account at its owner's asking: the
 //! address joins the account, confirmed, when the link mailed to it is
@@ -306,18 +307,15 @@ pub(crate) async fn send_to_new_account(user_id: Ulid, email: &str) -> Result<()
     send_confirmation_email(user_id, email, &code).await
 }
 
-/// Send an account's confirmation email again, within the limits above.
+/// Send an account's confirmation email again, or send one to another of
+/// its addresses, within the limits above.
 pub async fn resend(req: &Request) -> Result<EmailVerificationResend, Error> {
     let resend: ResendEmailVerification = flexbuffers::from_slice(&req.message.payload)?;
-    let user_id_str = resend.user_id.to_string();
 
-    let email = sqlx::query_scalar!(
-        r#"select "primary_email" from "users" where "user_id" = ?"#,
-        user_id_str,
-    )
-    .fetch_optional(db())
-    .await?
-    .ok_or_else(|| anyhow::anyhow!("User not found"))?;
+    let Some(email) = address_to_confirm(db(), resend.user_id, resend.email.as_deref()).await?
+    else {
+        return Ok(EmailVerificationResend::NotOnAccount);
+    };
 
     // The emailer would drop the message without a word, and the banner would
     // go on promising an email that is never coming. Asked before a code is
@@ -345,6 +343,36 @@ pub async fn resend(req: &Request) -> Result<EmailVerificationResend, Error> {
     Ok(EmailVerificationResend::Sent)
 }
 
+/// The address a confirmation email is for: the one named, as the account
+/// spells it, when the account has it, and otherwise None; or the account's
+/// primary address when none is named.
+async fn address_to_confirm(
+    pool: &SqlitePool,
+    user_id: Ulid,
+    named: Option<&str>,
+) -> Result<Option<String>, Error> {
+    let user_id = user_id.to_string();
+
+    match named {
+        Some(named) => Ok(sqlx::query_scalar!(
+            r#"select "email" from "emails" where "user_id" = ? and "email" = ?"#,
+            user_id,
+            named,
+        )
+        .fetch_optional(pool)
+        .await?),
+        None => Ok(Some(
+            sqlx::query_scalar!(
+                r#"select "primary_email" from "users" where "user_id" = ?"#,
+                user_id,
+            )
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("User not found"))?,
+        )),
+    }
+}
+
 /// Redeem the code from a confirmation email. None when the link is no
 /// longer good.
 pub async fn verify(req: &Request) -> Result<Option<VerifiedEmail>, Error> {
@@ -366,6 +394,9 @@ pub async fn verify(req: &Request) -> Result<Option<VerifiedEmail>, Error> {
 
 /// Mail an address the link that adds it to the account, unless it is not
 /// one mail can reach, someone already has it, or it has been sent too many.
+///
+/// The stricter of the two ways to add an address: `users::add_own_email`
+/// adds one at once, unconfirmed, and is what the settings page uses.
 pub async fn request_add(req: &Request) -> Result<EmailAddRequested, Error> {
     let add: EmailAddRequest = flexbuffers::from_slice(&req.message.payload)?;
     let email = add.email.trim();
@@ -471,6 +502,7 @@ mod tests {
         sqlx::raw_sql(
             r#"create table "users" (
                  "user_id" text primary key not null,
+                 "primary_email" text,
                  "verified" boolean not null
                );
                create table "emails" (
@@ -496,11 +528,14 @@ mod tests {
                 .expect("schema");
         }
 
-        sqlx::query(r#"insert into "users" ("user_id", "verified") values (?, 0)"#)
-            .bind(ADA)
-            .execute(&pool)
-            .await
-            .expect("user");
+        sqlx::query(
+            r#"insert into "users" ("user_id", "primary_email", "verified") values (?, ?, 0)"#,
+        )
+        .bind(ADA)
+        .bind(ADDRESS)
+        .execute(&pool)
+        .await
+        .expect("user");
 
         add_address(&pool, ADDRESS, false).await;
 
@@ -792,6 +827,44 @@ mod tests {
     }
 
     const SECOND: &str = "Countess@Example.invalid";
+
+    #[tokio::test]
+    async fn a_confirmation_email_goes_to_the_primary_address_unless_another_is_named() {
+        let pool = fixture().await;
+        add_address(&pool, SECOND, false).await;
+
+        check!(address_to_confirm(&pool, ada(), None).await.unwrap() == Some(ADDRESS.to_string()));
+        check!(
+            address_to_confirm(&pool, ada(), Some(SECOND))
+                .await
+                .unwrap()
+                == Some(SECOND.to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn a_confirmation_email_goes_only_to_the_accounts_own_addresses() {
+        let pool = fixture().await;
+        sqlx::query(r#"insert into "users" ("user_id", "verified") values (?, 0)"#)
+            .bind(BOB)
+            .execute(&pool)
+            .await
+            .unwrap();
+        add_address_to(&pool, BOB, SECOND, false).await;
+
+        check!(
+            address_to_confirm(&pool, ada(), Some(SECOND))
+                .await
+                .unwrap()
+                == None
+        );
+        check!(
+            address_to_confirm(&pool, ada(), Some("nobody@example.invalid"))
+                .await
+                .unwrap()
+                == None
+        );
+    }
 
     #[tokio::test]
     async fn a_code_mailed_to_add_an_address_adds_it_confirmed() {

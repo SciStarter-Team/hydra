@@ -4,15 +4,15 @@ use common::{
     badge::Badge,
     message::user::{
         AccountEmail, AccountEmails, AdminPasswordResetRequest, AdminPasswordResetResponse,
-        BadgeHolderInfo, BadgeHoldersRequest, BadgeHoldersResponse, BasicInfo, EmailDrop,
-        EmailDropped, InterestedRequest, InterestedUser, MasqueradeRequest, PRIVATE_DISPLAY_NAME,
-        PageManagerSyncRequest, PageManagerSyncResponse, PageManagerUpdateRequest,
-        PageManagerUpdateResponse, TagCohortMember, TagCohortRequest, UserAndBadge, UserBadge,
-        UserDetails, UserDetailsBatchGetRequest, UserDetailsBatchGetResponse,
-        UserDetailsCreateRequest, UserDetailsDeleteRequest, UserDetailsDeleteResponse,
-        UserDetailsExportRequest, UserDetailsExportResponse, UserDetailsGetRequest,
-        UserDetailsListRequest, UserDetailsListResponse, UserDetailsResponse,
-        UserDetailsSearchRequest, UserDetailsUpdateRequest, UserDisplayInfo,
+        BadgeHolderInfo, BadgeHoldersRequest, BadgeHoldersResponse, BasicInfo, EmailAdd,
+        EmailAdded, EmailDrop, EmailDropped, InterestedRequest, InterestedUser, MasqueradeRequest,
+        PRIVATE_DISPLAY_NAME, PageManagerSyncRequest, PageManagerSyncResponse,
+        PageManagerUpdateRequest, PageManagerUpdateResponse, TagCohortMember, TagCohortRequest,
+        UserAndBadge, UserBadge, UserDetails, UserDetailsBatchGetRequest,
+        UserDetailsBatchGetResponse, UserDetailsCreateRequest, UserDetailsDeleteRequest,
+        UserDetailsDeleteResponse, UserDetailsExportRequest, UserDetailsExportResponse,
+        UserDetailsGetRequest, UserDetailsListRequest, UserDetailsListResponse,
+        UserDetailsResponse, UserDetailsSearchRequest, UserDetailsUpdateRequest, UserDisplayInfo,
         UserDisplayInfoBatchRequest, UserDisplayInfoBatchResponse, UserEmail, UserEmailAddRequest,
         UserEmailDeleteRequest, UserEmailInfo, UserEmailInfoRequest, UserEmailResponse,
         UserEmailToggleVerifiedRequest, UserEmailUpdateRequest, UserNameMapping, UserPointsRequest,
@@ -818,6 +818,94 @@ async fn account_emails_in(pool: &SqlitePool, user_id: &str) -> Result<AccountEm
         addresses,
         pending: crate::email_verification::pending_additions(pool, user_id).await?,
     })
+}
+
+/// Add an address to an account at its owner's asking. It joins at once,
+/// unless the account or another already has it in any of the spellings that
+/// are hashed, and is trusted as far as the account is: a verified account's
+/// new address counts as verified until it bounces, as a new account's does,
+/// while an unverified account's is unverified too, so that adding an
+/// address is no way around confirming one.
+pub async fn add_own_email(req: &Request) -> Result<EmailAdded, Error> {
+    let add: EmailAdd = flexbuffers::from_slice(&req.message.payload)?;
+    let user_id = add.user_id.to_string();
+    let email = add.email.trim();
+
+    let added = add_own_email_in(db(), &user_id, email).await?;
+
+    if added == EmailAdded::Added {
+        announce_user_emails(&user_id).await?;
+
+        log_activity(
+            None,
+            "email-added",
+            add.user_id,
+            None,
+            format!("email={email}"),
+        )
+        .await
+        .ok();
+    }
+
+    Ok(added)
+}
+
+async fn add_own_email_in(
+    pool: &SqlitePool,
+    user_id: &str,
+    email: &str,
+) -> Result<EmailAdded, Error> {
+    if !common::email::valid(email) {
+        return Ok(EmailAdded::Invalid);
+    }
+
+    let hash = hash_identifier(email);
+    let hash_lower = hash_identifier_lower(email);
+    let hash_capfirst = hash_identifier_capfirst(email);
+
+    let mut tx = Immediate::begin_with_retry(pool, None, None).await?;
+
+    // Each spelling is unique, and two addresses share one exactly when they
+    // share a lowercase spelling, so that is the one to look for.
+    let owner = sqlx::query_scalar!(
+        r#"SELECT "user_id" FROM "emails" WHERE "hash_lower" = ?"#,
+        hash_lower
+    )
+    .fetch_optional(&mut tx)
+    .await?;
+
+    if let Some(owner) = owner {
+        tx.rollback().await?;
+        return Ok(if owner == user_id {
+            EmailAdded::AlreadyYours
+        } else {
+            EmailAdded::Taken
+        });
+    }
+
+    let verified = sqlx::query_scalar!(
+        r#"SELECT "verified" AS "verified: bool" FROM "users" WHERE "user_id" = ?"#,
+        user_id
+    )
+    .fetch_one(&mut tx)
+    .await?;
+
+    sqlx::query!(
+        r#"INSERT INTO "emails" ("user_id", "email", "verified", "hash", "hash_lower", "hash_capfirst")
+           VALUES (?, ?, ?, ?, ?, ?)"#,
+        user_id,
+        email,
+        verified,
+        hash,
+        hash_lower,
+        hash_capfirst
+    )
+    .execute(&mut tx)
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(EmailAdded::Added)
 }
 
 /// Take an address off an account at its owner's asking, or stop waiting
@@ -2468,6 +2556,7 @@ mod tests {
     use assert2::check;
 
     const ADA: &str = "01JGEDS64C0ECBWR472V7788BF";
+    const BOB: &str = "01JGEDS64C0ECBWR472V7788BG";
     const PRIMARY: &str = "ada@example.invalid";
     const SECOND: &str = "countess@example.invalid";
     const ASKED: &str = "lovelace@example.invalid";
@@ -2484,12 +2573,16 @@ mod tests {
         sqlx::raw_sql(
             r#"create table "users" (
                  "user_id" text primary key not null,
-                 "primary_email" text not null
+                 "primary_email" text not null,
+                 "verified" boolean not null default 1
                );
                create table "emails" (
                  "user_id" text not null references "users" ("user_id") on delete cascade,
                  "email" text not null unique,
-                 "verified" boolean not null
+                 "verified" boolean not null,
+                 "hash" text unique,
+                 "hash_lower" text unique,
+                 "hash_capfirst" text unique
                );"#,
         )
         .execute(&pool)
@@ -2515,11 +2608,13 @@ mod tests {
 
         for (email, verified) in [(SECOND, false), (PRIMARY, true)] {
             sqlx::query(
-                r#"insert into "emails" ("user_id", "email", "verified") values (?, ?, ?)"#,
+                r#"insert into "emails" ("user_id", "email", "verified", "hash_lower")
+                   values (?, ?, ?, ?)"#,
             )
             .bind(ADA)
             .bind(email)
             .bind(verified)
+            .bind(hash_identifier_lower(email))
             .execute(&pool)
             .await
             .expect("address");
@@ -2602,5 +2697,93 @@ mod tests {
                 .unwrap()
                 == EmailDropped::NotFound
         );
+    }
+
+    #[tokio::test]
+    async fn a_verified_accounts_address_is_added_at_once_as_verified() {
+        let pool = fixture().await;
+
+        check!(
+            add_own_email_in(&pool, ADA, "Lovelace@Example.invalid")
+                .await
+                .unwrap()
+                == EmailAdded::Added
+        );
+        check!(
+            account_emails_in(&pool, ADA)
+                .await
+                .unwrap()
+                .addresses
+                .contains(&AccountEmail {
+                    email: "Lovelace@Example.invalid".to_string(),
+                    verified: true,
+                    primary: false,
+                })
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unverified_accounts_address_is_added_at_once_as_unverified() {
+        let pool = fixture().await;
+        sqlx::query(r#"update "users" set "verified" = 0 where "user_id" = ?"#)
+            .bind(ADA)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        check!(
+            add_own_email_in(&pool, ADA, "Lovelace@Example.invalid")
+                .await
+                .unwrap()
+                == EmailAdded::Added
+        );
+        check!(
+            account_emails_in(&pool, ADA)
+                .await
+                .unwrap()
+                .addresses
+                .contains(&AccountEmail {
+                    email: "Lovelace@Example.invalid".to_string(),
+                    verified: false,
+                    primary: false,
+                })
+        );
+    }
+
+    #[tokio::test]
+    async fn an_address_already_on_the_account_in_any_spelling_is_not_added_again() {
+        let pool = fixture().await;
+
+        check!(
+            add_own_email_in(&pool, ADA, "Countess@Example.invalid")
+                .await
+                .unwrap()
+                == EmailAdded::AlreadyYours
+        );
+    }
+
+    #[tokio::test]
+    async fn another_accounts_address_is_not_added() {
+        let pool = fixture().await;
+        sqlx::query(r#"insert into "users" ("user_id", "primary_email") values (?, ?)"#)
+            .bind(BOB)
+            .bind("bob@example.invalid")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        check!(
+            add_own_email_in(&pool, BOB, "COUNTESS@example.invalid")
+                .await
+                .unwrap()
+                == EmailAdded::Taken
+        );
+    }
+
+    #[tokio::test]
+    async fn a_malformed_address_is_not_added() {
+        let pool = fixture().await;
+
+        check!(add_own_email_in(&pool, ADA, "countess").await.unwrap() == EmailAdded::Invalid);
     }
 }

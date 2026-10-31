@@ -1,12 +1,17 @@
 //! The account's email addresses on the settings page. Projects that report
 //! participation by email address credit it to whichever account has the
 //! address, so an account holder adds the addresses they use elsewhere here.
-//! An address joins the account when the link mailed to it is followed; the
-//! addresses and the links are user-service's.
+//! An address joins the account at once, trusted as far as the account is,
+//! and is shown unconfirmed only once that trust is lost (a bounce, say); an
+//! unconfirmed address can be mailed the link that confirms it. One
+//! its owner asked to add through the stricter `user.emails.request_add`,
+//! which waits for a mailed link to be followed, is listed as waiting and can
+//! be added now instead. The addresses and the links are user-service's.
 
 use anyhow::{Error, anyhow};
 use common::message::user::{
-    AccountEmails, EmailAddRequest, EmailAddRequested, EmailDrop, EmailDropped,
+    AccountEmails, EmailAdd, EmailAdded, EmailDrop, EmailDropped, EmailVerificationResend,
+    ResendEmailVerification,
 };
 use poem::web::{Form, Html};
 use poem::{IntoResponse, Response, handler};
@@ -17,7 +22,7 @@ use ulid::Ulid;
 use crate::middleware::authorization::Authenticated;
 
 /// The Email Addresses section, which replaces itself when an address is
-/// asked for or dropped.
+/// added, dropped, or sent its confirmation link.
 #[derive(TemplateOnce)]
 #[template(path = "dashboard/_partials/email_addresses_section.stpl.html")]
 pub struct EmailAddressesSection {
@@ -52,33 +57,41 @@ async fn list(user_id: Ulid) -> AccountEmails {
         .unwrap_or_default()
 }
 
-fn requested_notice(requested: EmailAddRequested, email: &str) -> Notice {
-    match requested {
-        EmailAddRequested::Sent => Notice::Done(format!(
-            "We sent a link to {email}. Follow it to add the address to your account."
-        )),
-        EmailAddRequested::Invalid => {
+fn added_notice(added: EmailAdded, email: &str) -> Notice {
+    match added {
+        EmailAdded::Added => Notice::Done(format!("Added {email}.")),
+        EmailAdded::Invalid => {
             Notice::Refused("That doesn't look like an email address.".to_string())
         }
-        EmailAddRequested::AlreadyYours => {
+        EmailAdded::AlreadyYours => {
             Notice::Refused("That address is already on your account.".to_string())
         }
-        EmailAddRequested::Taken => Notice::Refused(
+        EmailAdded::Taken => Notice::Refused(
             "That address belongs to another SciStarter account. If it's yours, write to us at info@scistarter.org."
                 .to_string(),
         ),
-        EmailAddRequested::TooSoon => Notice::Refused(
+    }
+}
+
+fn confirmation_notice(resent: EmailVerificationResend, email: &str) -> Option<Notice> {
+    match resent {
+        EmailVerificationResend::Sent => Some(Notice::Done(format!(
+            "We sent a link to {email}. Follow it to confirm the address."
+        ))),
+        EmailVerificationResend::TooSoon => Some(Notice::Refused(
             "We sent a link to that address less than a minute ago. Check its inbox (and its spam folder)."
                 .to_string(),
-        ),
-        EmailAddRequested::LimitReached => Notice::Refused(
+        )),
+        EmailVerificationResend::LimitReached => Some(Notice::Refused(
             "We've sent several links to that address today. Please check its spam folder, or write to us at info@scistarter.org."
                 .to_string(),
-        ),
-        EmailAddRequested::Undeliverable => Notice::Refused(
+        )),
+        EmailVerificationResend::Undeliverable => Some(Notice::Refused(
             "Our email to that address is not getting through. Please write to us at info@scistarter.org."
                 .to_string(),
-        ),
+        )),
+        // Gone from the account meanwhile; the section as it now stands says so.
+        EmailVerificationResend::NotOnAccount => None,
     }
 }
 
@@ -88,7 +101,7 @@ pub struct EmailForm {
     email: String,
 }
 
-/// POST `/dashboard/emails` -- mail an address the link that adds it.
+/// POST `/dashboard/emails` -- add an address to the account.
 #[handler]
 pub async fn add(
     Authenticated(user_info): Authenticated,
@@ -98,16 +111,16 @@ pub async fn add(
     let user_id = user_info.user_id;
     let email = form.email.trim().to_string();
 
-    let requested: EmailAddRequested = common::service::request(
-        "user.emails.request_add",
-        EmailAddRequest {
+    let added: EmailAdded = common::service::request(
+        "user.emails.add_own",
+        EmailAdd {
             user_id,
             email: email.clone(),
         },
     )
     .await?;
 
-    let notice = requested_notice(requested, &email);
+    let notice = added_notice(added, &email);
 
     let section = EmailAddressesSection {
         emails: list(user_id).await,
@@ -116,6 +129,34 @@ pub async fn add(
             Notice::Done(_) => String::new(),
         },
         notice: Some(notice),
+    };
+
+    Ok(Html(section.render_once()?).into_response())
+}
+
+/// POST `/dashboard/emails/confirm` -- mail one of the account's addresses
+/// the link that confirms it.
+#[handler]
+pub async fn confirm(
+    Authenticated(user_info): Authenticated,
+    Form(form): Form<EmailForm>,
+) -> Result<Response, Error> {
+    let user_info = user_info.ok_or_else(|| anyhow!("Login required"))?;
+    let user_id = user_info.user_id;
+
+    let resent: EmailVerificationResend = common::service::request(
+        "user.auth.resend_email_verification",
+        ResendEmailVerification {
+            user_id,
+            email: Some(form.email.clone()),
+        },
+    )
+    .await?;
+
+    let section = EmailAddressesSection {
+        emails: list(user_id).await,
+        entered: String::new(),
+        notice: confirmation_notice(resent, &form.email),
     };
 
     Ok(Html(section.render_once()?).into_response())
@@ -198,7 +239,19 @@ mod tests {
     }
 
     #[test]
-    fn an_address_asked_for_can_be_sent_again_or_cancelled() {
+    fn only_unconfirmed_addresses_offer_a_confirmation_link() {
+        let html = section(None);
+
+        check!(
+            html.matches(r#"hx-post="/dashboard/emails/confirm""#)
+                .count()
+                == 1
+        );
+        check!(html.contains("Send confirmation"));
+    }
+
+    #[test]
+    fn an_address_waiting_on_its_link_can_be_added_now_or_cancelled() {
         let html = section(None);
 
         check!(html.contains("lovelace@example.invalid"));
@@ -209,14 +262,15 @@ mod tests {
         );
         check!(html.contains(r#"hx-post="/dashboard/emails""#));
         check!(html.contains(r#"hx-post="/dashboard/emails/remove""#));
+        check!(html.contains("Add now"));
     }
 
     #[test]
-    fn a_refusal_is_an_alert_and_a_sent_link_is_not() {
+    fn a_refusal_is_an_alert_and_an_addition_is_not() {
         check!(section(Some(Notice::Refused("No.".to_string()))).contains(r#"role="alert""#));
 
-        let sent = section(Some(Notice::Done("Sent.".to_string())));
-        check!(sent.contains(r#"role="status""#));
-        check!(!sent.contains(r#"role="alert""#));
+        let added = section(Some(Notice::Done("Added.".to_string())));
+        check!(added.contains(r#"role="status""#));
+        check!(!added.contains(r#"role="alert""#));
     }
 }
