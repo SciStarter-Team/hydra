@@ -4,9 +4,9 @@ use poem::{
     web::{Query, Redirect},
 };
 
-use crate::auth::is_local_next;
 use crate::i18n::Lang;
 use crate::middleware::authorization::Authenticated;
+use common::redirect::is_local_next;
 
 pub fn routes() -> impl Endpoint {
     Route::new().at("/ensure-account", get(ensure_account))

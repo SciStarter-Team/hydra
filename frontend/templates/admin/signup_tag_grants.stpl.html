@@ -1,0 +1,125 @@
+<div class="space-y-6">
+    <div class="bg-white rounded-lg shadow border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Signup Tag Grants</h3>
+            <p class="mt-1 text-sm text-gray-500">
+                Everyone who signs up or signs in through a link carrying one of these tags is
+                credited with the training and its badge, without doing the steps. For a partner
+                that runs the training with its group before enrolling them.
+            </p>
+            <p class="mt-1 text-sm text-gray-500">
+                Grants marked <em>from orrery</em> are made and deleted in orrery&rsquo;s admin, and
+                copied here every hour.
+            </p>
+        </div>
+
+        <div class="p-6 space-y-4">
+            <% if let Some(grant) = &self.added { %>
+                <div class="rounded-md bg-green-50 border border-green-200 p-4">
+                    <h4 class="text-sm font-medium text-green-800">&ldquo;<%= grant.tag %>&rdquo; now grants the <%= grant.badge.badge().name() %> badge</h4>
+                    <p class="mt-1 text-sm text-green-700">The link to hand out:</p>
+                    <div class="mt-2">
+                        <code class="block bg-white border border-green-300 rounded px-3 py-2 text-sm font-mono break-all text-gray-900"><%= Self::link(grant) %></code>
+                    </div>
+                </div>
+            <% } %>
+
+            <% if let Some(refusal) = &self.refusal { %>
+                <div role="alert" class="rounded-md bg-red-50 border border-red-200 p-4">
+                    <p class="text-sm text-red-700"><%= refusal %></p>
+                </div>
+            <% } %>
+
+            <form method="post" action="/-admin/signup-tag-grants/create" class="flex flex-col sm:flex-row gap-3 sm:items-end">
+                <div class="flex-1">
+                    <label for="signup-tag-grant-tag" class="block text-sm font-medium text-gray-700">Tag</label>
+                    <input
+                        type="text"
+                        id="signup-tag-grant-tag"
+                        name="tag"
+                        required
+                        maxlength="<%= common::message::user::SIGNUP_TAG_GRANT_TAG_LENGTH %>"
+                        value="<%= self.tag %>"
+                        placeholder="e.g. CALL"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    >
+                    <p class="mt-1 text-xs text-gray-500">Capitalization, surrounding spaces and a leading # are ignored.</p>
+                </div>
+                <div class="flex-1">
+                    <label for="signup-tag-grant-next-path" class="block text-sm font-medium text-gray-700">After signing up, go to <span class="font-normal text-gray-500">(optional)</span></label>
+                    <input
+                        type="text"
+                        id="signup-tag-grant-next-path"
+                        name="next_path"
+                        maxlength="<%= common::message::user::SIGNUP_TAG_GRANT_NEXT_PATH_LENGTH %>"
+                        value="<%= self.next_path %>"
+                        placeholder="e.g. /l/library-network-signup"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    >
+                    <p class="mt-1 text-xs text-gray-500">A page on this site. It becomes part of the link to hand out.</p>
+                </div>
+                <button type="submit" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Grant Foundations
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow border border-gray-200">
+        <div class="p-6">
+            <% if self.grants.is_empty() { %>
+                <div class="text-center py-12">
+                    <h3 class="text-sm font-medium text-gray-900">No grants yet</h3>
+                    <p class="mt-1 text-sm text-gray-500">Add a tag above to credit its cohort.</p>
+                </div>
+            <% } else { %>
+                <div class="overflow-hidden shadow ring-1 ring-black/5 rounded-lg">
+                    <div class="hidden lg:grid lg:grid-cols-5 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <div>Tag</div>
+                        <div>Badge</div>
+                        <div>Link to hand out</div>
+                        <div>Created</div>
+                        <div class="text-right">Actions</div>
+                    </div>
+                    <div class="divide-y divide-gray-200 bg-white">
+                        <% for grant in &self.grants { %>
+                            <div class="flex flex-col lg:grid lg:grid-cols-5 gap-3 lg:gap-4 px-6 py-4 lg:items-center" id="signup-tag-grant-<%= grant.id %>">
+                                <div>
+                                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Tag</div>
+                                    <div class="text-sm text-gray-900"><%= grant.tag %></div>
+                                </div>
+                                <div>
+                                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Badge</div>
+                                    <div class="text-sm text-gray-900"><%= grant.badge.badge().name() %></div>
+                                </div>
+                                <div>
+                                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Link to hand out</div>
+                                    <code class="bg-gray-100 px-2 py-1 rounded text-xs break-all text-gray-700"><%= Self::link(grant) %></code>
+                                </div>
+                                <div>
+                                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Created</div>
+                                    <div class="text-sm text-gray-500"><%= grant.created %></div>
+                                </div>
+                                <div class="flex flex-wrap gap-3 lg:justify-end">
+                                    <% if grant.from_orrery { %>
+                                        <span class="text-sm text-gray-500">from orrery</span>
+                                    <% } else { %>
+                                        <button
+                                            hx-delete="/-admin/signup-tag-grants/<%= grant.id %>"
+                                            hx-confirm="Stop crediting this tag? Accounts already credited keep their badge."
+                                            hx-target="closest [id^='signup-tag-grant-']"
+                                            hx-swap="outerHTML"
+                                            class="text-sm font-medium text-red-600 hover:text-red-900"
+                                        >
+                                            Delete<span class="sr-only">, <%= grant.tag %></span>
+                                        </button>
+                                    <% } %>
+                                </div>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</div>

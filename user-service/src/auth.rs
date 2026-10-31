@@ -5,8 +5,7 @@ use common::{
     message::user::{
         Attribution, BasicInfo, CompleteSignup, CompleteSignupResponse, DeferSignup,
         DeferSignupOutcome, Login, PendingTransition, Signup, SnmProfile, UserAndBadge,
-        normalize_tag, signup_grants_foundations, signup_needs_protection,
-        welcome_trigger_for_signup,
+        normalize_tag, signup_needs_protection, welcome_trigger_for_signup,
     },
     service::{TriggerEvent, log_activity, request, send, trigger_email},
     shared::{db, hash_identifier, hash_identifier_capfirst, hash_identifier_lower},
@@ -282,16 +281,14 @@ async fn create_account(
         }
     }
 
-    // Some signup contexts identify a cohort that ran the Foundations module
-    // before enrolling. Credited here for the reason protection is decided
+    // Some signup contexts identify a cohort that ran a training before
+    // enrolling, as the signup tag grants record. Credited here for the reason protection is decided
     // here -- every lane obeys it -- and non-fatally for the reason the badge
     // above is: the account is committed by this point, so a credit that fails
     // must not turn a completed signup into an error. The cohort backfill
     // catches whoever it misses.
-    if signup_grants_foundations(&form.tags) {
-        if let Err(e) = crate::workflow::credit_foundations_cohort(&user_id_str).await {
-            eprintln!("Failed to credit the Foundations cohort for {user_id}: {e}");
-        }
+    if let Err(e) = crate::signup_tag_grants::credit(&user_id_str, &form.tags).await {
+        eprintln!("Failed to credit the signup cohort for {user_id}: {e}");
     }
 
     // Training steps the visitor earned before they had an account -- a

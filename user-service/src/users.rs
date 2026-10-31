@@ -564,9 +564,7 @@ async fn apply_tag(user_id: &str, tag: &str, source: TagSource) -> Result<(), Er
         // reaches an account that already exists, so every lane that gets a
         // person signed in -- password, passkey, whatever comes next -- obeys
         // it without having to remember to.
-        if common::message::user::signup_grants_foundations(&[&tag]) {
-            crate::workflow::credit_foundations_cohort(user_id).await?;
-        }
+        crate::signup_tag_grants::credit(user_id, &[&tag]).await?;
     }
 
     // Constant Contact holds some of these tags directly, and derives the

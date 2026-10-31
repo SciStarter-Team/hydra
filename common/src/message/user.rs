@@ -362,37 +362,113 @@ pub fn signup_needs_protection<S: AsRef<str>>(tags: &[S]) -> bool {
     })
 }
 
-/// Signup-context tags whose cohort is credited with the Foundations of
-/// Citizen Science module rather than working through it on the site. The
-/// partner runs the module with its cohort before enrolling them, so the
-/// grant records something that already happened off-site. Kept in step with
-/// orrery's `FOUNDATIONS_GRANT_SIGNUP_TAGS`.
+/// A training a signup tag can credit its cohort with outright, badge and
+/// all. The partner runs the training with its cohort before enrolling them,
+/// so the grant records something that already happened off-site.
 ///
-/// Kept apart from `PROTECTED_SIGNUP_TAGS` even though the membership
-/// overlaps: protecting an account and crediting it are separate decisions
-/// about the same cohort, and a partner can need one without the other --
-/// girlscout is protected and is not credited, ldpl is credited and is not
-/// protected.
-pub const FOUNDATIONS_GRANT_SIGNUP_TAGS: [&str; 9] = [
-    "laplstudent",
-    "ldpl",
-    "signup-noyce",
-    "osher-asu",
-    "lakedallaslibrary",
-    "port-charlotte",
-    "turkey-scicomm",
-    "azla",
-    "ambassador-foundations-event",
-];
+/// Which tags credit which training is data, not code: staff keep it in
+/// orrery's admin (`core.SignupTagGrant`), user-service mirrors it into
+/// `signup_tag_grants`, and staff may add rows of their own in hydra's admin.
+/// Spelled as orrery's `SignupTagGrant.Badge`.
+///
+/// Kept apart from `PROTECTED_SIGNUP_TAGS` even though the cohorts overlap:
+/// protecting an account and crediting it are separate decisions about the
+/// same cohort, and a partner can need one without the other -- girlscout is
+/// protected and is not credited, ldpl is credited and is not protected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum SignupTagBadge {
+    Foundations,
+}
 
-/// Whether an account carrying `tags` from its signup context is credited
-/// with the Foundations module outright.
-pub fn signup_grants_foundations<S: AsRef<str>>(tags: &[S]) -> bool {
-    tags.iter().any(|tag| {
-        let tag = normalize_tag(tag.as_ref());
+impl SignupTagBadge {
+    pub const ALL: [SignupTagBadge; 1] = [SignupTagBadge::Foundations];
 
-        FOUNDATIONS_GRANT_SIGNUP_TAGS.contains(&tag.as_str())
-    })
+    /// The spelling stored in the database and sent by orrery.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SignupTagBadge::Foundations => "foundations",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<SignupTagBadge> {
+        SignupTagBadge::ALL
+            .into_iter()
+            .find(|badge| badge.as_str() == value)
+    }
+
+    /// The badge the training awards.
+    pub fn badge(self) -> Badge {
+        match self {
+            SignupTagBadge::Foundations => Badge::FoundationsOfCitizenScience,
+        }
+    }
+}
+
+/// The longest tag a signup tag grant may name, as orrery's
+/// `SignupTagGrant.tag`.
+pub const SIGNUP_TAG_GRANT_TAG_LENGTH: usize = 64;
+
+/// The longest path a signup tag grant may send people on to, as orrery's
+/// `SignupTagGrant.next_path`.
+pub const SIGNUP_TAG_GRANT_NEXT_PATH_LENGTH: usize = 200;
+
+/// One signup tag grant. Returned by `user.signup_tag_grants.list`, in tag
+/// order.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SignupTagGrant {
+    pub id: i64,
+    pub tag: String,
+    pub badge: SignupTagBadge,
+
+    /// Where the link handing out the tag sends people once they have signed
+    /// up or signed in: a path on this site, or empty. Only the link carries
+    /// it; the grant credits the tag however it arrives.
+    pub next_path: String,
+
+    pub created: String,
+
+    /// Copied from orrery, which owns it: deleting it here would only last
+    /// until the next sync, so it is changed there.
+    pub from_orrery: bool,
+}
+
+/// Sent via `user.signup_tag_grants.add`. `tag` and `next_path` are as staff
+/// typed them; the handler normalizes the tag, trims the path and answers
+/// with a `SignupTagGrantAdded`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SignupTagGrantAdd {
+    pub tag: String,
+    pub badge: SignupTagBadge,
+    pub next_path: String,
+}
+
+/// The answer to `user.signup_tag_grants.add`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum SignupTagGrantAdded {
+    Added(SignupTagGrant),
+
+    /// The tag, normalized, already credits this badge.
+    AlreadyGranted(String),
+
+    /// Nothing is left of the tag once normalized.
+    EmptyTag,
+
+    /// The tag is longer than `SIGNUP_TAG_GRANT_TAG_LENGTH`.
+    TagTooLong,
+
+    /// The path to send people on to is not a path on this site; see
+    /// `common::redirect::is_local_next`.
+    NextPathNotLocal,
+
+    /// The path is longer than `SIGNUP_TAG_GRANT_NEXT_PATH_LENGTH`.
+    NextPathTooLong,
+}
+
+/// Sent via `user.signup_tag_grants.delete`. Deletes the grant only if it was
+/// made here, not copied from orrery.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SignupTagGrantDelete {
+    pub id: i64,
 }
 
 /// Signup-context tags whose cohort is welcomed in its own words, and the
@@ -2445,36 +2521,9 @@ mod tests {
         assert!(!signup_needs_protection::<String>(&[]));
     }
 
-    #[test]
-    fn the_crediting_signup_tags_are_recognized() {
-        assert!(signup_grants_foundations(&["laplstudent".to_string()]));
-        assert!(signup_grants_foundations(&["ldpl".to_string()]));
-        // Handed out as `/login?tag=LDPL`, and arriving in whatever case and
-        // punctuation the partner wrote it in.
-        assert!(signup_grants_foundations(&["LDPL".to_string()]));
-        assert!(signup_grants_foundations(&[" #LDPL ".to_string()]));
-        assert!(signup_grants_foundations(&[
-            "some-partner".to_string(),
-            "LAPLstudent".to_string(),
-        ]));
-    }
-
-    /// The two rules name overlapping cohorts and decide separate things, in
-    /// both directions. Pinned because the sets are easy to mistake for one
-    /// another, and either confusion is a real harm: crediting a badge to a
-    /// cohort that did not earn it, or leaving a minor's account unprotected.
-    #[test]
-    fn crediting_and_protecting_are_separate_decisions() {
-        assert!(signup_needs_protection(&["girlscout".to_string()]));
-        assert!(!signup_grants_foundations(&["girlscout".to_string()]));
-
-        assert!(signup_grants_foundations(&["ldpl".to_string()]));
-        assert!(!signup_needs_protection(&["ldpl".to_string()]));
-    }
-
-    /// Adding a cohort is adding a string to a list, so the whole of each
-    /// list is run through its predicate here rather than growing a case per
-    /// partner. The lists are duplicated from orrery and nothing checks that
+    /// Adding a cohort is adding a string to the list, so the whole list is
+    /// run through its predicate here rather than growing a case per
+    /// partner. The list is duplicated from orrery and nothing checks that
     /// the two agree, so a string that only reached one codebase at least
     /// cannot also go untested in the one it reached.
     #[test]
@@ -2485,20 +2534,17 @@ mod tests {
                 "{tag} is listed as protecting and is not recognized"
             );
         }
-
-        for tag in FOUNDATIONS_GRANT_SIGNUP_TAGS {
-            assert!(
-                signup_grants_foundations(&[tag.to_string()]),
-                "{tag} is listed as crediting and is not recognized"
-            );
-        }
     }
 
+    /// The stored spelling is orrery's, and a row is read back through
+    /// `parse`, so the two must agree for every badge.
     #[test]
-    fn an_ordinary_signup_is_not_credited() {
-        assert!(!signup_grants_foundations(&["some-partner".to_string()]));
-        assert!(!signup_grants_foundations(&["ldpls".to_string()]));
-        assert!(!signup_grants_foundations::<String>(&[]));
+    fn every_signup_tag_badge_reads_back_its_own_spelling() {
+        for badge in SignupTagBadge::ALL {
+            assert_eq!(SignupTagBadge::parse(badge.as_str()), Some(badge));
+        }
+
+        assert_eq!(SignupTagBadge::parse("Foundations"), None);
     }
 
     #[test]

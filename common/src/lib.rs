@@ -20,6 +20,7 @@ pub mod primary;
 #[cfg(feature = "database")]
 pub mod query;
 pub mod quill;
+pub mod redirect;
 pub mod referrals;
 pub mod report_kit;
 pub mod sequence;

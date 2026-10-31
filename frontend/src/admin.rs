@@ -24,6 +24,7 @@ pub mod pagebuilder;
 pub mod projects;
 pub mod schedules;
 pub mod sets;
+pub mod signup_tag_grants;
 pub mod staff_picks;
 pub mod trainings;
 pub mod translations;
@@ -98,6 +99,9 @@ pub fn routes() -> impl Endpoint {
         .nest("/wiki", wiki::routes())
         // Badges
         .nest("/badges", badges::routes())
+        // Signup tags that credit their cohort with a training (shown under
+        // Engine Room in the sidebar)
+        .nest("/signup-tag-grants", signup_tag_grants::routes())
         // Archive
         .nest("/archive", archive::routes())
         // Page Builder

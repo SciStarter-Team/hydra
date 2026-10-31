@@ -84,7 +84,7 @@ const JOB_TYPES: &[&str] = &[
 /// a browser reads it as another host entirely. Same rule as
 /// [`crate::gourl::GoUrl::is_valid_target`].
 fn safe_next(next: Option<String>) -> String {
-    next.filter(|n| crate::auth::is_local_next(n))
+    next.filter(|n| common::redirect::is_local_next(n))
         .unwrap_or_else(|| String::from("/library"))
 }
 

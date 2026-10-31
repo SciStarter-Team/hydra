@@ -41,6 +41,7 @@ pub mod recipient_search;
 pub mod referrals;
 pub mod secret_code;
 pub mod sessions;
+pub mod signup_tag_grants;
 pub mod stats;
 pub mod sync;
 pub mod user_matching;
@@ -3135,6 +3136,39 @@ async fn link_tokens_synchronize() {
     }
 }
 
+/// Mirror orrery's signup tag grants, so that a cohort tag made in orrery's
+/// admin credits its cohort here too.
+///
+/// A snapshot, like the link tokens: there are a handful, with nothing to page
+/// on, and a grant deleted on orrery is deleted here when it is missing from
+/// the set.
+async fn signup_tag_grants_synchronize() {
+    loop {
+        let client = reqwest::Client::new();
+        let fetched = match client
+            .get("https://scistarter.org/staff/sync/signup_tag_grants")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .send()
+            .await
+            .and_then(|response| response.error_for_status())
+        {
+            Ok(response) => response.json::<Vec<signup_tag_grants::OrreryGrant>>().await,
+            Err(e) => Err(e),
+        };
+
+        match fetched {
+            Ok(grants) => {
+                if let Err(e) = signup_tag_grants::mirror_orrery(&grants).await {
+                    eprintln!("Failed to save signup tag grants: {}", e);
+                }
+            }
+            Err(e) => eprintln!("Signup tag grants sync error: {}", e),
+        }
+
+        sleep(Duration::from_secs(60 * 60)).await;
+    }
+}
+
 /// Mirror orrery's Library Network signups into our own table.
 ///
 /// Orrery owns the signup form and remains the system of record, so every
@@ -3362,6 +3396,7 @@ async fn main() {
     let _library_signups_sync_task = spawn(library_signups_synchronize());
     let _ambassador_connections_sync_task = spawn(ambassador_connections_synchronize());
     let _link_tokens_sync_task = spawn(link_tokens_synchronize());
+    let _signup_tag_grants_sync_task = spawn(signup_tag_grants_synchronize());
 
     let _constant_contact_task = spawn(constant_contact::sweep_periodically());
 
@@ -3775,6 +3810,24 @@ async fn main() {
     ));
     toplevel.spawn(handler!(link_tokens_group, "add", link_tokens::add));
     toplevel.spawn(handler!(link_tokens_group, "delete", link_tokens::delete));
+
+    // Signup tags that credit their cohort with a training, for the admin
+    let signup_tag_grants_group = service.group("user.signup_tag_grants");
+    toplevel.spawn(handler!(
+        signup_tag_grants_group,
+        "list",
+        signup_tag_grants::list
+    ));
+    toplevel.spawn(handler!(
+        signup_tag_grants_group,
+        "add",
+        signup_tag_grants::add
+    ));
+    toplevel.spawn(handler!(
+        signup_tag_grants_group,
+        "delete",
+        signup_tag_grants::delete
+    ));
 
     // Workflow progress tracking
     let workflow_group = service.group("user.workflow");
