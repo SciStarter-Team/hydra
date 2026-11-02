@@ -12,6 +12,7 @@ use ulid::Ulid;
 use crate::{
     datasets::DATASET_REGISTRY,
     format::{add_footer_to_plain_text, html_to_markdown, wrap_html_layout},
+    opens,
     ratelimit::{mark_sent, wait_until_can_send},
     sends::send_email_queued,
     ses::{from_email, send_email},
@@ -305,10 +306,17 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             "/messaging/emailer/unsubscribe?a={}&b={}",
             item.sending_id, unsubscribe_param
         );
-        let open_path = format!(
-            "/messaging/emailer/open?a={}&b={}",
-            item.sending_id, unsubscribe_param
-        );
+
+        // Nothing about the recipient goes into this URL or the record of it.
+        let measure = sqlx::query!(
+            r#"SELECT open_label, opens_by_sending FROM sendings WHERE sending_id = ?"#,
+            item.sending_id
+        )
+        .fetch_one(db())
+        .await?;
+        let open_token = measure.open_label.as_ref().map(|_| opens::new_token());
+        let open_path = opens::open_path(open_token.as_deref());
+
         let unsubscribe_url = format!("https://{}{}", env!("DOMAIN"), unsubscribe_path);
         all_field_names.push("UNSUBSCRIBE_URL".to_string());
         all_field_values.push(unsubscribe_url.clone());
@@ -415,6 +423,20 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
         record_sent(queue_id, &item.sending_id, &email_address, &ses_message_id).await?;
+
+        // Costs one data point if it fails. Failing the message here would send
+        // it again.
+        if let (Some(token), Some(label)) = (&open_token, &measure.open_label) {
+            let sending_id = measure.opens_by_sending.then_some(item.sending_id.as_str());
+
+            if let Err(e) = opens::record_delivery(db(), token, label, sending_id).await {
+                tracing::error!(
+                    sending_id = %item.sending_id,
+                    error = %e,
+                    "Failed to count an email towards its open rate"
+                );
+            }
+        }
 
         // Delete from queue
         delete_from_queue(queue_id).await?;
@@ -656,7 +678,7 @@ async fn process_scheduled_sends() -> Result<bool, Error> {
 
     // Fetch next scheduled send that is due
     let scheduled = sqlx::query!(
-        r#"SELECT scheduled_id, user_id, hook, template_html, subject, data_sets, additional_data, recipients, reply_to, no_unsubscribe
+        r#"SELECT scheduled_id, user_id, hook, template_html, subject, data_sets, additional_data, recipients, reply_to, no_unsubscribe, open_label
            FROM scheduled_sends
            WHERE scheduled_time <= ?
            ORDER BY scheduled_time ASC
@@ -694,6 +716,7 @@ async fn process_scheduled_sends() -> Result<bool, Error> {
         Some(additional_data),
         reply_to,
         item.no_unsubscribe,
+        item.open_label,
     )
     .await?;
 

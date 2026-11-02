@@ -186,23 +186,12 @@
       </div>
       <% } %>
 
-      <% let has_guidance = !self.guidance.is_nothing() || !self.howto_video.is_empty(); %>
+      <% let has_guidance = !self.guidance.is_nothing(); %>
       <% if has_guidance || !self.how_to_join.is_empty() || self.can_edit { %>
       <div class="border border-linework rounded-sm bg-primary-light mb-4<% if !has_guidance && self.how_to_join.is_empty() { %> edit-only<% } %>">
         <dl>
           <dt class="ribbon-project bg-primary-dark text-white">How to Get Started</dt>
           <dd class="p-4">
-            <% if !self.howto_video.is_empty() { %>
-            <details class="mb-3">
-              <summary class="cursor-pointer text-primary-action underline">View the How-To Video</summary>
-              <% if self.howto_video.contains("youtube") { %>
-              <iframe class="mt-2 w-full max-w-md aspect-video" src="<%= &self.howto_video %>" title="How-to video" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-              <% } else { %>
-              <video class="mt-2 w-full max-w-md" controls src="<%= &self.howto_video %>">Sorry, your browser won't play this video. You may be able to download it from <a href="<%= &self.howto_video %>">its address</a>.</video>
-              <% } %>
-            </details>
-            <% } %>
-
             <% match &self.guidance { GetStartedGuidance::Custom(html) => { %>
             <div class="mb-3"><%- html %></div>
             <% } GetStartedGuidance::LinkedPlatform(form) => { %>

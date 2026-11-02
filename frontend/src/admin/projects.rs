@@ -189,6 +189,7 @@ pub struct AdminProjectFull {
     pub exchange: Option<String>,
     pub suborigin: String,
     pub video_url: String,
+    pub video_label: String,
     pub blog_url: String,
     pub twitter_name: String,
     pub facebook_page: String,
@@ -228,7 +229,6 @@ pub struct AdminProjectFull {
     pub prefix_how_to_logged_in: String,
     pub prefix_how_to_logged_out: String,
     pub how_to_join: String,
-    pub howto_video: String,
     pub outcomes_label: String,
     pub outcomes_link: String,
     pub time_required: String,
@@ -365,6 +365,7 @@ impl AdminProjectFull {
             promotion_time: format!("{:?}", project.promotion_time),
             promotion_target: project.promotion_target.map(|t| t.to_string()),
             video_url: project.video_url,
+            video_label: project.video_label,
             blog_url: project.blog_url,
             twitter_name: project.twitter_name,
             facebook_page: project.facebook_page,
@@ -402,7 +403,6 @@ impl AdminProjectFull {
             prefix_how_to_logged_in: project.prefix_how_to_logged_in,
             prefix_how_to_logged_out: project.prefix_how_to_logged_out,
             how_to_join: project.how_to_join,
-            howto_video: project.howto_video,
             outcomes_label: project.outcomes_label,
             outcomes_link: project.outcomes_link,
             time_required: project.time_required,
@@ -1337,7 +1337,8 @@ fn get_field_label(field_type: &str) -> &str {
         "status" => "Status",
         "difficulty" => "Difficulty",
         "url" => "Project URL",
-        "video_url" => "Video URL",
+        "video_url" => "How-To Video",
+        "video_label" => "How-To Video Label",
         "blog_url" => "Blog URL",
         "twitter_name" => "Twitter Handle",
         "entirely_online" => "Entirely Online",
@@ -1784,6 +1785,7 @@ async fn projects_update_field(
         "contacts" => crate::project::field::ProjectFieldType::Contacts,
         "url" => crate::project::field::ProjectFieldType::Url,
         "video_url" => crate::project::field::ProjectFieldType::VideoUrl,
+        "video_label" => crate::project::field::ProjectFieldType::VideoLabel,
         "blog_url" => crate::project::field::ProjectFieldType::BlogUrl,
         "twitter_name" => crate::project::field::ProjectFieldType::TwitterName,
         "facebook_page" => crate::project::field::ProjectFieldType::FacebookPage,
@@ -1800,7 +1802,6 @@ async fn projects_update_field(
         "prefix_how_to_logged_in" => crate::project::field::ProjectFieldType::PrefixHowToLoggedIn,
         "prefix_how_to_logged_out" => crate::project::field::ProjectFieldType::PrefixHowToLoggedOut,
         "how_to_join" => crate::project::field::ProjectFieldType::HowToJoin,
-        "howto_video" => crate::project::field::ProjectFieldType::HowtoVideo,
         "outcomes_label" => crate::project::field::ProjectFieldType::OutcomesLabel,
         "outcomes_link" => crate::project::field::ProjectFieldType::OutcomesLink,
         "time_required" => crate::project::field::ProjectFieldType::TimeRequired,
@@ -2260,6 +2261,9 @@ async fn projects_update_field(
             crate::project::field::ProjectFieldType::VideoUrl => {
                 crate::project::field::ProjectFieldValue::VideoUrl(form_value)
             }
+            crate::project::field::ProjectFieldType::VideoLabel => {
+                crate::project::field::ProjectFieldValue::VideoLabel(form_value)
+            }
             crate::project::field::ProjectFieldType::BlogUrl => {
                 crate::project::field::ProjectFieldValue::BlogUrl(form_value)
             }
@@ -2340,9 +2344,6 @@ async fn projects_update_field(
             }
             crate::project::field::ProjectFieldType::HowToJoin => {
                 crate::project::field::ProjectFieldValue::HowToJoin(form_value)
-            }
-            crate::project::field::ProjectFieldType::HowtoVideo => {
-                crate::project::field::ProjectFieldValue::HowtoVideo(form_value)
             }
             crate::project::field::ProjectFieldType::OutcomesLabel => {
                 crate::project::field::ProjectFieldValue::OutcomesLabel(form_value)

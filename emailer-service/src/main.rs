@@ -14,6 +14,7 @@ mod events;
 mod format;
 mod health;
 mod oneoff_emails;
+mod opens;
 mod processor;
 mod ratelimit;
 mod scheduled;
@@ -128,6 +129,11 @@ async fn main() {
         analytics_group,
         "get_sending",
         analytics::handle_get_sending
+    ));
+    toplevel.spawn(handler!(
+        analytics_group,
+        "open_rates",
+        opens::handle_open_rates
     ));
     toplevel.spawn(handler!(
         analytics_group,

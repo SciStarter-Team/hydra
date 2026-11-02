@@ -1,0 +1,42 @@
+<div class="bg-white rounded-lg shadow border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900">Email Open Rates</h3>
+        <p class="text-sm text-gray-500 mt-1">
+            Last <%= self.days %> days. Show:
+            <% for period in self.periods { %>
+                <a href="/-admin/email/opens?days=<%= period %>" class="text-indigo-600 hover:text-indigo-900"><%= period %> days</a>
+            <% } %>
+        </p>
+        <p class="text-sm text-gray-500 mt-1">
+            An open is the first time an email's logo loads. Apple Mail can load images without the message being read, and some clients block them, so these numbers are best used to compare emails with each other.
+        </p>
+    </div>
+    <% if self.rates.is_empty() { %>
+        <div class="p-6 text-center text-gray-500">
+            No emails counted in this period
+        </div>
+    <% } else { %>
+        <div class="divide-y divide-gray-200">
+            <% for rate in &self.rates { %>
+                <div class="flex flex-col xl:grid xl:grid-cols-22 gap-3 xl:gap-4 xl:items-start px-6 py-4 hover:bg-gray-50 transition-colors">
+                    <div class="xl:col-span-6">
+                        <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Email</div>
+                        <div class="text-sm font-medium text-gray-900"><%= rate.label %></div>
+                    </div>
+                    <div class="xl:col-span-2">
+                        <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Sent</div>
+                        <div class="text-sm text-gray-700"><%= rate.delivered %></div>
+                    </div>
+                    <div class="xl:col-span-2">
+                        <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Opened</div>
+                        <div class="text-sm text-gray-700"><%= rate.opened %></div>
+                    </div>
+                    <div class="xl:col-span-2">
+                        <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Open rate</div>
+                        <div class="text-sm text-gray-700"><%= format!("{:.1}", rate.percent()) %>%</div>
+                    </div>
+                </div>
+            <% } %>
+        </div>
+    <% } %>
+</div>

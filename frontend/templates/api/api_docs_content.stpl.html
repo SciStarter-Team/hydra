@@ -426,9 +426,10 @@
           <div class="accordion__panel bg-white p-4">
             <h3 class="mt-0">What is a Link Token?</h3>
             <p>
-              A Link Token is a code that a volunteer creates on their SciStarter dashboard and pastes
-              into your app or website. With it, your app can let SciStarter know each time that person
-              takes part in your project, and SciStarter adds the contribution to their dashboard.
+              A Link Token is a code that connects one volunteer's SciStarter account to your project.
+              The volunteer gets it from their SciStarter dashboard and pastes it into your website or
+              app, once. From then on, your app lets SciStarter know each time that person takes part,
+              and SciStarter adds the contribution to their dashboard.
             </p>
             <p>
               Link Tokens are built to protect privacy. You don't need the volunteer's email address or
@@ -439,74 +440,110 @@
               Link Tokens are a good fit if you don't collect your volunteers' email addresses, or if
               you'd rather your volunteers choose for themselves whether to connect. If you do have
               their email addresses, you can
-              <a href="#docs-hashed">report participation with email hashes</a> instead, with
-              nothing for them to set up.
+              <a href="#docs-hashed">report participation with email hashes</a>
+              instead, with nothing for them to set up.
             </p>
 
-            <h3>How it works</h3>
+            <h3>Two Separate Opt-Ins</h3>
+            <p>
+              Link Tokens require two separate opt-ins: project leaders choose to add a place for tokens
+              to their website or app, and volunteers independently choose whether to connect by pasting
+              one in. Each is a one-time setup: your project adds that place once, and each volunteer
+              pastes their token once. Nobody has to do anything extra each time a volunteer takes part.
+            </p>
+
+            <h3>Project Leaders</h3>
+            <p>
+              <strong>You don't create tokens or choose a type of token.</strong> SciStarter creates
+              every token, and each volunteer gets their own. Your part is:
+            </p>
             <ol class="list-decimal ml-6 mb-4">
               <li>
-                <strong>The volunteer creates a token.</strong> While signed in to SciStarter, they open
-                their dashboard at <a href="/dashboard">scistarter.org/dashboard</a>, type a name for
-                the token (your project's name works well, so they'll recognize it later), and click
-                <strong>Create a Link Token</strong>. The new token appears next to the name.
+                <strong>Add a visible SciStarter section to your website or app,</strong> where volunteers
+                paste their tokens. Examples are below.
               </li>
               <li>
-                <strong>They give it to your app.</strong> They copy the token and paste it into a place
-                your app provides for it, such as a "Connect to SciStarter" field in their account
-                settings.
+                <strong>Save each token.</strong> Keep it with that volunteer's account. It doesn't
+                expire, so you only need to ask once.
               </li>
               <li>
-                <strong>Your app saves it.</strong> Keep the token with that volunteer's account. It
-                doesn't expire, so you only need to ask once.
-              </li>
-              <li>
-                <strong>Your app reports each contribution.</strong> When the volunteer takes part, your
-                app sends SciStarter a short report that includes the token (see <em>Sending a
-                report</em>, below). The contribution then appears on their SciStarter dashboard.
-              </li>
-              <li>
-                <strong>The volunteer stays in control.</strong> They can delete the token from their
-                dashboard whenever they like. From then on SciStarter refuses reports that carry it,
-                until they create a new token and give it to you.
+                <strong>Report each contribution.</strong> When a connected volunteer takes part, your
+                app sends SciStarter a short report that includes the token. The contribution then appears
+                on their SciStarter dashboard. This step and the one before it need someone who can change
+                your app's code; the details are under <em>Reporting contributions</em>, below.
               </li>
             </ol>
-            <p>
-              A volunteer can create as many tokens as they like, each with its own name. Encourage
-              them to make a separate one for each app, so that disconnecting one doesn't affect the
-              others.
-            </p>
 
-            <h3>What SciStarter receives</h3>
-            <p>
-              Only what your report contains: which project, what kind of participation, and, if you
-              choose to send them, when and where it happened, how long it took, and how many
-              contributions it covers. SciStarter does not receive the observations, classifications,
-              or other data volunteers submit to your project.
-            </p>
-            <p>
-              Volunteers may not notice the connection at work unless you tell them, so say so in your
-              app. For example: "Each time you submit an observation, we'll let SciStarter know, so it
-              shows up on your SciStarter dashboard."
-            </p>
-
-            <h3>Where it fits in your app</h3>
-            <p>
-              Your app needs three things: a place for volunteers to connect, a few well-chosen moments
-              to suggest it, and a report each time a connected volunteer takes part.
-            </p>
-
-            <h4>A place to connect</h4>
+            <h4>Where the field goes</h4>
             <p>
               Add a SciStarter section to the volunteer's account settings, or to your app's settings
-              screen if volunteers don't have accounts with you. It needs:
+              screen if volunteers don't have accounts with you.
             </p>
-            <ul class="bullets">
-              <li>A sentence saying what connecting does, for example: &ldquo;Connect to SciStarter to see your contributions to our project on your SciStarter dashboard, alongside the rest of your citizen science.&rdquo;</li>
-              <li>A link to <a href="/dashboard">scistarter.org/dashboard</a>, opening in a new tab or the device's browser, where the volunteer creates the token. Volunteers who don't have a SciStarter account yet can make one there first.</li>
-              <li>A field to paste the token into, and a <strong>Connect</strong> button.</li>
-              <li>Once connected, a line saying so, and a <strong>Disconnect</strong> button that forgets the token.</li>
-            </ul>
+
+            <h4>What it can look like</h4>
+            <div class="border border-linework rounded-sm bg-neutral-xlight p-4 mb-4 max-w-lg" role="img" aria-label="Example of a Connect to SciStarter section: a heading, a sentence explaining it, a field labelled SciStarter Link Token holding a sample token, and a Connect button.">
+              <div class="font-bold mb-2">Connect to SciStarter</div>
+              <p class="text-sm mb-3">See your contributions to our project on your SciStarter dashboard, alongside the rest of your citizen science. You only need to do this once.</p>
+              <div class="text-sm font-bold mb-1">SciStarter Link Token</div>
+              <div class="border border-linework rounded-sm bg-white font-mono text-sm break-all px-3 py-2 mb-1">01JGEDS64C0ECBWR472V7788BF</div>
+              <p class="text-xs mb-3">Get your token at <span class="underline">scistarter.org/dashboard</span>, then copy and paste it here.</p>
+              <span class="btn btn-primary btn-small">Connect</span>
+            </div>
+            <p>
+              The code in the field is a sample of what a token looks like: a string of letters and
+              numbers. It's an example only and won't work in a report.
+            </p>
+
+            <h4>Words you can use</h4>
+            <table class="api-params">
+              <thead>
+                <tr>
+                  <th>where</th>
+                  <th>suggested wording</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Section heading</td>
+                  <td>Connect to SciStarter</td>
+                </tr>
+                <tr>
+                  <td>Explanation</td>
+                  <td>See your contributions to our project on your SciStarter dashboard, alongside the rest of your citizen science. You only need to do this once.</td>
+                </tr>
+                <tr>
+                  <td>Field label</td>
+                  <td>SciStarter Link Token</td>
+                </tr>
+                <tr>
+                  <td>Under the field</td>
+                  <td>Get your token at scistarter.org/dashboard, then copy and paste it here.</td>
+                </tr>
+                <tr>
+                  <td>Button</td>
+                  <td>Connect</td>
+                </tr>
+                <tr>
+                  <td>Once connected</td>
+                  <td>You're connected to SciStarter. Each time you submit an observation, we'll let SciStarter know, so it shows up on your SciStarter dashboard. We don't share your name, your email address, or the data you submit.</td>
+                </tr>
+                <tr>
+                  <td>Once connected, button</td>
+                  <td>Disconnect</td>
+                </tr>
+                <tr>
+                  <td>If the token doesn't work</td>
+                  <td>That token didn't work. Please copy it from your SciStarter dashboard and try again.</td>
+                </tr>
+              </tbody>
+            </table>
+            <p>
+              Change "observation" to whatever volunteers do in your project, and make sure the sentence
+              about sharing is true of what your app sends. Make the link to
+              <a href="/dashboard">scistarter.org/dashboard</a> open in a new tab or the device's browser.
+              Volunteers who don't have a SciStarter account yet can make one there first. Disconnect
+              should make your app forget the token.
+            </p>
             <p>
               When the volunteer presses Connect, send a report with type <strong>signup</strong>
               straight away. If SciStarter answers with success, the token works: show the volunteer
@@ -526,7 +563,53 @@
               <li>In welcome emails and newsletters, linking to the settings section</li>
             </ul>
 
-            <h4>Reporting contributions</h4>
+            <h3>How Volunteers Opt In</h3>
+            <p>
+              Adding the section does not automatically track your volunteers. Each person decides for
+              themselves whether to connect:
+            </p>
+            <ol class="list-decimal ml-6 mb-4">
+              <li>
+                <strong>They create a token.</strong> While signed in to SciStarter, they open their
+                dashboard at <a href="/dashboard">scistarter.org/dashboard</a>, type a name for the token
+                (your project's name works well, so they'll recognize it later), and click
+                <strong>Create a Link Token</strong>. The new token appears next to the name.
+              </li>
+              <li>
+                <strong>They paste it into your SciStarter section</strong> and press Connect.
+              </li>
+              <li>
+                <strong>That's it.</strong> They do nothing extra when they take part. Your app reports
+                their contributions from then on, and the contributions appear on their SciStarter dashboard.
+              </li>
+            </ol>
+            <p><strong>Good to know:</strong></p>
+            <ul class="bullets">
+              <li>Volunteers paste a token once for each project, not each time they take part.</li>
+              <li>A volunteer can create as many tokens as they like, each with its own name. Encourage them to make a separate one for each project, so that disconnecting one doesn't affect the others.</li>
+              <li>They can delete a token from their dashboard whenever they like. From then on SciStarter refuses reports that carry it, until they create a new token and give it to you.</li>
+              <li>If your app keeps the token on the volunteer's device rather than with an account, they'll need to paste it again on a new device or after reinstalling. If that applies to your app, tell them so.</li>
+            </ul>
+
+            <h3>What SciStarter Tracks</h3>
+            <p>Only what your report contains:</p>
+            <ul class="bullets">
+              <li>Which project</li>
+              <li>What kind of participation: collecting data, classifying or analyzing data, or signing up</li>
+              <li>The date and time, and how long it took</li>
+              <li>If you choose to send them: where it happened, how many contributions the report covers, and how likely they are to be accurate</li>
+            </ul>
+            <p>
+              <strong>What SciStarter does NOT track:</strong> The observations, classifications, or other
+              data volunteers submit to your project. Your project doesn't learn anything about the
+              volunteer's SciStarter account either: SciStarter only answers whether the report was recorded.
+            </p>
+            <p>
+              Volunteers may not notice the connection at work unless you tell them, so say so in your
+              app, as the "Once connected" wording above does.
+            </p>
+
+            <h3>Reporting contributions</h3>
             <ul class="bullets">
               <li>When your app saves a contribution from a connected volunteer, send a report with the volunteer's token. Send nothing for volunteers who haven't connected.</li>
               <li>Send reports in the background, after your app has answered the volunteer. If SciStarter can't be reached, keep the report and try again later, with <strong>when</strong> set to the time of the contribution. Resend only reports that got no answer: sending one again after SciStarter has answered counts it twice.</li>
@@ -668,6 +751,7 @@
             <h3>Storing the token</h3>
             <ul class="bullets">
               <li>Store the token as text, exactly as the volunteer pasted it apart from any spaces before or after it. Capitalization matters. Leave room for at least 64 characters.</li>
+              <li>Don't check the token's format or length. SciStarter's answer to your report says whether it's good.</li>
               <li>Ask volunteers to copy and paste the token from their SciStarter dashboard rather than typing it.</li>
             </ul>
           </div>
@@ -842,7 +926,9 @@
               <dt>country</dt>
               <dd>The country where this project or event takes place, if applicable</dd>
               <dt>video_url</dt>
-              <dd>The URL of the project's introductory video (a string)</dd>
+              <dd>The URL of the project's How-To Video (a string)</dd>
+              <dt>video_label</dt>
+              <dd>The words of the link to the project's How-To Video (a string). Without them, the link reads "How to do" followed by the project's name</dd>
               <dt>blog_url</dt>
               <dd>The URL of the project's blog (a string)</dd>
               <dt>twitter_name</dt>

@@ -158,8 +158,12 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
             input_kind: FieldInputKind::Textarea,
         }),
         ("video_url", DetailPageKind::Project) => Some(FieldMeta {
-            label: "Video URL",
+            label: "How-To Video",
             input_kind: FieldInputKind::Url,
+        }),
+        ("video_label", DetailPageKind::Project) => Some(FieldMeta {
+            label: "How-To Video Label",
+            input_kind: FieldInputKind::Text,
         }),
         ("total_expense", DetailPageKind::Project) => Some(FieldMeta {
             label: "Total Expense",
@@ -496,6 +500,12 @@ async fn read_project_field(id: &str, field_type: &str) -> Result<String, Error>
         }
         "video_url" => Ok(sqlx::query_scalar!(
             "SELECT video_url FROM projects WHERE project_id = ?",
+            id
+        )
+        .fetch_one(db())
+        .await?),
+        "video_label" => Ok(sqlx::query_scalar!(
+            "SELECT video_label FROM projects WHERE project_id = ?",
             id
         )
         .fetch_one(db())
@@ -890,6 +900,7 @@ async fn save_project_field(
         "country" => ProjectFieldValue::Country(value.to_string()),
         "entirely_online" => ProjectFieldValue::EntirelyOnline(value == "true"),
         "video_url" => ProjectFieldValue::VideoUrl(value.to_string()),
+        "video_label" => ProjectFieldValue::VideoLabel(value.to_string()),
         "total_expense" => {
             let v = if value.is_empty() {
                 None
@@ -1055,6 +1066,7 @@ pub struct SupplementalField {
     pub label: String,
     pub input_kind: FieldInputKind,
     pub current_value: String,
+    pub placeholder: String,
 }
 
 #[derive(TemplateOnce)]
@@ -1264,6 +1276,8 @@ struct FieldForm {
     value: Vec<String>,
     #[serde(default)]
     image_credit: Option<String>,
+    #[serde(default)]
+    video_label: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1326,6 +1340,22 @@ pub async fn get_edit_form(
                 label: "Image Credit".to_string(),
                 input_kind: FieldInputKind::Text,
                 current_value: credit,
+                placeholder: String::new(),
+            })
+        }
+        "video_url" => {
+            let label = read_field_value(&id, "video_label", kind)
+                .await
+                .unwrap_or_default();
+            let name = read_field_value(&id, "name", kind)
+                .await
+                .unwrap_or_default();
+            Some(SupplementalField {
+                name: "video_label".to_string(),
+                label: "How-To Video Label".to_string(),
+                input_kind: FieldInputKind::Text,
+                current_value: label,
+                placeholder: howto_video_default_text(&name),
             })
         }
         _ => None,
@@ -1398,15 +1428,15 @@ pub async fn save_field(
     })?;
 
     // Save supplemental fields
-    if let Some(credit) = &form.image_credit {
-        let credit_values = vec![credit.clone()];
+    for (name, value) in [
+        ("image_credit", &form.image_credit),
+        ("video_label", &form.video_label),
+    ] {
+        let Some(value) = value else { continue };
+        let values = vec![value.clone()];
         match kind {
-            DetailPageKind::Project => {
-                save_project_field(target_ulid, "image_credit", &credit_values, source).await
-            }
-            DetailPageKind::Event => {
-                save_event_field(target_ulid, "image_credit", &credit_values).await
-            }
+            DetailPageKind::Project => save_project_field(target_ulid, name, &values, source).await,
+            DetailPageKind::Event => save_event_field(target_ulid, name, &values).await,
         }
         .map_err(|e| {
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -1489,6 +1519,21 @@ pub async fn get_display(
     })?;
 
     Ok(Html(html).into_response())
+}
+
+/// The words of the link to a project's How-To Video when its editors chose none.
+fn howto_video_default_text(name: &str) -> String {
+    format!("How to do {name}")
+}
+
+/// The words of the link to a project's How-To Video.
+fn howto_video_text(label: &str, name: &str) -> String {
+    let label = label.trim();
+    if label.is_empty() {
+        howto_video_default_text(name)
+    } else {
+        label.to_string()
+    }
 }
 
 fn html_escape(s: &str) -> String {
@@ -1701,13 +1746,16 @@ async fn format_display_value(
             if empty {
                 not_set().to_string()
             } else {
+                let label = read_field_value(target_id, "video_label", kind)
+                    .await
+                    .unwrap_or_default();
                 let name = read_field_value(target_id, "name", kind)
                     .await
                     .unwrap_or_default();
                 format!(
-                    r#"<a href="{}" class="text-primary-action hover:underline" target="_blank" rel="noopener">How to do {}</a>"#,
+                    r#"<a href="{}" class="text-primary-action hover:underline" target="_blank" rel="noopener">{}</a>"#,
                     esc(),
-                    html_escape(&name)
+                    html_escape(&howto_video_text(&label, &name))
                 )
             },
         ),
@@ -3285,4 +3333,55 @@ pub async fn load_additional_fields(
         }
     }
     Ok(fields)
+}
+
+#[cfg(test)]
+mod howto_video_tests {
+    use super::*;
+    use assert2::check;
+
+    #[test]
+    fn a_chosen_label_words_the_link() {
+        check!(howto_video_text("Watch the tutorial", "Fern Watch") == "Watch the tutorial");
+    }
+
+    #[test]
+    fn without_a_label_the_link_names_the_project() {
+        check!(howto_video_text("", "Fern Watch") == "How to do Fern Watch");
+        check!(howto_video_text("   ", "Fern Watch") == "How to do Fern Watch");
+    }
+
+    #[test]
+    fn the_edit_form_offers_the_video_and_its_label_together() {
+        let html = FieldEditForm {
+            target_id: "01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string(),
+            field_type: "video_url".to_string(),
+            label: "How-To Video".to_string(),
+            input_kind: FieldInputKind::Url,
+            current_value: "https://example.org/ferns".to_string(),
+            supplemental: Some(SupplementalField {
+                name: "video_label".to_string(),
+                label: "How-To Video Label".to_string(),
+                input_kind: FieldInputKind::Text,
+                current_value: String::new(),
+                placeholder: howto_video_default_text("Fern Watch"),
+            }),
+        }
+        .render_once()
+        .unwrap();
+
+        check!(html.contains(">How-To Video<"));
+        check!(html.contains(">How-To Video Label<"));
+        check!(html.contains(r#"name="video_label""#));
+        check!(html.contains(r#"placeholder="How to do Fern Watch""#));
+    }
+
+    #[test]
+    fn the_form_carries_the_label_to_the_save() {
+        let form: FieldForm =
+            serde_qs::from_str("value=https%3A%2F%2Fexample.org&video_label=Fern+basics").unwrap();
+
+        check!(form.video_label.as_deref() == Some("Fern basics"));
+        check!(form.image_credit.is_none());
+    }
 }

@@ -36,7 +36,8 @@
         <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">Recent Mass Sendings</h3>
             <p class="text-sm text-gray-500 mt-1">
-                Showing <%= self.sendings.len() %> of <%= self.total %> mass sendings (2+ targets)
+                Showing <%= self.sendings.len() %> of <%= self.total %> mass sendings (2+ targets).
+                <a href="/-admin/email/opens" class="text-indigo-600 hover:text-indigo-900">Open rates by email</a>
             </p>
         </div>
         <% if self.sendings.is_empty() { %>
@@ -104,7 +105,7 @@
                         <!-- Opened -->
                         <div class="xl:col-span-2">
                             <div class="xl:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Opened</div>
-                            <div class="text-sm text-gray-700 xl:text-right"><%= sending.messages_opened %></div>
+                            <div class="text-sm text-gray-700 xl:text-right"><% if sending.opens_by_sending { %><%= sending.messages_opened %><% } else { %>&mdash;<% } %></div>
                         </div>
 
                         <!-- Bounced -->

@@ -33,6 +33,11 @@ pub struct SendEmailRequest {
     /// the offer would be a promise nothing keeps.
     #[serde(default)]
     pub no_unsubscribe: bool,
+    /// Which email this is, to count its opens under. `None` leaves its opens
+    /// uncounted, as for transactional mail and for staff trying out an email
+    /// on themselves.
+    #[serde(default)]
+    pub open_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +46,13 @@ pub enum EmailRecipient {
     UserId(Ulid),
     UserSet { slug: String },
     AddressSet { slug: String },
+}
+
+impl EmailRecipient {
+    /// Whether this is a set of people, rather than one named person.
+    pub fn is_set(&self) -> bool {
+        matches!(self, Self::UserSet { .. } | Self::AddressSet { .. })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,6 +118,35 @@ pub struct CancelScheduledSendResponse {
 pub struct QueueStatusRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenRatesRequest {
+    /// How many days back to count mail from.
+    pub days: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenRatesResponse {
+    pub rates: Vec<OpenRate>,
+}
+
+/// How often one email has been opened, across everyone it went to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenRate {
+    pub label: String,
+    pub delivered: u32,
+    pub opened: u32,
+}
+
+impl OpenRate {
+    pub fn percent(&self) -> f64 {
+        if self.delivered == 0 {
+            0.0
+        } else {
+            100.0 * f64::from(self.opened) / f64::from(self.delivered)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueStatusResponse {
     pub pending_count: u32,
     pub processing_count: u32,
@@ -146,7 +187,12 @@ pub struct SendingMetrics {
     pub total_queued: u32,
     pub messages_sent: u32,
     pub messages_skipped: u32,
+    /// Only kept for a sending addressed to sets of people; see
+    /// `opens_by_sending`.
     pub messages_opened: u32,
+    /// Whether `messages_opened` is kept for this sending.
+    #[serde(default)]
+    pub opens_by_sending: bool,
     pub messages_bounced: u32,
     pub unsubscribes: u32,
     pub complaints: u32,
@@ -219,9 +265,9 @@ pub struct UnsubscribeEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenEvent {
-    pub sending_id: Ulid,
-    pub user_id: Option<Ulid>,
-    pub email_address: String,
+    /// The message's own token, which says nothing about who received it.
+    pub token: String,
+    pub user_agent: String,
 }
 
 // ============================================================================

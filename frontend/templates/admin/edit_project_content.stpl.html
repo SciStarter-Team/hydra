@@ -456,13 +456,32 @@
         
         
         <div>
-          <label for="video-url" class="block text-sm font-medium text-gray-700">Video URL</label>
+          <label for="video-url" class="block text-sm font-medium text-gray-700">How-To Video</label>
           <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/video_url" hx-target="this" hx-swap="none">
             <input 
                 type="url" 
                 name="value"
                 id="video-url"
                 value="<%= self.project.video_url %>"
+                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+            >
+            <button 
+                type="submit"
+                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+
+        <div>
+          <label for="video-label" class="block text-sm font-medium text-gray-700">How-To Video Label</label>
+          <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/video_label" hx-target="this" hx-swap="none">
+            <input 
+                type="text" 
+                name="value"
+                id="video-label"
+                value="<%= self.project.video_label %>"
                 class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
             >
             <button 
@@ -886,24 +905,6 @@
           </form>
         </div>
         
-        <div>
-          <label for="howto-video" class="block text-sm font-medium text-gray-700">How-to Video URL</label>
-          <form class="mt-1 flex" hx-put="/-admin/projects/<%= self.project.id %>/field/howto_video" hx-target="this" hx-swap="none">
-            <input 
-                type="url" 
-                name="value"
-                id="howto-video"
-                value="<%= self.project.howto_video %>"
-                class="block w-full min-w-0 px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
-            >
-            <button 
-                type="submit"
-                class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
-            >
-              Save
-            </button>
-          </form>
-        </div>
         
         <div>
           <label for="training-materials" class="block text-sm font-medium text-gray-700">Training Materials</label>

@@ -288,6 +288,7 @@ pub enum ProjectFieldValue {
     Contacts(Box<[Contact]>),
     Url(String),
     VideoUrl(String),
+    VideoLabel(String),
     BlogUrl(String),
     TwitterName(String),
     FacebookPage(String),
@@ -304,7 +305,6 @@ pub enum ProjectFieldValue {
     PrefixHowToLoggedIn(String),
     PrefixHowToLoggedOut(String),
     HowToJoin(String),
-    HowtoVideo(String),
     OutcomesLabel(String),
     OutcomesLink(String),
     TimeRequired(String),
@@ -581,6 +581,7 @@ impl ProjectField {
             ProjectFieldValue::Contacts(_) => ProjectFieldType::Contacts,
             ProjectFieldValue::Url(_) => ProjectFieldType::Url,
             ProjectFieldValue::VideoUrl(_) => ProjectFieldType::VideoUrl,
+            ProjectFieldValue::VideoLabel(_) => ProjectFieldType::VideoLabel,
             ProjectFieldValue::BlogUrl(_) => ProjectFieldType::BlogUrl,
             ProjectFieldValue::TwitterName(_) => ProjectFieldType::TwitterName,
             ProjectFieldValue::FacebookPage(_) => ProjectFieldType::FacebookPage,
@@ -597,7 +598,6 @@ impl ProjectField {
             ProjectFieldValue::PrefixHowToLoggedIn(_) => ProjectFieldType::PrefixHowToLoggedIn,
             ProjectFieldValue::PrefixHowToLoggedOut(_) => ProjectFieldType::PrefixHowToLoggedOut,
             ProjectFieldValue::HowToJoin(_) => ProjectFieldType::HowToJoin,
-            ProjectFieldValue::HowtoVideo(_) => ProjectFieldType::HowtoVideo,
             ProjectFieldValue::OutcomesLabel(_) => ProjectFieldType::OutcomesLabel,
             ProjectFieldValue::OutcomesLink(_) => ProjectFieldType::OutcomesLink,
             ProjectFieldValue::TimeRequired(_) => ProjectFieldType::TimeRequired,
@@ -1575,6 +1575,20 @@ impl ProjectField {
         ))
     }
 
+    async fn read_video_label(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let video_label = sqlx::query_scalar!(
+            "SELECT video_label FROM projects WHERE project_id = ?",
+            project_id_str
+        )
+        .fetch_one(db())
+        .await?;
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::VideoLabel(video_label),
+        ))
+    }
+
     async fn read_blog_url(project_id: Ulid) -> Result<Self, Error> {
         let project_id_str = project_id.to_string();
         let blog_url = sqlx::query_scalar!(
@@ -1937,20 +1951,6 @@ impl ProjectField {
         Ok(ProjectField::new(
             project_id,
             ProjectFieldValue::PrefixHowToLoggedOut(prefix_how_to_logged_out),
-        ))
-    }
-
-    async fn read_howto_video(project_id: Ulid) -> Result<Self, Error> {
-        let project_id_str = project_id.to_string();
-        let howto_video = sqlx::query_scalar!(
-            "SELECT howto_video FROM projects WHERE project_id = ?",
-            project_id_str
-        )
-        .fetch_one(db())
-        .await?;
-        Ok(ProjectField::new(
-            project_id,
-            ProjectFieldValue::HowtoVideo(howto_video),
         ))
     }
 
@@ -2949,6 +2949,18 @@ impl ProjectField {
         Ok(())
     }
 
+    async fn save_video_label(&self, video_label: &str) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+        sqlx::query!(
+            "UPDATE projects SET video_label = ? WHERE project_id = ?",
+            video_label,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+        Ok(())
+    }
+
     async fn save_blog_url(&self, blog_url: &str) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
         sqlx::query!(
@@ -3267,18 +3279,6 @@ impl ProjectField {
         sqlx::query!(
             "UPDATE projects SET prefix_how_to_logged_out = ? WHERE project_id = ?",
             prefix_how_to_logged_out,
-            project_id_str
-        )
-        .execute(db())
-        .await?;
-        Ok(())
-    }
-
-    async fn save_howto_video(&self, howto_video: &str) -> Result<(), Error> {
-        let project_id_str = self.project_id.to_string();
-        sqlx::query!(
-            "UPDATE projects SET howto_video = ? WHERE project_id = ?",
-            howto_video,
             project_id_str
         )
         .execute(db())
@@ -3988,6 +3988,7 @@ impl LoadStorePeered for ProjectField {
                 self.save_outcomes_link(outcomes_link).await
             }
             ProjectFieldValue::VideoUrl(video_url) => self.save_video_url(video_url).await,
+            ProjectFieldValue::VideoLabel(video_label) => self.save_video_label(video_label).await,
             ProjectFieldValue::BlogUrl(blog_url) => self.save_blog_url(blog_url).await,
             ProjectFieldValue::TwitterName(twitter_name) => {
                 self.save_twitter_name(twitter_name).await
@@ -4050,7 +4051,6 @@ impl LoadStorePeered for ProjectField {
                 self.save_prefix_how_to_logged_out(prefix_how_to_logged_out)
                     .await
             }
-            ProjectFieldValue::HowtoVideo(howto_video) => self.save_howto_video(howto_video).await,
             ProjectFieldValue::TimeRequired(time_required) => {
                 self.save_time_required(time_required).await
             }
@@ -4267,6 +4267,7 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::OutcomesLabel => Self::read_outcomes_label(project_id).await,
             ProjectFieldType::OutcomesLink => Self::read_outcomes_link(project_id).await,
             ProjectFieldType::VideoUrl => Self::read_video_url(project_id).await,
+            ProjectFieldType::VideoLabel => Self::read_video_label(project_id).await,
             ProjectFieldType::BlogUrl => Self::read_blog_url(project_id).await,
             ProjectFieldType::TwitterName => Self::read_twitter_name(project_id).await,
             ProjectFieldType::FacebookPage => Self::read_facebook_page(project_id).await,
@@ -4302,7 +4303,6 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::PrefixHowToLoggedOut => {
                 Self::read_prefix_how_to_logged_out(project_id).await
             }
-            ProjectFieldType::HowtoVideo => Self::read_howto_video(project_id).await,
             ProjectFieldType::TimeRequired => Self::read_time_required(project_id).await,
             ProjectFieldType::TrainingMaterials => Self::read_training_materials(project_id).await,
             ProjectFieldType::ClassroomMaterials => {

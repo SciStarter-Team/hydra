@@ -1064,6 +1064,9 @@ mod sync {
         // section Web
         url: String,
         video_url: String,
+        // Absent until orrery's side of the sync is deployed.
+        #[serde(default)]
+        video_label: String,
         blog_url: String,
         twitter_name: String,
         facebook_page: String,
@@ -1082,7 +1085,6 @@ mod sync {
         prefix_how_to_logged_in: String,
         prefix_how_to_logged_out: String,
         how_to_join: String,
-        howto_video: String,
         outcomes_label: String,
         outcomes_link: String,
         time_required: String,
@@ -1469,6 +1471,7 @@ mod sync {
                 proj.contacts = contacts.into_boxed_slice();
                 proj.url = data.url;
                 proj.video_url = data.video_url;
+                proj.video_label = data.video_label;
                 proj.blog_url = data.blog_url;
                 proj.twitter_name = data.twitter_name;
                 proj.facebook_page = data.facebook_page;
@@ -1505,7 +1508,6 @@ mod sync {
                 proj.prefix_how_to_logged_in = data.prefix_how_to_logged_in;
                 proj.prefix_how_to_logged_out = data.prefix_how_to_logged_out;
                 proj.how_to_join = data.how_to_join;
-                proj.howto_video = data.howto_video;
                 proj.outcomes_label = data.outcomes_label;
                 proj.outcomes_link = data.outcomes_link;
                 proj.time_required = data.time_required;

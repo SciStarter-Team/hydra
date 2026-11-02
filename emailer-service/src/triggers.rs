@@ -785,7 +785,7 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
         // Get the stored email content
         let stored_email_id_str = trigger.stored_email_id.to_string();
         let stored_email_row = sqlx::query!(
-            r#"SELECT subject, body_delta, datasets, reply_to_noreply, no_unsubscribe FROM stored_emails WHERE stored_email_id = ?"#,
+            r#"SELECT slug, subject, body_delta, datasets, reply_to_noreply, no_unsubscribe FROM stored_emails WHERE stored_email_id = ?"#,
             stored_email_id_str
         )
         .fetch_optional(db())
@@ -833,6 +833,7 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
                     Some(additional_data),
                     reply_to,
                     no_unsubscribe,
+                    Some(stored_email.slug),
                 )
                 .await?;
 
@@ -856,6 +857,7 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
                     pin_triggering_user(&recipients_json, address.as_deref()),
                     reply_to,
                     no_unsubscribe,
+                    Some(stored_email.slug),
                 )
                 .await?;
 

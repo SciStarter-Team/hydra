@@ -204,37 +204,13 @@ pub async fn handle_unsubscribe(req: &Request) -> Result<(), Error> {
 }
 
 /// Handle open event (tracking pixel)
-/// Updates sending metrics
 #[tracing::instrument(skip_all)]
 pub async fn handle_open(req: &Request) -> Result<(), Error> {
     let event: OpenEvent = flexbuffers::from_slice(&req.message.payload)?;
-    let sending_id_str = event.sending_id.to_string();
 
-    // Update sending metrics
-    sqlx::query!(
-        r#"UPDATE sendings SET messages_opened = messages_opened + 1 WHERE sending_id = ?"#,
-        sending_id_str
-    )
-    .execute(db())
-    .await?;
+    crate::opens::note_open(db(), &event.token, &event.user_agent).await?;
 
-    tracing::debug!(
-        sending_id = %event.sending_id,
-        user_id = ?event.user_id,
-        email = %event.email_address,
-        "Open tracked"
-    );
-
-    // Log the open event
-    let _ = common::service::log_email_event(
-        None,
-        "open",
-        event.sending_id,
-        &event.email_address,
-        event.user_id,
-        None::<String>,
-    )
-    .await;
+    tracing::debug!(token = %event.token, "Open tracked");
 
     Ok(())
 }

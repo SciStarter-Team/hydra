@@ -389,7 +389,6 @@ pub struct DetailPageContent {
     /// Whether the project credits participation to the participant's
     /// SciStarter account.
     pub is_affiliate: bool,
-    pub howto_video: String,
     /// What the "How to Get Started" box says ahead of `how_to_join`.
     pub guidance: GetStartedGuidance,
 
@@ -758,8 +757,7 @@ impl DetailPage {
                 is_affiliate as "is_affiliate: bool",
                 is_inaturalist as "is_inaturalist: bool",
                 prefix_how_to_logged_in,
-                prefix_how_to_logged_out,
-                howto_video
+                prefix_how_to_logged_out
             FROM projects
             WHERE project_id = ?
             "#,
@@ -1132,7 +1130,6 @@ impl DetailPage {
             meta_description,
             how_to_join: how_to_join_html,
             is_affiliate: row.is_affiliate,
-            howto_video: row.howto_video,
             guidance,
             location_type: row.location_type,
             entirely_online: row.entirely_online,
@@ -1467,7 +1464,6 @@ impl DetailPage {
             meta_description,
             how_to_join: how_to_join_html,
             is_affiliate: false,
-            howto_video: String::new(),
             guidance: GetStartedGuidance::Nothing,
             location_type: row.location_type,
             entirely_online: row.entirely_online,

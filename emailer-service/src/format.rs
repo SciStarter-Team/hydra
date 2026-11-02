@@ -127,13 +127,13 @@ mod tests {
     fn test_wrap_html_layout() {
         let body = "<p>Test content</p>";
         let unsubscribe_path = "/messaging/emailer/unsubscribe?a=123&b=456";
-        let open_path = "/messaging/emailer/open?a=123&b=456";
+        let open_path = "/messaging/emailer/open?x=789";
         let wrapped = wrap_html_layout(body, Some(unsubscribe_path), open_path);
         assert!(wrapped.contains("<!DOCTYPE html>"));
         assert!(wrapped.contains("<p>Test content</p>"));
         // Verify the paths are present (HTML-escaped ampersands)
         assert!(wrapped.contains("/messaging/emailer/unsubscribe?a=123&amp;b=456"));
-        assert!(wrapped.contains("/messaging/emailer/open?a=123&amp;b=456"));
+        assert!(wrapped.contains("/messaging/emailer/open?x=789"));
     }
 
     #[test]

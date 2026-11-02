@@ -43,6 +43,7 @@ pub fn routes() -> Route {
         )
         .at("/queue", get(email_queue))
         .at("/queue-content", get(email_queue_content))
+        .at("/opens", get(email_opens))
         .at("/dataset/:name/variables", get(email_dataset_variables))
         .at("/merge-fields", get(email_merge_fields))
 }
@@ -520,6 +521,13 @@ async fn email_stored_send(
     // Convert delta to HTML
     let template_html = common::quill::delta_to_html(&email_response.email.body_delta)?;
 
+    // Sent only to named people, this is staff trying it out, which isn't to
+    // count towards its open rate.
+    let open_label = recipients
+        .iter()
+        .any(common::message::email::EmailRecipient::is_set)
+        .then_some(email_response.email.slug);
+
     // Send the email
     let _response: common::message::email::SendEmailResponse = common::service::request(
         "emailer.send",
@@ -535,6 +543,7 @@ async fn email_stored_send(
             // The email's own setting, so that what staff see when they send
             // it to themselves is what its trigger sends.
             no_unsubscribe: email_response.email.no_unsubscribe,
+            open_label,
         },
     )
     .await?;
@@ -851,6 +860,13 @@ async fn email_oneoff_send(
     // Convert delta to HTML
     let template_html = common::quill::delta_to_html(&email_response.email.body_delta)?;
 
+    // Sent only to named people, this is staff trying it out, which isn't to
+    // count towards its open rate. A one-off has no slug; its subject names it.
+    let open_label = recipients
+        .iter()
+        .any(common::message::email::EmailRecipient::is_set)
+        .then(|| email_response.email.subject.clone());
+
     // Send the email
     let _response: common::message::email::SendEmailResponse = common::service::request(
         "emailer.send",
@@ -864,6 +880,7 @@ async fn email_oneoff_send(
                 email_response.email.reply_to_noreply,
             ),
             no_unsubscribe: false,
+            open_label,
         },
     )
     .await?;
@@ -1526,6 +1543,53 @@ async fn email_queue_content(
         .body(content))
 }
 
+const OPEN_RATE_PERIODS: [u32; 4] = [7, 30, 90, 365];
+const DEFAULT_OPEN_RATE_PERIOD: u32 = 30;
+
+#[derive(Debug, Deserialize)]
+struct EmailOpensQuery {
+    #[serde(default)]
+    days: String,
+}
+
+#[derive(Debug, TemplateOnce)]
+#[template(path = "admin/email_opens.stpl.html")]
+pub struct EmailOpensContent {
+    days: u32,
+    periods: [u32; 4],
+    rates: Vec<common::message::email::OpenRate>,
+}
+
+#[handler]
+async fn email_opens(
+    Query(query): Query<EmailOpensQuery>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    use common::message::email::{OpenRatesRequest, OpenRatesResponse};
+
+    let days = query
+        .days
+        .parse()
+        .ok()
+        .filter(|days| OPEN_RATE_PERIODS.contains(days))
+        .unwrap_or(DEFAULT_OPEN_RATE_PERIOD);
+
+    let response: OpenRatesResponse =
+        common::service::request("emailer.analytics.open_rates", OpenRatesRequest { days }).await?;
+
+    let content = EmailOpensContent {
+        days,
+        periods: OPEN_RATE_PERIODS,
+        rates: response.rates,
+    };
+
+    AdminLayout::new("Email Open Rates", content)
+        .with_breadcrumb("Email Open Rates", None)
+        .with_sidebar_active("email-queue")
+        .into_response(user_info)
+        .await
+}
+
 // HTMX endpoint to fetch merge fields HTML fragment for selected datasets
 #[derive(Debug, Deserialize)]
 pub struct MergeFieldsQuery {
@@ -1738,8 +1802,43 @@ async fn email_dataset_variables(
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_open_rates_page_shows_each_email() {
+        let page = EmailOpensContent {
+            days: 30,
+            periods: OPEN_RATE_PERIODS,
+            rates: vec![common::message::email::OpenRate {
+                label: "foundations-invitation".to_string(),
+                delivered: 3,
+                opened: 1,
+            }],
+        }
+        .render_once()
+        .expect("render");
+
+        assert!(page.contains("foundations-invitation"));
+        assert!(page.contains("33.3%"));
+        assert!(page.contains("Last 30 days"));
+        assert!(page.contains("/-admin/email/opens?days=365"));
+    }
+
+    #[test]
+    fn the_open_rates_page_says_when_nothing_was_counted() {
+        let page = EmailOpensContent {
+            days: 7,
+            periods: OPEN_RATE_PERIODS,
+            rates: Vec::new(),
+        }
+        .render_once()
+        .expect("render");
+
+        assert!(page.contains("No emails counted in this period"));
+    }
+
     fn htmx_request() -> poem::Request {
-        poem::Request::builder().header("HX-Request", "true").finish()
+        poem::Request::builder()
+            .header("HX-Request", "true")
+            .finish()
     }
 
     /// After an htmx request, a save stays put, a delete leaves the editor of

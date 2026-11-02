@@ -437,10 +437,12 @@ impl Sending {
     async fn create(
         template_html: String,
         subject: String,
+        recipients: &[EmailRecipient],
         data_sets: Vec<String>,
         additional_data: Option<Vec<(String, String)>>,
         reply_to: Option<Vec<String>>,
         no_unsubscribe: bool,
+        open_label: Option<String>,
     ) -> Result<Self, Error> {
         let sending_id = Ulid::new();
         let sending_id_str = sending_id.to_string();
@@ -454,11 +456,12 @@ impl Sending {
             .filter(|r| !r.is_empty())
             .map(|r| serde_json::to_string(&r))
             .transpose()?;
+        let opens_by_sending = crate::opens::opens_by_sending(open_label.as_deref(), recipients);
 
         // Create sending record with total_queued = 0 initially
         sqlx::query!(
-            r#"INSERT INTO sendings (sending_id, created_at, subject, total_queued, template_html, data_sets, additional_data, reply_to, no_unsubscribe)
-               VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)"#,
+            r#"INSERT INTO sendings (sending_id, created_at, subject, total_queued, template_html, data_sets, additional_data, reply_to, no_unsubscribe, open_label, opens_by_sending)
+               VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)"#,
             sending_id_str,
             created_at,
             subject,
@@ -466,7 +469,9 @@ impl Sending {
             data_sets_json,
             additional_data_json,
             reply_to_json,
-            no_unsubscribe
+            no_unsubscribe,
+            open_label,
+            opens_by_sending
         )
         .execute(db())
         .await?;
@@ -508,14 +513,17 @@ pub async fn send_email(
     additional_data: Option<Vec<(String, String)>>,
     reply_to: Option<Vec<String>>,
     no_unsubscribe: bool,
+    open_label: Option<String>,
 ) -> Result<Ulid, Error> {
     let sending = Sending::create(
         template_html,
         subject,
+        &recipients,
         data_sets,
         additional_data,
         reply_to,
         no_unsubscribe,
+        open_label,
     )
     .await?;
     let sending_id = sending.sending_id;
@@ -553,14 +561,17 @@ pub async fn send_email_queued(
     additional_data: Option<Vec<(String, String)>>,
     reply_to: Option<Vec<String>>,
     no_unsubscribe: bool,
+    open_label: Option<String>,
 ) -> Result<Ulid, Error> {
     let sending = Sending::create(
         template_html,
         subject,
+        &recipients,
         data_sets,
         additional_data,
         reply_to,
         no_unsubscribe,
+        open_label,
     )
     .await?;
     let sending_id = sending.sending_id;
@@ -592,6 +603,7 @@ pub async fn handle_send_request(req: &Request) -> Result<SendEmailResponse, Err
         request.additional_data,
         request.reply_to,
         request.no_unsubscribe,
+        request.open_label,
     )
     .await?;
 

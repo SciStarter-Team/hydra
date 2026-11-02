@@ -593,6 +593,7 @@ pub async fn send_email(
         additional_data: additional_data.into(),
         reply_to: reply_to.into(),
         no_unsubscribe: false,
+        open_label: None,
     };
 
     let response: SendEmailResponse = request("emailer.send", email_request).await?;
@@ -602,7 +603,8 @@ pub async fn send_email(
 /// A convenience wrapper around [`common::service::send`] for logging
 /// email events to the log service.
 ///
-/// Event types: "sent", "bounce", "complaint", "open", "unsubscribe"
+/// Event types: "sent", "bounce", "complaint", "unsubscribe". Opens are not
+/// among them, because this log names the recipient; see the emailer's `opens`.
 pub fn log_email_event(
     when: impl Into<Option<TimeString>>,
     event_type: impl Into<String>,

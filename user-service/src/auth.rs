@@ -368,6 +368,7 @@ async fn send_completion_email(email: &str, code: &str) -> Result<(), Error> {
             additional_data: None,
             reply_to: noreply_reply_to(true),
             no_unsubscribe: false,
+            open_label: None,
         },
     )
     .await?;

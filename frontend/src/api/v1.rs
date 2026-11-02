@@ -1114,6 +1114,7 @@ pub async fn project_add(body: String) -> Result<Response, Error> {
         ("description", &mut proj.description),
         ("url", &mut proj.url),
         ("video_url", &mut proj.video_url),
+        ("video_label", &mut proj.video_label),
         ("blog_url", &mut proj.blog_url),
         ("twitter_name", &mut proj.twitter_name),
         ("facebook_page", &mut proj.facebook_page),

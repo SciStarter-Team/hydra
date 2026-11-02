@@ -320,54 +320,32 @@ async fn process_unsubscribe(Query(params): Query<UnsubscribeParams>) -> Result<
     .await
 }
 
+/// Open tracking query parameters.
+///
+/// Optional because the logo has to load whatever the URL holds. Mail sent
+/// without a token holds none, and mail sent by orrery holds tokens of its own,
+/// which go on being opened after the cutover and match nothing here.
+#[derive(Debug, Deserialize)]
+struct OpenParams {
+    #[serde(default)]
+    x: String, // the message's own token
+}
+
 /// Email open tracking pixel (GET)
-/// Returns the SciStarter logo PNG
+/// Returns the SciStarter logo PNG. no-store asks image proxies and clients to
+/// come back on a later open.
 #[handler]
-#[tracing::instrument]
-async fn track_open(Query(params): Query<UnsubscribeParams>) -> Response {
-    // Parse sending_id
-    if let Ok(sending_id) = params.a.parse::<Ulid>() {
-        // Determine if b parameter is email or user_id
-        if params.b.contains('@') {
-            // Send open event to emailer service
-            let open_event = OpenEvent {
-                sending_id,
-                user_id: None,
-                email_address: params.b.clone(),
-            };
-
-            if let Err(e) = send("emailer.event.open", open_event).await {
-                tracing::error!("Failed to send open event for email: {:?}", e);
-            }
-        } else if let Ok(uid) = params.b.parse::<Ulid>() {
-            // b parameter is a user_id - look up the email
-            use common::message::user::{UserEmailInfo, UserEmailInfoRequest};
-            use common::service::request;
-
-            if let Ok(user) = request::<UserEmailInfo>(
-                "user.info.email_info",
-                UserEmailInfoRequest { user_id: uid },
-            )
-            .await
-            {
-                // Send open event to emailer service
-                let open_event = OpenEvent {
-                    sending_id,
-                    user_id: Some(uid),
-                    email_address: user.primary_email,
-                };
-
-                if let Err(e) = send("emailer.event.open", open_event).await {
-                    tracing::error!("Failed to send open event for uid: {:?}", e);
-                }
-            } else {
-                tracing::error!("Failed to lookup user email: {:?}", params.b);
-            }
-        } else {
-            tracing::warn!("Invalid b parameter in open tracking: {}", params.b);
+#[tracing::instrument(skip_all)]
+async fn track_open(Query(params): Query<OpenParams>, req: &poem::Request) -> Response {
+    if !params.x.is_empty() {
+        let open_event = OpenEvent {
+            token: params.x,
+            user_agent: req.header("User-Agent").unwrap_or_default().to_string(),
         };
-    } else {
-        tracing::warn!("Invalid a parameter in open tracking: {}", params.a);
+
+        if let Err(e) = send("emailer.event.open", open_event).await {
+            tracing::error!("Failed to send open event: {:?}", e);
+        }
     }
 
     // Return PNG logo regardless of event success
@@ -381,5 +359,37 @@ async fn track_open(Query(params): Query<UnsubscribeParams>) -> Response {
 
     Response::builder()
         .content_type("image/png")
+        .header("Cache-Control", "no-store")
         .body(logo.data.into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use poem::test::TestClient;
+
+    use super::*;
+
+    fn app() -> impl Endpoint {
+        Route::new().at("/open", get(track_open))
+    }
+
+    async fn assert_serves_the_logo(url: &str) {
+        let response = TestClient::new(app()).get(url).send().await;
+
+        response.assert_status_is_ok();
+        response.assert_content_type("image/png");
+        response.assert_header("Cache-Control", "no-store");
+    }
+
+    #[tokio::test]
+    async fn the_logo_loads_for_a_message_that_is_not_measured() {
+        assert_serves_the_logo("/open").await;
+    }
+
+    /// Nothing but a message's own token is read from the URL, so anything
+    /// else there gets the logo and counts nothing.
+    #[tokio::test]
+    async fn the_logo_loads_whatever_else_the_url_holds() {
+        assert_serves_the_logo("/open?a=123&b=someone@example.invalid").await;
+    }
 }
