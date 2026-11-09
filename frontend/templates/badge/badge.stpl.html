@@ -10,6 +10,7 @@
     <link rel="stylesheet" type="text/css" href="/-static/css/style.css" />
     <script src="/-static/js/scripts.js"></script>
     <script src="/-static/js/clickthrough.js" defer></script>
+    <script src="/-static/js/copy-text.js" defer></script>
     <% if self.own_badge { %>
     <script type="text/javascript" src="https://platform-api.sharethis.com/js/sharethis.js#property=684be7fdeb2dda0012da59f3&product=inline-share-buttons&source=platform" async="async"></script>
     <% } %>
@@ -195,37 +196,6 @@
                const arrow = this.querySelector('.faq-arrow');
                answer.classList.toggle('hidden');
                arrow.classList.toggle('rotate-180');
-           });
-       });
-      </script>
-      <script>
-       // Copies the text of the element a button names. Where the clipboard
-       // is unavailable or refused, the text is selected instead, so the
-       // reader can copy it themselves.
-       document.querySelectorAll('.badge-copy').forEach(button => {
-           const source = document.getElementById(button.dataset.copies);
-           const status = button.querySelector('.badge-copy-status');
-           let timer;
-
-           button.addEventListener('click', async () => {
-               try {
-                   await navigator.clipboard.writeText(source.textContent);
-               } catch (e) {
-                   const range = document.createRange();
-                   range.selectNodeContents(source);
-                   const selection = window.getSelection();
-                   selection.removeAllRanges();
-                   selection.addRange(range);
-                   return;
-               }
-
-               status.textContent = button.dataset.copied;
-               button.classList.add('copied');
-               clearTimeout(timer);
-               timer = setTimeout(() => {
-                   status.textContent = '';
-                   button.classList.remove('copied');
-               }, 2000);
            });
        });
       </script>

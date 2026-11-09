@@ -1,6 +1,7 @@
 //! The dashboard's Link Tokens, which the account holder gives an affiliate
-//! project so that it can report their contributions. Made, listed and
-//! deleted here; the tokens themselves are user-service's.
+//! project so that it can report their contributions. Listed and deleted here,
+//! and further ones added; the tokens themselves are user-service's, which
+//! gives every account its first.
 
 use anyhow::{Error, anyhow};
 use common::message::dashboard::{
@@ -41,7 +42,7 @@ impl LinkTokensSection {
 }
 
 async fn list(user_id: Ulid) -> Vec<LinkToken> {
-    common::service::request("user.link_tokens.list_by_user", user_id.to_string())
+    common::service::request("user.link_tokens.ensure_by_user", user_id.to_string())
         .await
         .unwrap_or_default()
 }
@@ -140,11 +141,75 @@ mod tests {
         .render_once()
         .unwrap();
 
-        check!(html.contains("Stall Catchers"));
         check!(html.contains("01HQ3Z8Y6V2N4J5K7M8P9R0S1T"));
         check!(html.contains(r#"name="token" value="01HQ3Z8Y6V2N4J5K7M8P9R0S1T""#));
         check!(html.contains(r#"hx-post="/dashboard/link-tokens/delete""#));
+        check!(html.contains("hx-confirm="));
         check!(!html.contains(r#"role="alert""#));
+    }
+
+    #[test]
+    fn a_lone_token_is_shown_without_a_name_and_with_the_form_folded_away() {
+        let html = LinkTokensSection {
+            tokens: vec![token("default", "01HQ3Z8Y6V2N4J5K7M8P9R0S1T")],
+            label: String::new(),
+            refusal: None,
+        }
+        .render_once()
+        .unwrap();
+
+        check!(!html.contains(">default<"));
+        check!(html.contains("<details>"));
+        check!(html.contains("+ Add another token"));
+    }
+
+    #[test]
+    fn several_tokens_are_told_apart_by_name() {
+        let html = LinkTokensSection {
+            tokens: vec![
+                token("default", "01HQ3Z8Y6V2N4J5K7M8P9R0S1T"),
+                token("Stall Catchers", "01HQ3Z8Y6V2N4J5K7M8P9R0S2V"),
+            ],
+            label: String::new(),
+            refusal: None,
+        }
+        .render_once()
+        .unwrap();
+
+        check!(html.contains(">default<"));
+        check!(html.contains(">Stall Catchers<"));
+    }
+
+    #[test]
+    fn a_refusal_leaves_the_form_open() {
+        let html = LinkTokensSection {
+            tokens: vec![token("default", "01HQ3Z8Y6V2N4J5K7M8P9R0S1T")],
+            label: "default".to_string(),
+            refusal: Some("Could not create a token named \"default\".".to_string()),
+        }
+        .render_once()
+        .unwrap();
+
+        check!(html.contains("<details open>"));
+    }
+
+    #[test]
+    fn each_copy_button_names_the_element_holding_its_own_token() {
+        let html = LinkTokensSection {
+            tokens: vec![
+                token("Stall Catchers", "01HQ3Z8Y6V2N4J5K7M8P9R0S1T"),
+                token("Anecdata", "01HQ3Z8Y6V2N4J5K7M8P9R0S2V"),
+            ],
+            label: String::new(),
+            refusal: None,
+        }
+        .render_once()
+        .unwrap();
+
+        for value in ["01HQ3Z8Y6V2N4J5K7M8P9R0S1T", "01HQ3Z8Y6V2N4J5K7M8P9R0S2V"] {
+            check!(html.contains(&format!(r#"data-copies="link-token-{value}""#)));
+            check!(html.contains(&format!(r#"id="link-token-{value}" class="font-mono text-sm break-all select-all">{value}<"#)));
+        }
     }
 
     #[test]

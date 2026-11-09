@@ -1104,7 +1104,8 @@ pub const DEFAULT_LINK_TOKEN_LABEL: &str = "default";
 
 /// A Link Token: a string an account holder gives an affiliate project, which
 /// the project sends back with each contribution it reports, to say whose it
-/// is. Returned by `user.link_tokens.list_by_user`, oldest first.
+/// is. Returned by `user.link_tokens.ensure_by_user`, oldest first, which gives
+/// an account with no token its first.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkToken {
     pub token: String,

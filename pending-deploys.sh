@@ -30,6 +30,11 @@
 # Exit status is 0 when everything is up to date and 1 when at least
 # one service is pending, so it can gate a deploy script or hook.
 #
+# With --files <service> it lists, one per line, the files behind that
+# service's source drift (the changed files described above), and exits 0.
+# site-snapshot uses this to choose which pages to screenshot around a
+# frontend deploy.
+#
 # With -d/--deploy it doesn't just report: it runs the needed deploys
 # via the `remote` tool, skipping services that are already up to date.
 # Deploys run in sequence in dependency order — log-service first,
@@ -50,23 +55,35 @@ cd "$(dirname "$0")"
 
 usage() {
     cat <<'EOF'
-Usage: pending-deploys.sh [-d|--deploy]
+Usage: pending-deploys.sh [-d|--deploy | --files SERVICE]
 
 Without options, report which services have undeployed changes (exit 1
 if any are pending, 0 otherwise).
 
-  -d, --deploy   Deploy the pending services via the `remote` tool, in
-                 order: log-service, user-service, any other pending
-                 services, then frontend last. Up-to-date services are
-                 skipped.
-  -h, --help     Show this help and exit.
+  -d, --deploy       Deploy the pending services via the `remote` tool, in
+                     order: log-service, user-service, any other pending
+                     services, then frontend last. Up-to-date services are
+                     skipped.
+  --files SERVICE    List the source files SERVICE's next deploy would ship
+                     changes to, one per line.
+  -h, --help         Show this help and exit.
 EOF
 }
 
 do_deploy=0
+files_for=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -d|--deploy) do_deploy=1 ;;
+        --files)
+            if [[ $# -lt 2 ]]; then
+                printf 'pending-deploys.sh: --files needs a service\n\n' >&2
+                usage >&2
+                exit 2
+            fi
+            shift
+            files_for=$1
+            ;;
         -h|--help) usage; exit 0 ;;
         *)
             printf 'pending-deploys.sh: unknown option: %s\n\n' "$1" >&2
@@ -117,6 +134,22 @@ newer_than_marker() {
     [[ ! -e "$file" || "$file" -nt "$marker" ]]
 }
 
+# The service's source files that differ from its deployed revision and
+# changed after the deploy stamped its marker — what the next deploy
+# ships that the last one didn't. (Files already in their current state
+# at deploy time shipped with it.)
+undeployed_files() {
+    local service=$1 marker=$2 rev=$3 file
+    local -a paths
+    mapfile -t paths < <(service_core_paths "$service")
+    while IFS= read -r file; do
+        [[ -n "$file" ]] || continue
+        if newer_than_marker "$file" "$marker"; then
+            printf '%s\n' "$file"
+        fi
+    done < <(changed_files "$rev" "${paths[@]}")
+}
+
 # Emit "name version" per [[package]] entry of a Cargo.lock on stdin.
 lock_packages() {
     awk -F'"' '/^name = /{n=$2} /^version = /{print n " " $2}'
@@ -144,6 +177,17 @@ service_closure() {
     cargo tree -p "$pkg" --prefix none --locked 2>/dev/null \
         | awk 'NF >= 2 { v = $2; sub(/^v/, "", v); print $1 " " v }' | sort -u
 }
+
+if [[ -n "$files_for" ]]; then
+    marker="$files_for/deployed"
+    rev=$(sed -n 2p "$marker" 2>/dev/null || true)
+    if [[ ! "$rev" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "$rev^{commit}" 2>/dev/null; then
+        printf 'pending-deploys.sh: %s records no deployed revision\n' "$marker" >&2
+        exit 2
+    fi
+    undeployed_files "$files_for" "$marker" "$rev"
+    exit 0
+fi
 
 pending=0
 checked=0
@@ -191,16 +235,8 @@ while IFS= read -r service; do
         && git cat-file -e "$deployed_rev^{commit}" 2>/dev/null; then
         # Content-based check against the recorded deployed revision.
 
-        # Source drift: files differing from the deployed revision that
-        # changed after the deploy stamped the marker. (Files already in
-        # their current state at deploy time shipped with it.)
-        changed=()
-        while IFS= read -r file; do
-            [[ -n "$file" ]] || continue
-            if newer_than_marker "$file" "$marker"; then
-                changed+=("$file")
-            fi
-        done < <(changed_files "$deployed_rev" "${core_paths[@]}")
+        # Source drift.
+        mapfile -t changed < <(undeployed_files "$service" "$marker" "$deployed_rev")
 
         if [[ ${#changed[@]} -gt 0 ]]; then
             sample=$(printf '%s, ' "${changed[@]:0:3}")

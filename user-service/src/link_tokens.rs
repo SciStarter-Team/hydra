@@ -20,9 +20,27 @@ use jiff::Timestamp;
 use sqlx::SqlitePool;
 use ulid::Ulid;
 
-pub async fn list_by_user(req: &Request) -> Result<Vec<LinkToken>, Error> {
-    let user_id: String = flexbuffers::from_slice(&req.message.payload)?;
-    list(db(), &user_id).await
+pub async fn ensure_by_user(req: &Request) -> Result<Vec<LinkToken>, Error> {
+    let user_id: Ulid = flexbuffers::from_slice::<String>(&req.message.payload)?.parse()?;
+    ensure(db(), user_id).await
+}
+
+/// The account's tokens, oldest first. An account with none is given one here,
+/// so that the dashboard always has a token to copy; it is made when first
+/// needed because most accounts never open the dashboard.
+async fn ensure(pool: &SqlitePool, user_id: Ulid) -> Result<Vec<LinkToken>, Error> {
+    let user_id_str = user_id.to_string();
+    let tokens = list(pool, &user_id_str).await?;
+
+    if !tokens.is_empty() {
+        return Ok(tokens);
+    }
+
+    // Requests racing here all ask for the default label, and only the first
+    // can have it.
+    add_token(pool, user_id, "").await?;
+
+    list(pool, &user_id_str).await
 }
 
 async fn list(pool: &SqlitePool, user_id: &str) -> Result<Vec<LinkToken>, Error> {
@@ -253,6 +271,31 @@ mod tests {
             .into_iter()
             .map(|t| t.label)
             .collect()
+    }
+
+    #[tokio::test]
+    async fn an_account_with_no_token_is_given_one_and_keeps_it() {
+        let pool = fixture().await;
+
+        let first = ensure(&pool, ada()).await.unwrap();
+        let second = ensure(&pool, ada()).await.unwrap();
+
+        check!(first.len() == 1);
+        check!(first[0].label == "default");
+        check!(second.len() == 1);
+        check!(second[0].token == first[0].token);
+    }
+
+    #[tokio::test]
+    async fn an_account_with_a_token_is_not_given_another() {
+        let pool = fixture().await;
+
+        add_token(&pool, ada(), "Stall Catchers").await.unwrap();
+
+        let tokens = ensure(&pool, ada()).await.unwrap();
+
+        check!(tokens.len() == 1);
+        check!(tokens[0].label == "Stall Catchers");
     }
 
     #[tokio::test]

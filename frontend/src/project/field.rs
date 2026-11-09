@@ -134,6 +134,7 @@ pub const TOPICS_VOCABULARY: &[&str] = &[
     "Awards",
     "Biology",
     "Birds",
+    "Books & Literature",
     "Chemistry",
     "Climate & Weather",
     "Computers & Technology",

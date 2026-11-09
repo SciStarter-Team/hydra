@@ -48,6 +48,7 @@ pub const TOPICS: &[(i64, &str)] = &[
     (26, "Science Policy"),
     (27, "Climate & Weather"),
     (203, "Disaster Response"),
+    (426, "Books & Literature"),
 ];
 
 pub const ACTIVITIES: &[(i64, &str)] = &[

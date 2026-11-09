@@ -3806,8 +3806,8 @@ async fn main() {
     let link_tokens_group = service.group("user.link_tokens");
     toplevel.spawn(handler!(
         link_tokens_group,
-        "list_by_user",
-        link_tokens::list_by_user
+        "ensure_by_user",
+        link_tokens::ensure_by_user
     ));
     toplevel.spawn(handler!(link_tokens_group, "add", link_tokens::add));
     toplevel.spawn(handler!(link_tokens_group, "delete", link_tokens::delete));

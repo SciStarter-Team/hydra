@@ -1,0 +1,171 @@
+# Which pages a frontend deploy changes, for before/after screenshots.
+#
+# remote.ron's deploy-frontend runs `site-snapshot before` first (before it
+# stamps frontend/deployed) and `site-snapshot after` in its cleanup, so
+# both `remote deploy-frontend` and `./pending-deploys.sh -d` take them.
+# Pages that look different afterwards land in the "Site screenshots"
+# folder on the SciStarter shared drive. `site-snapshot pages` shows what
+# the undeployed changes would capture, and why.
+#
+# A changed file that matches `visible` but no [[map]] rule stops the
+# deploy to ask which pages show it, and can record the answer here. A
+# rule with `pages = []` says its files have no page to capture. Commits
+# can add pages with a `Screenshots: /path, /other` trailer, and
+# `SITE_SNAPSHOT_SKIP=1` deploys without screenshots.
+#
+# Rust source isn't listed as visible: whether a .rs change shows depends
+# on the change, not the file. Use a trailer for those, beyond the
+# handlers mapped below.
+#
+# Only signed-out views are captured. Signed-in, staff and partner-only
+# screens are mapped to no pages.
+
+name = "hydra"
+url = "https://next.scistarter.org"
+deployed-revision = ["sed", "-n", "2p", "frontend/deployed"]
+
+# The same notion of "undeployed" that pending-deploys.sh reports.
+changed-files = ["./pending-deploys.sh", "--files", "frontend"]
+
+# Content that changes by itself (social feeds, countdown clocks): shown,
+# but not counted as a change.
+volatile = ['[id^="curator-feed"]', ".countdown"]
+
+visible = [
+    "frontend/templates/**",
+    "frontend/static/**",
+    "frontend/components/**",
+]
+
+[sets]
+# Site-wide chrome and styles show on every page; these cover the home
+# page, the finder, the detail page (projects and events) and a CMS page.
+core = ["/", "/finder", "/projects/globe-at-night", "/library-kits"]
+detail = ["/projects/globe-at-night"]
+cms = ["/library-kits"]
+csm = ["/citizensciencemonth/", "/citizensciencemonth/participate"]
+
+# Site-wide
+
+[[map]]
+files = [
+    "frontend/templates/site/head.stpl.html",
+    "frontend/templates/site/header.stpl.html",
+    "frontend/templates/site/footer.stpl.html",
+    "frontend/templates/site/sidebar.stpl.html",
+    "frontend/templates/site/standard_layout.stpl.html",
+    "frontend/templates/site/htmx_runtime.stpl.html",
+    "frontend/templates/site/notification*.stpl.html",
+    "frontend/templates/site/verify_banner*.stpl.html",
+    "frontend/static/css/**",
+    "frontend/static/js/scripts.js",
+    "frontend/static/js/copy-text.js",
+    "frontend/static/js/notifications.js",
+    "frontend/static/js/verify-banner.js",
+    "frontend/static/fonts/**",
+    "frontend/static/webawesome/**",
+    "frontend/static/htmx*.js",
+    "frontend/static/hx-*.js",
+]
+pages = ["@core"]
+
+# Pages
+
+[[map]]
+files = [
+    "frontend/templates/pages/index*.stpl.html",
+    "frontend/src/pages/index.rs",
+]
+pages = ["/"]
+
+[[map]]
+files = [
+    "frontend/templates/pages/finder*.stpl.html",
+    "frontend/templates/search/**",
+    "frontend/templates/component/pagination.stpl.html",
+    "frontend/src/search.rs",
+    "frontend/src/search/**",
+]
+pages = ["/finder"]
+
+[[map]]
+files = [
+    "frontend/templates/pages/detail_page*.stpl.html",
+    "frontend/src/component/detail_page.rs",
+    "frontend/static/js/social_share.js",
+]
+pages = ["@detail"]
+
+[[map]]
+files = [
+    "frontend/templates/pages/content*.stpl.html",
+    "frontend/components/**",
+    "frontend/src/pagebuilder.rs",
+    "frontend/src/pagebuilder/**",
+]
+pages = ["@cms"]
+
+[[map]]
+files = ["frontend/templates/pages/csm*.stpl.html", "frontend/templates/pages/csm/**", "frontend/src/csm.rs"]
+pages = ["@csm"]
+
+[[map]]
+files = ["frontend/templates/pages/communities*.stpl.html", "frontend/templates/pages/community*.stpl.html"]
+pages = ["/communities"]
+
+[[map]]
+files = ["frontend/templates/pages/data*.stpl.html", "frontend/src/pages/data.rs"]
+pages = ["/data"]
+
+[[map]]
+files = ["frontend/templates/training/**", "frontend/src/training.rs", "frontend/src/training/**"]
+pages = ["/training/foundations"]
+
+[[map]]
+files = ["frontend/templates/exchange/**", "frontend/static/exchange/**", "frontend/src/exchange/**"]
+pages = ["/exchange/35/"]
+
+[[map]]
+files = ["frontend/templates/site/add_*.stpl.html", "frontend/src/add.rs"]
+pages = ["/add"]
+
+[[map]]
+files = ["frontend/templates/auth/login_signup*.stpl.html"]
+pages = ["/login"]
+
+[[map]]
+files = ["frontend/templates/api/api_docs*.stpl.html"]
+pages = ["/api"]
+
+[[map]]
+files = ["frontend/static/design/**"]
+pages = ["/-static/design/design-guide.html"]
+
+# No page to capture: signed-in, staff, partner-only, email, or embedded
+# elsewhere
+
+[[map]]
+files = [
+    "frontend/templates/admin/**",
+    "frontend/templates/staff/**",
+    "frontend/templates/dashboard/**",
+    "frontend/templates/people_finder/**",
+    "frontend/templates/emailer/**",
+    "frontend/templates/dev/**",
+    "frontend/templates/oauth2/**",
+    "frontend/templates/sitemap/**",
+    "frontend/templates/api/api_key*.stpl.html",
+    "frontend/templates/pages/entity_list*.stpl.html",
+    "frontend/templates/pages/entity_password*.stpl.html",
+    "frontend/templates/profile*.stpl.html",
+    "frontend/templates/evolveme/**",
+    "frontend/static/evolveme/**",
+    "frontend/templates/embed/**",
+    "frontend/static/certificates/**",
+    "frontend/static/vendor.sh",
+]
+pages = []
+
+# Individual event pages expire, so there is no lasting one to map event
+# changes to: name a current event when asked, and answer "n" to
+# remembering it.
