@@ -169,3 +169,27 @@ pages = []
 # Individual event pages expire, so there is no lasting one to map event
 # changes to: name a current event when asked, and answer "n" to
 # remembering it.
+
+[[map]]
+files = ["frontend/templates/component/concierge_section.stpl.html"]
+pages = ["@core"]
+
+[[map]]
+files = ["frontend/templates/concierge/chat.stpl.html"]
+pages = ["@core"]
+
+[[map]]
+files = ["frontend/templates/concierge/form.stpl.html"]
+pages = ["@core"]
+
+[[map]]
+files = ["frontend/templates/concierge/launcher.stpl.html"]
+pages = ["@core"]
+
+[[map]]
+files = ["frontend/templates/concierge/turn_response.stpl.html"]
+pages = ["@core"]
+
+[[map]]
+files = ["frontend/templates/concierge/turn.stpl.html"]
+pages = ["@core"]
