@@ -104,7 +104,9 @@ pub fn project_slug(url: &str) -> Option<String> {
     }
 
     let parsed = url::Url::parse(url).ok()?;
-    let mut path = parsed.path_segments()?.filter(|segment| !segment.is_empty());
+    let mut path = parsed
+        .path_segments()?
+        .filter(|segment| !segment.is_empty());
 
     if path.next()? != "projects" {
         return None;
@@ -364,7 +366,9 @@ mod tests {
 
     #[test]
     fn network_sites_are_recognised() {
-        assert!(is_network_url("https://www.inaturalist.org/projects/echidnacsi"));
+        assert!(is_network_url(
+            "https://www.inaturalist.org/projects/echidnacsi"
+        ));
         assert!(is_network_url("https://inaturalist.ala.org.au/projects/x"));
         assert!(is_network_url("https://inaturalist.nz/projects/x"));
         assert!(is_network_url("https://www.naturalista.mx/projects/x"));
@@ -407,9 +411,15 @@ mod tests {
 
     #[test]
     fn the_answer_must_be_the_project_asked_about() {
-        assert_eq!(matching_project(found(&[(7, "EchidnaCSI")]), "echidnacsi"), Some(7));
+        assert_eq!(
+            matching_project(found(&[(7, "EchidnaCSI")]), "echidnacsi"),
+            Some(7)
+        );
         assert_eq!(matching_project(found(&[(7, "echidnacsi")]), "7"), Some(7));
-        assert_eq!(matching_project(found(&[(7, "something-else")]), "new"), None);
+        assert_eq!(
+            matching_project(found(&[(7, "something-else")]), "new"),
+            None
+        );
         assert_eq!(matching_project(found(&[]), "echidnacsi"), None);
     }
 }

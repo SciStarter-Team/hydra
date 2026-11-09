@@ -36,10 +36,15 @@ where
     type Prepared = StandardLayoutPrepared<T>;
 
     async fn prepare(self, user: Self::Param) -> Result<Self::Prepared, anyhow::Error> {
-        let header = Header::default()
-            .with_current_uri(&self.path)
-            .prepare(user.clone())
-            .await?;
+        // Both may ask the user service about a signed-in viewer, so they
+        // wait together rather than one after the other.
+        let (header, concierge) = tokio::join!(
+            Header::default()
+                .with_current_uri(&self.path)
+                .prepare(user.clone()),
+            crate::concierge::launcher_for(user.as_deref()),
+        );
+        let header = header?;
         let sidebar = Sidebar::new(&self.path).prepare(user.clone()).await?;
         let footer = Footer::default()
             .config(&self.path)
@@ -51,6 +56,7 @@ where
             header,
             sidebar,
             footer,
+            concierge,
             content: self.content,
             collapsed: self.collapsed,
         })
@@ -64,6 +70,9 @@ pub struct StandardLayoutPrepared<T: sailfish::TemplateOnce> {
     header: <Header as Component>::Prepared,
     sidebar: <Sidebar as Component>::Prepared,
     footer: <Footer as Component>::Prepared,
+    /// Flower's floating launcher, when the concierge is presented that way
+    /// and available to this viewer.
+    concierge: Option<crate::concierge::ConciergeLauncher>,
     content: T,
     collapsed: bool,
 }

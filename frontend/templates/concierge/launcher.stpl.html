@@ -1,0 +1,62 @@
+<%#
+  Flower's floating presentation: an "Ask Flower" button at the corner of the
+  page, and the panel it opens (a bottom sheet on narrow screens).
+
+  Opening and closing are the browser's own Popover API, so they need no
+  script. The panel is a manual popover so that clicking the page behind it
+  does not close it; Escape does, while focus is inside. The chat is fetched
+  into the panel the first time it opens on a page.
+
+  "Hide Flower" lasts for the rest of the visit (sessionStorage), so the
+  launcher stays out of the way of someone who has dismissed it as they move
+  from page to page. That is a per-tab display preference with nothing for
+  the server to know, so it lives in the browser.
+
+  htmx 4 fires htmx:after:swap on the element that made the request, not on
+  the swap target, so the handler that settles the freshly loaded chat
+  (scrolled to its latest message, input focused where there is a keyboard)
+  sits on the launcher button. The inline script runs as
+  soon as the element is parsed, before first paint, so a hidden launcher
+  never flashes into view.
+%>
+<div id="flower" class="flower"
+     hx-on:click="if (event.target.closest('[data-flower-hide]')) { try { sessionStorage.setItem('flower-hidden', '1'); } catch (e) {} document.getElementById('flower-panel').hidePopover(); this.hidden = true; }">
+  <script>try { if (sessionStorage.getItem('flower-hidden')) document.currentScript.parentElement.hidden = true; } catch (e) {}</script>
+
+  <div class="flower-dock">
+    <button type="button" class="flower-fab" popovertarget="flower-panel" popovertargetaction="show"
+            hx-get="/-concierge/chat" hx-trigger="click once" hx-target="#flower-panel-body"
+            hx-on::after:swap="const body = document.getElementById('flower-panel-body'); const log = body.querySelector('#concierge-log'); if (log) log.scrollTop = log.scrollHeight; if (matchMedia('(pointer: fine)').matches) body.querySelector('textarea')?.focus();">
+      <img src="/-static/img/concierge/flower-avatar.jpg" alt="" class="flower-avatar" />
+      Ask Flower
+    </button>
+    <button type="button" class="flower-hide" data-flower-hide aria-label="Hide Flower" title="Hide Flower">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+    </button>
+  </div>
+
+  <div id="flower-panel" class="flower-panel" popover="manual" role="dialog" aria-labelledby="flower-panel-title"
+       data-notifications
+       hx-on:keydown="if (event.key === 'Escape') this.hidePopover();"
+       hx-on:toggle="if (event.newState === 'open' && matchMedia('(pointer: fine)').matches) this.querySelector('textarea')?.focus();">
+    <div class="flower-head">
+      <img src="/-static/img/concierge/flower-avatar.jpg" alt="" class="flower-avatar" />
+      <div class="flower-title">
+        <h2 id="flower-panel-title">Ask Flower</h2>
+        <p>Your guide to citizen science</p>
+      </div>
+      <button type="button" class="flower-close" popovertarget="flower-panel" popovertargetaction="hide" aria-label="Close">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+      </button>
+    </div>
+
+    <div id="flower-panel-body" class="flower-body">
+      <p class="flower-loading">Flower is on her way&hellip;</p>
+    </div>
+
+    <p class="flower-fine">
+      Flower is an AI helper and can get things wrong; check details on each project&rsquo;s page.
+      <button type="button" data-flower-hide>Hide Flower</button>
+    </p>
+  </div>
+</div>

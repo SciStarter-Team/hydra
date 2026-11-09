@@ -3,6 +3,7 @@ use common::{shared::db, timestring::TimeString, transaction::Immediate};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
+use crate::concierge::tools::ConciergeCard;
 use crate::peering::LoadStorePeered;
 
 /// How long a conversation is retained after its last turn.
@@ -38,6 +39,19 @@ pub struct TranscriptMsg {
     pub content: Vec<TranscriptContent>,
 }
 
+/// What the visitor saw of one completed turn, kept so the chat can be
+/// redrawn when they come back to it on another page. The reply is kept as
+/// the model wrote it and sanitized again each time it is drawn, so a redraw
+/// links only what the navigation whitelist allows at that moment.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShownTurn {
+    pub user_text: String,
+    pub assistant_text: String,
+    pub cards: Vec<ConciergeCard>,
+    pub more_url: String,
+    pub more_label: String,
+}
+
 /// A concierge chat conversation, synchronized to all frontends so that a
 /// turn may be handled by any instance.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +64,9 @@ pub struct Conversation {
     pub tokens_in: i64,
     pub tokens_out: i64,
     pub transcript: Vec<TranscriptMsg>,
+    /// The completed turns as the visitor saw them, oldest first.
+    #[serde(default)]
+    pub shown: Vec<ShownTurn>,
 }
 
 impl Conversation {
@@ -64,6 +81,7 @@ impl Conversation {
             tokens_in: 0,
             tokens_out: 0,
             transcript: Vec::new(),
+            shown: Vec::new(),
         }
     }
 }
@@ -79,13 +97,14 @@ impl LoadStorePeered for Conversation {
         let user_id = self.user_id.map(|id| id.to_string());
         let turns = self.turns as i64;
         let transcript = serde_json::to_string(&self.transcript)?;
+        let shown = serde_json::to_string(&self.shown)?;
 
         let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
         sqlx::query!(
             r#"INSERT OR REPLACE INTO "concierge_conversations"
                ("conversation_id", "created", "updated", "user_id",
-                "turns", "tokens_in", "tokens_out", "transcript")
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "turns", "tokens_in", "tokens_out", "transcript", "shown")
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             conversation_id,
             self.created,
             self.updated,
@@ -94,6 +113,7 @@ impl LoadStorePeered for Conversation {
             self.tokens_in,
             self.tokens_out,
             transcript,
+            shown,
         )
         .execute(&mut tx)
         .await?;
@@ -105,7 +125,7 @@ impl LoadStorePeered for Conversation {
         let conversation_id = key.to_string();
         let row = sqlx::query!(
             r#"SELECT "created", "updated", "user_id", "turns",
-                      "tokens_in", "tokens_out", "transcript"
+                      "tokens_in", "tokens_out", "transcript", "shown"
                FROM "concierge_conversations" WHERE "conversation_id" = ?"#,
             conversation_id,
         )
@@ -121,6 +141,7 @@ impl LoadStorePeered for Conversation {
             tokens_in: row.tokens_in,
             tokens_out: row.tokens_out,
             transcript: serde_json::from_str(&row.transcript)?,
+            shown: serde_json::from_str(&row.shown)?,
         })
     }
 

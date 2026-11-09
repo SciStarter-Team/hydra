@@ -18,7 +18,8 @@ use ulid::Ulid;
 use crate::component::{AdminLayout, Component};
 use crate::form::QsForm;
 use crate::home::{
-    Condition, ConditionKind, DayComparison, HomeSettings, WelcomeMessage, WelcomeRule,
+    ConciergePresentation, Condition, ConditionKind, DayComparison, HomeSettings, WelcomeMessage,
+    WelcomeRule,
 };
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
@@ -204,6 +205,8 @@ struct WelcomeForm {
     #[serde(default)]
     show_concierge: Option<String>,
     #[serde(default)]
+    concierge_presentation: ConciergePresentation,
+    #[serde(default)]
     concierge_heading: String,
 }
 
@@ -342,6 +345,7 @@ fn to_settings(form: WelcomeForm) -> HomeSettings {
             nearby_heading.to_string()
         },
         show_concierge: form.show_concierge.is_some(),
+        concierge_presentation: form.concierge_presentation,
         concierge_heading: if concierge_heading.is_empty() {
             crate::home::default_concierge_heading()
         } else {
@@ -471,6 +475,7 @@ struct DashboardSettingsPage {
     nearby_heading: String,
     nearby_limit: i64,
     show_concierge: bool,
+    concierge_presentation: ConciergePresentation,
     concierge_heading: String,
     communities: Vec<CommunityOption>,
     sections: Vec<ManagedSection>,
@@ -502,6 +507,7 @@ async fn render_page(
         nearby_heading: settings.nearby_heading.clone(),
         nearby_limit: settings.nearby_limit,
         show_concierge: settings.show_concierge,
+        concierge_presentation: settings.concierge_presentation,
         concierge_heading: settings.concierge_heading.clone(),
         communities,
         sections: build_managed_sections().await,

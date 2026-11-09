@@ -767,6 +767,7 @@ pub static TOOL_CONFIG: LazyLock<ToolConfiguration> = LazyLock::new(|| {
 
 /// A rendered result card, unified across projects, events, and communities.
 /// Cards are built only from real tool-result rows held server-side.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ConciergeCard {
     pub link: String,
     pub image: String,

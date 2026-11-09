@@ -38,8 +38,18 @@
                 Show the concierge
             </label>
 
+            <fieldset>
+                <legend class="block text-sm font-medium text-gray-700">Presentation</legend>
+                <% for presentation in crate::home::ConciergePresentation::ALL { %>
+                <label class="mt-1 flex items-center gap-2 text-sm text-gray-700">
+                    <input type="radio" name="concierge_presentation" value="<%= presentation.form_value() %>" <% if presentation == self.concierge_presentation { %>checked<% } %> class="border-gray-300" />
+                    <%= presentation.label() %>
+                </label>
+                <% } %>
+            </fieldset>
+
             <div>
-                <label class="block text-sm font-medium text-gray-700">Heading</label>
+                <label class="block text-sm font-medium text-gray-700">Heading <span class="font-normal text-gray-500">(home-page section only)</span></label>
                 <input type="text" name="concierge_heading" value="<%= self.concierge_heading %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm" />
             </div>
         </div>

@@ -133,7 +133,7 @@ async fn entity_page(
     Path(slug): Path<String>,
 ) -> poem::Result<poem::Response> {
     if &slug == "" {
-        Ok(index_page_pseudo_handler(client_ip, user_info).await?)
+        Ok(index_page_pseudo_handler(session, client_ip, user_info).await?)
     } else {
         Entity::response_for_slug(slug, "/", user_info, session, req).await
     }

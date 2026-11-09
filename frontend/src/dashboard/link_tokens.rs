@@ -208,7 +208,9 @@ mod tests {
 
         for value in ["01HQ3Z8Y6V2N4J5K7M8P9R0S1T", "01HQ3Z8Y6V2N4J5K7M8P9R0S2V"] {
             check!(html.contains(&format!(r#"data-copies="link-token-{value}""#)));
-            check!(html.contains(&format!(r#"id="link-token-{value}" class="font-mono text-sm break-all select-all">{value}<"#)));
+            check!(html.contains(&format!(
+                r#"id="link-token-{value}" class="font-mono text-sm break-all select-all">{value}<"#
+            )));
         }
     }
 

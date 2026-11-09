@@ -222,9 +222,51 @@ pub struct HomeSettings {
     /// the feature rolls out deliberately.
     #[serde(default)]
     pub show_concierge: bool,
-    /// Heading for the concierge section.
+    /// How the concierge is presented when it is shown.
+    #[serde(default)]
+    pub concierge_presentation: ConciergePresentation,
+    /// Heading for the concierge section. Used by the inline presentation
+    /// only.
     #[serde(default = "default_concierge_heading")]
     pub concierge_heading: String,
+}
+
+/// Where and how the concierge appears. Both presentations hold the same chat
+/// (the same log, form, turn endpoint and conversation); only the container
+/// around it differs.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConciergePresentation {
+    /// A section of the home page.
+    #[default]
+    Inline,
+    /// A launcher floating at the corner of every standard page, opening a
+    /// chat panel; on narrow screens the panel is a bottom sheet.
+    Floating,
+}
+
+impl ConciergePresentation {
+    pub const ALL: [ConciergePresentation; 2] = [
+        ConciergePresentation::Inline,
+        ConciergePresentation::Floating,
+    ];
+
+    /// The value used for this presentation in the settings form; the same
+    /// spelling serde reads back.
+    pub fn form_value(self) -> &'static str {
+        match self {
+            ConciergePresentation::Inline => "inline",
+            ConciergePresentation::Floating => "floating",
+        }
+    }
+
+    /// The label for this presentation in the settings form.
+    pub fn label(self) -> &'static str {
+        match self {
+            ConciergePresentation::Inline => "Section on the home page",
+            ConciergePresentation::Floating => "Floating \"Ask Flower\" button on every page",
+        }
+    }
 }
 
 pub fn default_concierge_heading() -> String {
@@ -257,6 +299,7 @@ impl Default for HomeSettings {
             nearby_limit: default_nearby_limit(),
             nearby_heading: default_nearby_heading(),
             show_concierge: false,
+            concierge_presentation: ConciergePresentation::default(),
             concierge_heading: default_concierge_heading(),
         }
     }
@@ -674,5 +717,24 @@ mod tests {
         let p = m.personalized("ada");
         assert_eq!(p.title, "Hi ada");
         assert_eq!(p.body, "Welcome back, ada.");
+    }
+
+    #[test]
+    fn concierge_presentation_form_values_are_serde_spellings() {
+        use assert2::check;
+
+        for presentation in ConciergePresentation::ALL {
+            let serialized = serde_json::to_value(presentation).unwrap();
+            check!(serialized == serde_json::json!(presentation.form_value()));
+        }
+    }
+
+    #[test]
+    fn settings_saved_before_presentation_existed_read_as_inline() {
+        use assert2::check;
+
+        let old = r#"{"show_concierge": true, "concierge_heading": "Ask Flower"}"#;
+        let settings: HomeSettings = serde_json::from_str(old).unwrap();
+        check!(settings.concierge_presentation == ConciergePresentation::Inline);
     }
 }

@@ -1,0 +1,14 @@
+<%# The chat itself, shared by both presentations: the home-page section and the floating panel. %>
+<div id="concierge-chat" class="concierge-chat">
+  <div id="concierge-log" class="concierge-log flex flex-col gap-3"
+       hx-on::after:swap="const b=Array.from(this.children).filter(c=>c.classList.contains('self-end')).pop(); if(b) b.scrollIntoView({behavior:'smooth',block:'start'});">
+    <div class="flex items-end gap-2 self-start max-w-[85%] lg:max-w-2xl">
+      <img src="/-static/img/concierge/flower-avatar.jpg" alt="Flower, a scruffy golden dog" class="w-9 h-9 rounded-full shrink-0" />
+      <div class="concierge-msg concierge-reply rounded-lg bg-gray-100 p-3 text-sm whitespace-pre-line">Hi, I&rsquo;m Flower! 🐾 Tell me what you&rsquo;re curious about &mdash; animals, the night sky, your neighborhood creek, anything &mdash; and I&rsquo;ll sniff out real science projects, upcoming events, and communities you can join. Not sure where to start? Just ask!</div>
+    </div>
+    <% for turn in self.history { %>
+    <%+ turn %>
+    <% } %>
+  </div>
+  <%+ self.form %>
+</div>

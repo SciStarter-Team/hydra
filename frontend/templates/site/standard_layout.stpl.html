@@ -13,5 +13,9 @@
 
   <%+ self.footer %>
 
+  <% if let Some(concierge) = self.concierge { %>
+  <%+ concierge %>
+  <% } %>
+
   <%+ crate::component::Notifications %>
 </body>

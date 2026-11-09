@@ -1,21 +1,33 @@
-<div id="concierge-form-area" class="mt-4"<% if self.oob { %> hx-swap-oob="true"<% } %>>
-  <% if !self.notice.is_empty() { %>
-  <p class="text-sm text-gray-600 mb-2"><%= self.notice %></p>
-  <% } %>
-  <% if self.disabled { %>
-  <a href="/finder" class="text-primary-action font-bold">Browse the project finder &rarr;</a>
-  <% } else { %>
+<div id="concierge-form-area" class="concierge-form-area mt-4"<% if self.oob { %> hx-swap-oob="true"<% } %>>
+<% match self.state { FormState::Open { started } => { %>
   <form hx-post="/-concierge/turn" hx-target="#concierge-log" hx-swap="beforeend"
         hx-disable="find textarea, find button" hx-indicator="#concierge-spinner"
         hx-on::response:error="this.parentElement.querySelector('.concierge-rate-note').classList.remove('hidden')"
         class="flex gap-2 items-end">
-    <input type="hidden" name="conversation_id" value="<%= self.conversation_id %>">
+    <%# 16px text on phones: iOS zooms the page into any field set smaller. %>
+    <%# Enter sends; Shift+Enter (or an IME composing) still inserts a newline. %>
     <textarea name="message" maxlength="500" required rows="2"
-              class="flex-1 border border-gray-300 rounded p-2 text-sm"
+              class="flex-1 border border-gray-300 rounded p-2 text-base sm:text-sm"
+              hx-on:keydown="if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); this.form.requestSubmit(); }"
               placeholder="Tell Flower what you're curious about&hellip;"></textarea>
     <button type="submit" class="btn btn-primary">Send</button>
-    <span id="concierge-spinner" class="htmx-indicator text-sm text-gray-500">Flower is thinking&hellip;</span>
   </form>
+  <div class="flex items-center justify-between gap-2 mt-1 min-h-6">
+    <span id="concierge-spinner" class="htmx-indicator text-sm text-gray-500">Flower is thinking&hellip;</span>
+    <% if started { %>
+    <button type="button" class="text-sm text-gray-600 underline hover:text-primary-action"
+            hx-post="/-concierge/restart" hx-target="#concierge-chat" hx-swap="outerHTML">Start over</button>
+    <% } %>
+  </div>
   <p class="concierge-rate-note hidden text-sm text-red-600 mt-2">You&rsquo;re going fast &mdash; please wait a moment and try again.</p>
+<% } FormState::Ended => { %>
+  <p class="text-sm text-gray-600 mb-2">This conversation has ended.</p>
+  <button type="button" class="btn btn-primary"
+          hx-post="/-concierge/restart" hx-target="#concierge-chat" hx-swap="outerHTML">Start a new conversation</button>
+<% } FormState::Unavailable { notice } => { %>
+  <% if !notice.is_empty() { %>
+  <p class="text-sm text-gray-600 mb-2"><%= notice %></p>
   <% } %>
+  <a href="/finder" class="text-primary-action font-bold">Browse the project finder &rarr;</a>
+<% } } %>
 </div>

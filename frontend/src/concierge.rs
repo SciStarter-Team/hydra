@@ -1,5 +1,6 @@
-//! Flower, the AI concierge: a chat widget on the home page that helps
-//! visitors find citizen-science projects, upcoming events, and public
+//! Flower, the AI concierge: a chat, shown either as a section of the home
+//! page or as a floating panel on every standard page, that helps visitors
+//! find citizen-science projects, upcoming events, and public
 //! communities matching their interests, and points them at the right site
 //! pages for who they are (librarians, educators, Girl Scouts, NASA fans,
 //! newcomers looking for a starting place).
@@ -23,17 +24,20 @@ use std::time::Duration;
 use anyhow::Error;
 use common::message::user::BasicInfo;
 use common::timestring::TimeString;
+use poem::session::Session;
 use poem::web::{Form, Html, RealIp};
-use poem::{Endpoint, EndpointExt, IntoResponse, Response, Route, handler, post};
+use poem::{Endpoint, EndpointExt, IntoResponse, Response, Route, get, handler, post};
 use sailfish::TemplateOnce;
 use serde::Deserialize;
 use ulid::Ulid;
 
 use crate::component::html_escape;
-use crate::concierge::convo::{Conversation, TranscriptContent, TranscriptMsg, TranscriptRole};
+use crate::concierge::convo::{
+    Conversation, ShownTurn, TranscriptContent, TranscriptMsg, TranscriptRole,
+};
 use crate::concierge::engine::{StopKind, TurnUsage, engine};
 use crate::concierge::tools::{ConciergeCard, ToolCallResult};
-use crate::home::HomeSettings;
+use crate::home::{ConciergePresentation, HomeSettings};
 use crate::middleware::authorization::Authenticated;
 use crate::middleware::rate_limit::{RateLimitConfig, RateLimitMiddleware};
 use crate::peering::LoadStorePeered;
@@ -51,91 +55,63 @@ pub const CARDS_PER_TURN: usize = 6;
 /// Search results included in the digest sent to the model.
 pub const TOOL_RESULTS_TO_MODEL: usize = 8;
 
-/// The concierge section of the home page.
-#[derive(TemplateOnce)]
-#[template(path = "component/concierge_section.stpl.html")]
-pub struct ConciergeSection {
-    pub heading: String,
-    pub form: ConciergeForm,
+/// Session key holding the id of the visitor's current conversation. Keying
+/// the conversation to the session rather than to the page lets it follow the
+/// visitor from page to page.
+const SESSION_KEY: &str = "concierge_conversation";
+
+/// Whether the concierge may talk to a viewer, and if not, why not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Availability {
+    Available,
+    /// Staff have switched the concierge off.
+    SwitchedOff,
+    /// Today's token budget is spent.
+    BudgetExhausted,
+    /// The viewer has opted out of AI features.
+    OptedOut,
 }
 
-/// The chat input area. Re-rendered out-of-band on every turn so the DOM
-/// state (conversation id, disabled state, notices) always comes from the
-/// server.
-#[derive(TemplateOnce)]
-#[template(path = "concierge/form.stpl.html")]
-pub struct ConciergeForm {
-    pub conversation_id: String,
-    pub disabled: bool,
-    pub notice: String,
-    /// Whether this render replaces the existing form area out-of-band.
-    pub oob: bool,
-}
+impl Availability {
+    /// Determine availability for a viewer. The local checks run first, so
+    /// the user service is asked about an opt-out only when it would matter.
+    pub async fn for_viewer(settings: &HomeSettings, user: Option<&BasicInfo>) -> Availability {
+        if !settings.show_concierge {
+            return Availability::SwitchedOff;
+        }
+        if !budget::available() {
+            return Availability::BudgetExhausted;
+        }
+        if let Some(user) = user {
+            if ai_opted_out(user.user_id).await {
+                return Availability::OptedOut;
+            }
+        }
+        Availability::Available
+    }
 
-impl ConciergeForm {
-    fn initial() -> ConciergeForm {
-        ConciergeForm {
-            conversation_id: String::new(),
-            disabled: false,
-            notice: String::new(),
-            oob: false,
+    /// Flower's reply to a message that arrives while unavailable, and the
+    /// notice left on the form. `None` when available.
+    fn explanation(self) -> Option<(&'static str, &'static str)> {
+        match self {
+            Availability::Available => None,
+            Availability::SwitchedOff => Some((
+                "The concierge isn't available right now — the project finder \
+                 has everything you need.",
+                "",
+            )),
+            Availability::BudgetExhausted => Some((
+                "Flower is taking a break for the rest of the day. The project \
+                 finder is always open, though!",
+                "Come back tomorrow to chat with Flower.",
+            )),
+            Availability::OptedOut => Some((
+                "AI features are switched off for your account. The project \
+                 finder has everything you need.",
+                "",
+            )),
         }
     }
-
-    fn active(conversation_id: Ulid) -> ConciergeForm {
-        ConciergeForm {
-            conversation_id: conversation_id.to_string(),
-            disabled: false,
-            notice: String::new(),
-            oob: true,
-        }
-    }
-
-    fn disabled(notice: &str) -> ConciergeForm {
-        ConciergeForm {
-            conversation_id: String::new(),
-            disabled: true,
-            notice: notice.to_string(),
-            oob: true,
-        }
-    }
-}
-
-/// One turn's worth of chat log content, appended into the log by HTMX with
-/// the form area replaced out-of-band.
-#[derive(TemplateOnce)]
-#[template(path = "concierge/turn.stpl.html")]
-struct TurnFragment {
-    user_text: String,
-    /// Sanitized HTML for the assistant reply, produced by
-    /// [`tools::render_assistant_html`] (markdown interpreted, raw HTML
-    /// escaped, links restricted to the destination whitelist). Rendered raw.
-    assistant_html: String,
-    cards: Vec<ConciergeCard>,
-    more_url: String,
-    more_label: String,
-    form: ConciergeForm,
-}
-
-/// Build the home-page concierge section, or `None` when the feature is
-/// switched off, the daily budget is exhausted, or the viewer has opted out
-/// of AI features.
-pub async fn section_for(
-    settings: &HomeSettings,
-    user: Option<&BasicInfo>,
-) -> Option<ConciergeSection> {
-    if !settings.show_concierge || !budget::available() {
-        return None;
-    }
-    if let Some(user) = user {
-        if ai_opted_out(user.user_id).await {
-            return None;
-        }
-    }
-    Some(ConciergeSection {
-        heading: settings.concierge_heading.clone(),
-        form: ConciergeForm::initial(),
-    })
 }
 
 /// Whether the user has opted out of AI features. Fails closed: if the
@@ -146,23 +122,238 @@ async fn ai_opted_out(user_id: Ulid) -> bool {
         .unwrap_or(true)
 }
 
+/// The visitor's current conversation: the one their session names, provided
+/// it has not expired and belongs to them (or to nobody, so a visitor who
+/// signs in mid-conversation keeps it).
+async fn session_conversation(session: &Session, user: Option<&BasicInfo>) -> Option<Conversation> {
+    let id = session.get::<Ulid>(SESSION_KEY)?;
+    let existing = Conversation::load(id).await.ok()?;
+    (existing.user_id.is_none() || existing.user_id == user.map(|u| u.user_id)).then_some(existing)
+}
+
+/// The concierge section of the home page: the inline presentation.
+#[derive(TemplateOnce)]
+#[template(path = "component/concierge_section.stpl.html")]
+pub struct ConciergeSection {
+    heading: String,
+    chat: ConciergeChat,
+}
+
+/// Build the home-page concierge section, or `None` when the concierge is
+/// presented some other way or is unavailable to this viewer.
+pub async fn section_for(
+    settings: &HomeSettings,
+    session: &Session,
+    user: Option<&BasicInfo>,
+) -> Option<ConciergeSection> {
+    if settings.concierge_presentation != ConciergePresentation::Inline
+        || Availability::for_viewer(settings, user).await != Availability::Available
+    {
+        return None;
+    }
+    Some(ConciergeSection {
+        heading: settings.concierge_heading.clone(),
+        chat: ConciergeChat::for_session(session, user).await,
+    })
+}
+
+/// The floating presentation: a launcher at the corner of the page and the
+/// chat panel it opens. The panel's chat is fetched from `/-concierge/chat`
+/// the first time it opens, so pages whose visitors never open it pay
+/// nothing for it.
+#[derive(TemplateOnce)]
+#[template(path = "concierge/launcher.stpl.html")]
+pub struct ConciergeLauncher {}
+
+/// Build the floating launcher for a standard page, or `None` when the
+/// concierge is presented some other way or is unavailable to this viewer.
+pub async fn launcher_for(user: Option<&BasicInfo>) -> Option<ConciergeLauncher> {
+    let settings = HomeSettings::current().await;
+    (settings.concierge_presentation == ConciergePresentation::Floating
+        && Availability::for_viewer(&settings, user).await == Availability::Available)
+        .then_some(ConciergeLauncher {})
+}
+
+/// The chat itself — log and form — shared by both presentations.
+#[derive(TemplateOnce)]
+#[template(path = "concierge/chat.stpl.html")]
+pub struct ConciergeChat {
+    history: Vec<TurnView>,
+    form: ConciergeForm,
+}
+
+impl ConciergeChat {
+    /// A chat with nothing said yet.
+    fn fresh() -> ConciergeChat {
+        ConciergeChat {
+            history: Vec::new(),
+            form: ConciergeForm::open(false, false),
+        }
+    }
+
+    /// The chat as the visitor left it: their session's conversation
+    /// redrawn, or a fresh chat when there is none.
+    async fn for_session(session: &Session, user: Option<&BasicInfo>) -> ConciergeChat {
+        let Some(conversation) = session_conversation(session, user).await else {
+            return ConciergeChat::fresh();
+        };
+        let urls = tools::linkable_urls().await;
+        ConciergeChat {
+            history: conversation
+                .shown
+                .iter()
+                .map(|turn| TurnView::shown(turn, &urls))
+                .collect(),
+            form: ConciergeForm::for_conversation(&conversation, false),
+        }
+    }
+
+    /// The chat for a viewer the concierge is not available to: Flower's
+    /// explanation, and a form that offers the project finder instead.
+    fn unavailable(reply: &str, form_notice: &str) -> ConciergeChat {
+        ConciergeChat {
+            history: vec![TurnView::notice("", reply)],
+            form: ConciergeForm::unavailable(form_notice, false),
+        }
+    }
+
+    /// The chat for a viewer as things stand: redrawn from their session
+    /// when available, otherwise the explanation of why not.
+    async fn for_viewer(session: &Session, user: Option<&BasicInfo>) -> ConciergeChat {
+        let settings = HomeSettings::current().await;
+        match Availability::for_viewer(&settings, user)
+            .await
+            .explanation()
+        {
+            None => ConciergeChat::for_session(session, user).await,
+            Some((reply, form_notice)) => ConciergeChat::unavailable(reply, form_notice),
+        }
+    }
+}
+
+/// What the form offers.
+enum FormState {
+    /// Accepting messages. `started` once the conversation has a completed
+    /// turn, when the form also offers to start over.
+    Open { started: bool },
+    /// The conversation reached [`MAX_TURNS`]; the form offers to start over.
+    Ended,
+    /// The concierge is unavailable to this viewer; the form offers the
+    /// project finder instead.
+    Unavailable { notice: String },
+}
+
+/// The chat input area. Re-rendered out-of-band on every turn so the DOM
+/// state (open, ended or unavailable, and any notice) always comes from the
+/// server.
+#[derive(TemplateOnce)]
+#[template(path = "concierge/form.stpl.html")]
+pub struct ConciergeForm {
+    state: FormState,
+    /// Whether this render replaces the existing form area out-of-band.
+    oob: bool,
+}
+
+impl ConciergeForm {
+    fn open(started: bool, oob: bool) -> ConciergeForm {
+        ConciergeForm {
+            state: FormState::Open { started },
+            oob,
+        }
+    }
+
+    fn unavailable(notice: &str, oob: bool) -> ConciergeForm {
+        ConciergeForm {
+            state: FormState::Unavailable {
+                notice: notice.to_string(),
+            },
+            oob,
+        }
+    }
+
+    /// The form as it stands after the conversation's latest turn.
+    fn for_conversation(conversation: &Conversation, oob: bool) -> ConciergeForm {
+        let state = if conversation.turns >= MAX_TURNS {
+            FormState::Ended
+        } else {
+            FormState::Open {
+                started: conversation.turns > 0,
+            }
+        };
+        ConciergeForm { state, oob }
+    }
+}
+
+/// One exchange in the chat log: the visitor's message, Flower's reply, and
+/// any cards shown with it. Used both for a turn as it happens and for
+/// earlier turns redrawn from the conversation.
+#[derive(TemplateOnce)]
+#[template(path = "concierge/turn.stpl.html")]
+struct TurnView {
+    /// Empty for a reply that answers no visible message.
+    user_text: String,
+    /// Sanitized HTML for the assistant reply, produced by
+    /// [`tools::render_assistant_html`] (markdown interpreted, raw HTML
+    /// escaped, links restricted to the destination whitelist) or by
+    /// escaping a plain notice. Rendered raw.
+    assistant_html: String,
+    cards: Vec<ConciergeCard>,
+    more_url: String,
+    more_label: String,
+}
+
+impl TurnView {
+    fn shown(turn: &ShownTurn, urls: &[&'static str]) -> TurnView {
+        TurnView {
+            user_text: turn.user_text.clone(),
+            assistant_html: tools::render_assistant_html(&turn.assistant_text, urls),
+            cards: turn.cards.clone(),
+            more_url: turn.more_url.clone(),
+            more_label: turn.more_label.clone(),
+        }
+    }
+
+    /// A reply carrying only a notice, which is not part of the
+    /// conversation.
+    fn notice(user_text: &str, notice: &str) -> TurnView {
+        TurnView {
+            user_text: user_text.to_string(),
+            assistant_html: html_escape(notice),
+            cards: Vec::new(),
+            more_url: String::new(),
+            more_label: String::new(),
+        }
+    }
+}
+
+/// The response to a turn: the exchange, appended to the log by HTMX, and
+/// the form area, replaced out-of-band.
+#[derive(TemplateOnce)]
+#[template(path = "concierge/turn_response.stpl.html")]
+struct TurnResponse {
+    turn: TurnView,
+    form: ConciergeForm,
+}
+
 pub fn routes() -> impl Endpoint {
     let burst = RateLimitConfig::new(6, Duration::from_secs(60))
         .with_error_message("You're sending messages very quickly. Please wait a minute.");
     let hourly = RateLimitConfig::new(40, Duration::from_secs(3600))
         .with_error_message("Hourly conversation limit reached. Please try again later.");
 
-    Route::new().at(
-        "/turn",
-        post(handle_turn)
-            .with(RateLimitMiddleware::new(burst))
-            .with(RateLimitMiddleware::new(hourly)),
-    )
+    Route::new()
+        .at(
+            "/turn",
+            post(handle_turn)
+                .with(RateLimitMiddleware::new(burst))
+                .with(RateLimitMiddleware::new(hourly)),
+        )
+        .at("/chat", get(handle_chat))
+        .at("/restart", post(handle_restart))
 }
 
 #[derive(Debug, Deserialize)]
 struct TurnInput {
-    conversation_id: Option<String>,
     message: String,
 }
 
@@ -191,116 +382,104 @@ impl Drop for InFlightGuard {
     }
 }
 
-/// Render a turn fragment. Always a 200 with well-formed HTML: an error
-/// status would leave the widget stuck mid-conversation.
-fn fragment(fragment: TurnFragment) -> Result<Response, poem::Error> {
-    let html = fragment.render_once().map_err(|e| {
+/// Render a template as an HTML response. Always a 200 with well-formed
+/// HTML: an error status would leave the widget stuck mid-conversation.
+fn html_response(template: impl TemplateOnce) -> Result<Response, poem::Error> {
+    let html = template.render_once().map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
     Ok(Html(html).into_response())
 }
 
-/// A turn fragment carrying only an assistant-style notice, leaving the
-/// conversation unchanged.
-fn notice_fragment(
+/// A turn response carrying only a notice, leaving the conversation
+/// unchanged.
+fn notice_response(
     user_text: &str,
     notice: &str,
     form: ConciergeForm,
 ) -> Result<Response, poem::Error> {
-    fragment(TurnFragment {
-        user_text: user_text.to_string(),
-        assistant_html: html_escape(notice),
-        cards: Vec::new(),
-        more_url: String::new(),
-        more_label: String::new(),
+    html_response(TurnResponse {
+        turn: TurnView::notice(user_text, notice),
         form,
     })
+}
+
+/// The chat for the floating panel, fetched when the panel first opens on a
+/// page.
+#[handler]
+async fn handle_chat(
+    session: &Session,
+    Authenticated(user_info): Authenticated,
+) -> Result<Response, poem::Error> {
+    html_response(ConciergeChat::for_viewer(session, user_info.as_deref()).await)
+}
+
+/// Leave the current conversation and start a fresh chat. The abandoned
+/// conversation expires with the rest.
+#[handler]
+async fn handle_restart(
+    session: &Session,
+    Authenticated(user_info): Authenticated,
+) -> Result<Response, poem::Error> {
+    session.remove(SESSION_KEY);
+    html_response(ConciergeChat::for_viewer(session, user_info.as_deref()).await)
 }
 
 #[handler]
 async fn handle_turn(
     RealIp(client_ip): RealIp,
+    session: &Session,
     Authenticated(user_info): Authenticated,
     Form(input): Form<TurnInput>,
 ) -> Result<Response, poem::Error> {
+    let user = user_info.as_deref();
+
     let mut message = input.message.trim().to_string();
     if message.is_empty() {
-        return notice_fragment(
-            "",
-            "Tell me what you're curious about!",
-            ConciergeForm::initial(),
-        );
+        let form = match session_conversation(session, user).await {
+            Some(conversation) => ConciergeForm::for_conversation(&conversation, true),
+            None => ConciergeForm::open(false, true),
+        };
+        return notice_response("", "Tell me what you're curious about!", form);
     }
     if message.chars().count() > MAX_USER_MSG_CHARS {
         message = message.chars().take(MAX_USER_MSG_CHARS).collect();
     }
 
+    // The chat may be open in a stale tab: re-check availability.
     let settings = HomeSettings::current().await;
-    let user = user_info.as_deref();
-
-    // The widget may be open in a stale tab: re-check every availability
-    // condition the section renderer applies.
-    if !settings.show_concierge {
-        return notice_fragment(
+    if let Some((reply, form_notice)) = Availability::for_viewer(&settings, user)
+        .await
+        .explanation()
+    {
+        return notice_response(
             &message,
-            "The concierge isn't available right now — the project finder \
-             has everything you need.",
-            ConciergeForm::disabled(""),
-        );
-    }
-    if let Some(user) = user {
-        if ai_opted_out(user.user_id).await {
-            return notice_fragment(
-                &message,
-                "AI features are switched off for your account. The project \
-                 finder has everything you need.",
-                ConciergeForm::disabled(""),
-            );
-        }
-    }
-    if !budget::available() {
-        return notice_fragment(
-            &message,
-            "Flower is taking a break for the rest of the day. The project \
-             finder is always open, though!",
-            ConciergeForm::disabled("Come back tomorrow to chat with Flower."),
+            reply,
+            ConciergeForm::unavailable(form_notice, true),
         );
     }
 
-    // Load the conversation, or start fresh when the id is missing, expired,
-    // or belongs to a different account.
-    let conversation_id = input
-        .conversation_id
-        .as_deref()
-        .and_then(|id| id.parse::<Ulid>().ok());
-    let mut conversation = match conversation_id {
-        Some(id) => match Conversation::load(id).await {
-            Ok(existing)
-                if existing.user_id == user.map(|u| u.user_id) || existing.user_id.is_none() =>
-            {
-                existing
-            }
-            _ => Conversation::new(user.map(|u| u.user_id)),
-        },
+    // Continue the session's conversation, or start fresh when there is
+    // none, it has expired, or it belongs to a different account.
+    let mut conversation = match session_conversation(session, user).await {
+        Some(existing) => existing,
         None => Conversation::new(user.map(|u| u.user_id)),
     };
 
     if conversation.turns >= MAX_TURNS {
-        return notice_fragment(
+        return notice_response(
             &message,
             "We've covered a lot of ground! For anything more, the project \
              finder is the best next stop.",
-            ConciergeForm::disabled(
-                "This conversation has ended — refresh the page to start a new one.",
-            ),
+            ConciergeForm::for_conversation(&conversation, true),
         );
     }
 
     let Some(_guard) = InFlightGuard::acquire(conversation.conversation_id) else {
-        return notice_fragment(
+        return notice_response(
             &message,
             "One thing at a time — I'm still thinking about your last message!",
-            ConciergeForm::active(conversation.conversation_id),
+            ConciergeForm::for_conversation(&conversation, true),
         );
     };
 
@@ -324,14 +503,32 @@ async fn handle_turn(
     let started = std::time::Instant::now();
     match run_turn(&mut conversation).await {
         Ok(outcome) => {
+            let (cards, more_url, more_label) = match outcome.last_result {
+                Some(result) => {
+                    let mut cards = result.cards;
+                    cards.truncate(CARDS_PER_TURN);
+                    (cards, result.more_url, result.more_label)
+                }
+                None => (Vec::new(), String::new(), String::new()),
+            };
+            let shown = ShownTurn {
+                user_text: message,
+                assistant_text: outcome.assistant_text,
+                cards,
+                more_url,
+                more_label,
+            };
+
             conversation.turns += 1;
             conversation.tokens_in += outcome.usage.input_tokens;
             conversation.tokens_out += outcome.usage.output_tokens;
             conversation.updated = TimeString::now().to_string();
+            conversation.shown.push(shown.clone());
 
             if let Err(e) = conversation.store().await {
                 tracing::error!("Failed to store concierge conversation: {}", e);
             }
+            session.set(SESSION_KEY, conversation.conversation_id);
             budget::record(&outcome.usage).await;
 
             tracing::info!(
@@ -369,40 +566,19 @@ async fn handle_turn(
                 }
             });
 
-            let (cards, more_url, more_label) = match outcome.last_result {
-                Some(result) => {
-                    let mut cards = result.cards;
-                    cards.truncate(CARDS_PER_TURN);
-                    (cards, result.more_url, result.more_label)
-                }
-                None => (Vec::new(), String::new(), String::new()),
-            };
-
-            let form = if conversation.turns >= MAX_TURNS {
-                ConciergeForm::disabled(
-                    "This conversation has ended — refresh the page to start a new one.",
-                )
-            } else {
-                ConciergeForm::active(conversation.conversation_id)
-            };
-
             let urls = tools::linkable_urls().await;
-            fragment(TurnFragment {
-                user_text: message,
-                assistant_html: tools::render_assistant_html(&outcome.assistant_text, &urls),
-                cards,
-                more_url,
-                more_label,
-                form,
+            html_response(TurnResponse {
+                turn: TurnView::shown(&shown, &urls),
+                form: ConciergeForm::for_conversation(&conversation, true),
             })
         }
         Err(e) => {
             tracing::error!("Concierge turn failed: {}", e);
-            notice_fragment(
+            notice_response(
                 &message,
                 "Oh dear, I ran into a hiccup. Please try again in a moment — \
                  or browse the project finder while I recover.",
-                ConciergeForm::active(conversation.conversation_id),
+                ConciergeForm::for_conversation(&conversation, true),
             )
         }
     }

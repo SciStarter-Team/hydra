@@ -54,3 +54,301 @@
     padding-left: 0.625rem;
     border-left: 2px solid var(--color-gray-300);
 }
+
+/* ==================== Floating presentation ====================
+   templates/concierge/launcher.stpl.html. An "Ask Flower" button at the
+   bottom-right corner of every standard page opens the chat in a panel; on
+   narrow screens the panel becomes a bottom sheet. The panel is a popover, so
+   it renders in the top layer above everything else on the page; it carries
+   data-notifications so that error notices land inside it rather than on the
+   page beneath. */
+.flower {
+    --flower-ink: var(--color-primary-dark);
+    --flower-paper: #f7f8fa;
+    --flower-hair: rgb(36 40 78 / 0.12);
+    --flower-gap: 1.125rem;
+    position: fixed;
+    right: var(--flower-gap);
+    bottom: calc(var(--flower-gap) + env(safe-area-inset-bottom, 0px));
+    z-index: 45;
+}
+
+.flower-dock {
+    position: relative;
+}
+
+/* While the panel is open it covers the launcher's corner anyway; on a phone
+   it would otherwise poke out above the sheet. */
+.flower:has(.flower-panel:popover-open) .flower-dock {
+    display: none;
+}
+
+.flower-fab {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.375rem 1.125rem 0.375rem 0.375rem;
+    border-radius: 999px;
+    background: var(--flower-ink);
+    color: var(--color-white);
+    font-family: var(--font-header-lg);
+    font-size: 1.0625rem;
+    font-weight: 700;
+    box-shadow: 0 10px 30px -8px rgb(20 20 40 / 0.45);
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.flower-fab:hover {
+    transform: translateY(-2px);
+}
+
+.flower-avatar {
+    flex: none;
+    width: 2.875rem;
+    height: 2.875rem;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* The small × on the launcher's corner hides Flower for the rest of the
+   visit. Revealed on hover where there is hover; always shown on touch
+   screens, where there is not. */
+.flower-hide {
+    position: absolute;
+    top: -0.5rem;
+    left: -0.5rem;
+    display: grid;
+    place-items: center;
+    width: 1.625rem;
+    height: 1.625rem;
+    border: 2px solid var(--color-white);
+    border-radius: 50%;
+    background: var(--flower-ink);
+    color: var(--color-white);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.flower-dock:hover .flower-hide,
+.flower-hide:focus-visible {
+    opacity: 1;
+}
+
+@media (hover: none) {
+    .flower-hide {
+        opacity: 1;
+    }
+}
+
+.flower svg {
+    width: 0.75rem;
+    height: 0.75rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.25;
+    stroke-linecap: round;
+}
+
+/* The panel. A closed popover is display:none by the browser's own rule, so
+   the flex layout applies only while open. */
+.flower-panel {
+    inset: auto var(--flower-gap) var(--flower-gap) auto;
+    width: 25rem;
+    max-width: calc(100vw - 1.5rem);
+    height: min(40rem, calc(100dvh - 2.5rem));
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--flower-hair);
+    border-radius: 1.375rem;
+    background: var(--flower-paper);
+    color: inherit;
+    box-shadow: 0 24px 60px -20px rgb(20 20 40 / 0.5);
+}
+
+.flower-panel:popover-open {
+    display: flex;
+    flex-direction: column;
+}
+
+.flower-head {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 0.875rem 0.875rem 1rem;
+    background: var(--flower-ink);
+    color: var(--color-white);
+}
+
+.flower-title {
+    min-width: 0;
+}
+
+/* The site styles bare headings and paragraphs; the panel header sets its own. */
+.flower-title h2 {
+    margin: 0;
+    color: var(--color-white);
+    font-family: var(--font-header-lg);
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.flower-title p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: rgb(255 255 255 / 0.75);
+}
+
+.flower-close {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    margin-left: auto;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.14);
+    color: var(--color-white);
+    cursor: pointer;
+}
+
+.flower-close:hover {
+    background: rgb(255 255 255 / 0.24);
+}
+
+.flower-close svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.flower-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.flower-loading {
+    padding: 1rem;
+    font-size: 0.875rem;
+    color: var(--color-gray-500);
+}
+
+.flower-body .concierge-chat {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.flower-body .concierge-log {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 1rem 0.875rem 0.5rem;
+}
+
+.flower-body .concierge-reply {
+    background: var(--color-white);
+    border: 1px solid var(--flower-hair);
+}
+
+.flower-body .concierge-form-area {
+    flex: none;
+    margin: 0;
+    padding: 0.625rem 0.75rem 0.25rem;
+    border-top: 1px solid var(--flower-hair);
+    background: var(--color-white);
+}
+
+/* A full card per result would make six results a long scroll in a panel
+   this narrow, so cards become compact rows: thumbnail beside text. */
+.flower-body .concierge-cards {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+}
+
+.flower-body .concierge-card {
+    display: flex;
+    max-width: none;
+}
+
+.flower-body .concierge-card-image {
+    flex: none;
+    width: 5.5rem;
+}
+
+.flower-body .concierge-card-image img {
+    height: 100%;
+    min-height: 5rem;
+}
+
+.flower-body .concierge-card-text {
+    min-width: 0;
+}
+
+.flower-fine {
+    flex: none;
+    padding: 0 0.875rem 0.625rem;
+    background: var(--color-white);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--color-gray-500);
+}
+
+.flower-fine button {
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.flower button:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* Phones: the panel is a bottom sheet across the full width, its close
+   button a full-size touch target at the top right of the header. */
+@media (max-width: 639px) {
+    .flower {
+        --flower-gap: 0.75rem;
+    }
+
+    .flower-fab {
+        padding: 0.3125rem 0.875rem 0.3125rem 0.3125rem;
+        font-size: 1rem;
+    }
+
+    .flower-dock .flower-avatar {
+        width: 2.625rem;
+        height: 2.625rem;
+    }
+
+    .flower-panel {
+        inset: auto 0 0 0;
+        width: 100%;
+        max-width: 100%;
+        height: 88dvh;
+        border-width: 1px 0 0;
+        border-radius: 1.375rem 1.375rem 0 0;
+    }
+
+    .flower-close {
+        width: 2.75rem;
+        height: 2.75rem;
+    }
+
+    .flower-fine {
+        padding-bottom: calc(0.625rem + env(safe-area-inset-bottom, 0px));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .flower-fab,
+    .flower-hide {
+        transition: none;
+    }
+}

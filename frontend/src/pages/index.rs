@@ -127,24 +127,26 @@ async fn build_nearby_section(
 #[handler]
 #[tracing::instrument]
 pub async fn index_page(
-    _session: &Session,
+    session: &Session,
     _headers: &HeaderMap,
     RealIp(client_ip): RealIp,
     Authenticated(user_info): Authenticated,
 ) -> Result<Response, anyhow::Error> {
-    render_index_page(client_ip, user_info).await
+    render_index_page(session, client_ip, user_info).await
 }
 
 // Temporarily needed until https://github.com/poem-web/poem/issues/1098 is fixed
 #[tracing::instrument]
 pub async fn index_page_pseudo_handler(
+    session: &Session,
     client_ip: Option<std::net::IpAddr>,
     user_info: Option<Arc<BasicInfo>>,
 ) -> Result<Response, anyhow::Error> {
-    render_index_page(client_ip, user_info).await
+    render_index_page(session, client_ip, user_info).await
 }
 
 async fn render_index_page(
+    session: &Session,
     client_ip: Option<std::net::IpAddr>,
     user_info: Option<Arc<BasicInfo>>,
 ) -> Result<Response, anyhow::Error> {
@@ -161,7 +163,7 @@ async fn render_index_page(
     // Location (and therefore the "near you" list) is resolved for everyone.
     let location = resolve_location(client_ip).await;
     let nearby = build_nearby_section(&location, &settings).await;
-    let concierge = crate::concierge::section_for(&settings, user_info.as_deref()).await;
+    let concierge = crate::concierge::section_for(&settings, session, user_info.as_deref()).await;
 
     if let Some(user) = user_info.clone() {
         let location_display = location_display_from_ip(&location);
