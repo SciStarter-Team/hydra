@@ -374,7 +374,12 @@ pub fn normalize_tag(tag: &str) -> String {
 /// that mark the account being created as one whose owner needs protection
 /// — a cohort signing up through a partner that enrolls minors. Kept in
 /// step with orrery's `PROTECTED_SIGNUP_TAGS`.
-pub const PROTECTED_SIGNUP_TAGS: [&str; 3] = ["laplstudent", "girlscout", "port-charlotte"];
+pub const PROTECTED_SIGNUP_TAGS: [&str; 4] = [
+    "laplstudent",
+    "girlscout",
+    "port-charlotte",
+    "dca-ca-gov",
+];
 
 /// Whether an account signing up under `tags` must be protected.
 ///

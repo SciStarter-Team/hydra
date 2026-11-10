@@ -69,7 +69,7 @@
     --flower-gap: 1.125rem;
     position: fixed;
     right: var(--flower-gap);
-    bottom: calc(var(--flower-gap) + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--flower-gap) + var(--logged-in-bar-height, 0px) + env(safe-area-inset-bottom, 0px));
     z-index: 45;
 }
 

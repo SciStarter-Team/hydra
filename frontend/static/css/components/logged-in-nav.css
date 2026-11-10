@@ -1,5 +1,12 @@
+/* The height of the bar the signed-in navigation becomes at the bottom of a
+   narrow screen. Anything else fixed to the bottom of the viewport (Flower's
+   launcher, for one) offsets itself by this to stay clear of it. */
+.logged-in {
+    --logged-in-bar-height: 44px;
+}
+
 .logged-in footer {
-    margin-bottom: 44px;
+    margin-bottom: var(--logged-in-bar-height);
 }
 
 #logged-in-toggle, #logged-in-nav-logo {
@@ -23,7 +30,7 @@
     bottom: 0;
     left:0;
     width:100%;
-    height: 44px;
+    height: var(--logged-in-bar-height);
     z-index: 999;
 }
 
@@ -156,6 +163,9 @@
 
 
 @media (min-width:768px){
+    .logged-in {
+        --logged-in-bar-height: 0px;
+    }
     .logged-in #logged-in-nav-logo {
         display: block;
         max-width: 200px;
