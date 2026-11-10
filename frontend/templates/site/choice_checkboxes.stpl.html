@@ -1,0 +1,16 @@
+<% let full = self.full(); %>
+<% if let Some(legend) = &self.legend { %>
+<fieldset class="choice-group">
+  <legend><%= legend %></legend>
+<% } %>
+  <div class="choice-checkboxes checkbox-grid"<% if let Some(limit) = self.limit { %> data-pick-limit="<%= limit %>"<% } %>>
+    <% for value in &self.values { let picked = self.picked.contains(&value.slug); %>
+    <label class="checkbox-option">
+      <input type="checkbox" name="<%= self.field %>[]" value="<%= value.slug %>"<% if picked { %> checked<% } else if full { %> disabled<% } %>>
+      <%= value.name %>
+    </label>
+    <% } %>
+  </div>
+<% if self.legend.is_some() { %>
+</fieldset>
+<% } %>

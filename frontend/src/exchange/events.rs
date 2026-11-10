@@ -9,8 +9,9 @@
 //!   tick-boxes and the squelches are the ones its projects are narrowed by;
 //! - an event is listed while it has a session that has not ended, or
 //!   always once past events are asked for;
-//! - activities, topics and audiences belong to projects alone, so a search
-//!   narrowed by any of them lists no events;
+//! - a topic or audiences narrow events as they narrow projects, by what
+//!   each event picks; events have no activities, so a search narrowed by
+//!   one lists no events;
 //! - those still to come before those that are over; among each, an
 //!   exchange with a region lists first the events held in person in its
 //!   region, then the online events aimed at its region, then the events it
@@ -28,8 +29,8 @@ use poem::{
 use sailfish::TemplateOnce;
 
 use super::handlers::{
-    EVENTS, PageSelector, SearchScope, create_template_exchange, push_hidden_exclusion,
-    push_membership, push_named_regions,
+    EVENTS, PageSelector, SearchScope, create_template_exchange, push_choice_conditions,
+    push_hidden_exclusion, push_membership, push_named_regions,
 };
 use super::{ExchangeInfo, SearchParams, TemplateExchange};
 use crate::local_time::{TimeFormat, local_time, local_time_range};
@@ -178,6 +179,7 @@ fn push_conditions(
     push_hidden_exclusion(query_builder, &EVENTS, exchange.exchange_id, scope);
     push_membership(query_builder, &EVENTS, exchange, params.global);
     push_named_regions(query_builder, &EVENTS, &scope.regions);
+    push_choice_conditions(query_builder, &EVENTS, params);
 
     if !params.past {
         query_builder

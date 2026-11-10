@@ -19,7 +19,8 @@ use serde_json::{Map, Value, json};
 use url::form_urlencoded;
 
 use super::{FinderQuery, FinderResult, FtsTermStyle, ResultPage, SearchKinds, run_finder_search};
-use crate::project::{ProjectStatus, choice_ids};
+use crate::choice::{ChoiceList, ChoiceLists, ChoiceValue};
+use crate::project::ProjectStatus;
 
 /// How many results orrery's API gave to a page.
 const PAGE_SIZE: u32 = 10;
@@ -40,9 +41,10 @@ struct ApiQuery {
 }
 
 impl ApiQuery {
-    /// Read the query string `query`. A parameter given more than once takes
-    /// its last value, as Django's `QueryDict.get` does.
-    fn parse(query: &str) -> Self {
+    /// Read the query string `query`, whose choices name values of `lists`.
+    /// A parameter given more than once takes its last value, as Django's
+    /// `QueryDict.get` does.
+    fn parse(query: &str, lists: &ChoiceLists) -> Self {
         let pairs: Vec<(String, String)> = form_urlencoded::parse(query.as_bytes())
             .into_owned()
             .collect();
@@ -64,7 +66,7 @@ impl ApiQuery {
 
         // A choice orrery could not find matched no project, so one that
         // names nothing here is kept as given, and matches none either.
-        let choice = |key: &str, choices: &[(i64, &'static str)]| {
+        let choice = |key: &str, values: &[ChoiceValue]| {
             last(key)
                 .filter(|value| !value.is_empty())
                 .map(|value| {
@@ -73,8 +75,8 @@ impl ApiQuery {
                         Err(_) => Value::from(value),
                     };
 
-                    choice_ids::named(choices, &named)
-                        .unwrap_or(value)
+                    ChoiceValue::partner_named(values, &named)
+                        .map_or(value, |value| value.name.as_str())
                         .to_string()
                 })
                 .into_iter()
@@ -90,8 +92,8 @@ impl ApiQuery {
             q: words.map(str::to_string),
             lat: coordinate("lat"),
             lng: coordinate("lng"),
-            topic: choice("topic", choice_ids::TOPICS),
-            activity: choice("activity", choice_ids::ACTIVITIES),
+            topic: choice("topic", lists.get(ChoiceList::Topic)),
+            activity: choice("activity", lists.get(ChoiceList::Activity)),
             show_completed: switch("all-status", false).then(|| "on".to_string()),
             ..Default::default()
         };
@@ -124,7 +126,8 @@ impl ApiQuery {
 
 #[handler]
 pub async fn handle(req: &Request) -> Result<Response, poem::Error> {
-    let query = ApiQuery::parse(req.uri().query().unwrap_or(""));
+    let lists = ChoiceLists::load().await.map_err(internal)?;
+    let query = ApiQuery::parse(req.uri().query().unwrap_or(""), &lists);
 
     let found = run_finder_search(
         &query.finder,
@@ -223,12 +226,15 @@ fn point(lng: Option<f64>, lat: Option<f64>) -> Value {
     }
 }
 
-/// A choice field as orrery gave it: each value's id and name.
-fn choices(choices: &[(i64, &'static str)], names: &[String]) -> Value {
+/// A choice field as orrery gave it: each value's id and name, by name.
+fn choices(values: &[ChoiceValue]) -> Value {
+    let mut values: Vec<&ChoiceValue> = values.iter().collect();
+    values.sort_by(|a, b| a.name.cmp(&b.name));
+
     Value::Array(
-        names
-            .iter()
-            .map(|name| json!({"value": choice_ids::id_of(choices, name), "label": name}))
+        values
+            .into_iter()
+            .map(|value| value.partner_json("value", "label"))
             .collect(),
     )
 }
@@ -266,40 +272,10 @@ async fn project_records(slugs: &str) -> Result<Records, Error> {
     .fetch_all(db())
     .await?;
 
-    let ids = serde_json::to_string(&rows.iter().map(|row| &row.project_id).collect::<Vec<_>>())?;
-    let topics = project_choices(
-        sqlx::query!(
-            r#"SELECT project_id AS "project_id!", topic AS "name!" FROM project_topics
-               WHERE project_id IN (SELECT value FROM json_each(?)) ORDER BY topic"#,
-            ids
-        )
-        .fetch_all(db())
-        .await?
-        .into_iter()
-        .map(|row| (row.project_id, row.name)),
-    );
-    let activities = project_choices(
-        sqlx::query!(
-            r#"SELECT project_id AS "project_id!", activity AS "name!" FROM project_activities
-               WHERE project_id IN (SELECT value FROM json_each(?)) ORDER BY activity"#,
-            ids
-        )
-        .fetch_all(db())
-        .await?
-        .into_iter()
-        .map(|row| (row.project_id, row.name)),
-    );
-    let audiences = project_choices(
-        sqlx::query!(
-            r#"SELECT project_id AS "project_id!", audience AS "name!" FROM project_audiences
-               WHERE project_id IN (SELECT value FROM json_each(?)) ORDER BY audience"#,
-            ids
-        )
-        .fetch_all(db())
-        .await?
-        .into_iter()
-        .map(|row| (row.project_id, row.name)),
-    );
+    let ids: Vec<String> = rows.iter().map(|row| row.project_id.clone()).collect();
+    let topics = ChoiceValue::picked_by_each(ChoiceList::Topic, &ids).await?;
+    let activities = ChoiceValue::picked_by_each(ChoiceList::Activity, &ids).await?;
+    let audiences = ChoiceValue::picked_by_each(ChoiceList::Audience, &ids).await?;
 
     let none = Vec::new();
 
@@ -312,24 +288,15 @@ async fn project_records(slugs: &str) -> Result<Records, Error> {
             record.insert("status".into(), status(row.status));
             record.insert(
                 "topics".into(),
-                choices(
-                    choice_ids::TOPICS,
-                    topics.get(&row.project_id).unwrap_or(&none),
-                ),
+                choices(topics.get(&row.project_id).unwrap_or(&none)),
             );
             record.insert(
                 "activities".into(),
-                choices(
-                    choice_ids::ACTIVITIES,
-                    activities.get(&row.project_id).unwrap_or(&none),
-                ),
+                choices(activities.get(&row.project_id).unwrap_or(&none)),
             );
             record.insert(
                 "audience".into(),
-                choices(
-                    choice_ids::AUDIENCE,
-                    audiences.get(&row.project_id).unwrap_or(&none),
-                ),
+                choices(audiences.get(&row.project_id).unwrap_or(&none)),
             );
             record.insert("point".into(), point(row.lng, row.lat));
 
@@ -373,17 +340,6 @@ async fn project_records(slugs: &str) -> Result<Records, Error> {
             (("Project".to_string(), row.slug), record)
         })
         .collect())
-}
-
-/// Each project's names for one choice field.
-fn project_choices(rows: impl Iterator<Item = (String, String)>) -> HashMap<String, Vec<String>> {
-    let mut by_project: HashMap<String, Vec<String>> = HashMap::new();
-
-    for (project_id, name) in rows {
-        by_project.entry(project_id).or_default().push(name);
-    }
-
-    by_project
 }
 
 /// The events among `slugs`, a JSON array, by kind and slug. An event has no
@@ -464,9 +420,30 @@ mod tests {
     use super::*;
     use assert2::check;
 
+    fn value(list: ChoiceList, id: i64, name: &str) -> ChoiceValue {
+        ChoiceValue {
+            list,
+            slug: crate::slug::slugify(name),
+            name: name.to_string(),
+            position: id,
+            orrery_id: Some(id),
+        }
+    }
+
+    /// The query read against a few of orrery's values.
+    fn parse(query: &str) -> ApiQuery {
+        let lists = ChoiceLists::of([
+            value(ChoiceList::Topic, 11, "Birds"),
+            value(ChoiceList::Topic, 13, "Astronomy & Space"),
+            value(ChoiceList::Activity, 40, "On a hike"),
+        ]);
+
+        ApiQuery::parse(query, &lists)
+    }
+
     #[test]
     fn a_search_is_read_with_orrerys_names_and_defaults() {
-        let query = ApiQuery::parse("q=butterfly&lat=35.78&lng=-78.64&topic=13&activity=40&page=2");
+        let query = parse("q=butterfly&lat=35.78&lng=-78.64&topic=13&activity=40&page=2");
 
         check!(query.finder.q.as_deref() == Some("butterfly"));
         check!(query.finder.lat == Some(35.78));
@@ -481,56 +458,39 @@ mod tests {
 
     #[test]
     fn phrase_stands_in_for_an_empty_q() {
-        check!(ApiQuery::parse("q=&phrase=amateur").finder.q.as_deref() == Some("amateur"));
-        check!(
-            ApiQuery::parse("q=moths&phrase=amateur")
-                .finder
-                .q
-                .as_deref()
-                == Some("moths")
-        );
-        check!(ApiQuery::parse("").finder.q.is_none());
+        check!(parse("q=&phrase=amateur").finder.q.as_deref() == Some("amateur"));
+        check!(parse("q=moths&phrase=amateur").finder.q.as_deref() == Some("moths"));
+        check!(parse("").finder.q.is_none());
     }
 
     #[test]
     fn a_choice_may_be_named_and_one_naming_nothing_matches_nothing() {
-        check!(ApiQuery::parse("topic=Birds").finder.topic == ["Birds"]);
-        check!(ApiQuery::parse("topic=99999").finder.topic == ["99999"]);
-        check!(ApiQuery::parse("topic=").finder.topic.is_empty());
+        check!(parse("topic=Birds").finder.topic == ["Birds"]);
+        check!(parse("topic=99999").finder.topic == ["99999"]);
+        check!(parse("topic=").finder.topic.is_empty());
     }
 
     #[test]
     fn the_last_of_a_repeated_parameter_counts() {
-        check!(ApiQuery::parse("topic=13&topic=11").finder.topic == ["Birds"]);
+        check!(parse("topic=13&topic=11").finder.topic == ["Birds"]);
     }
 
     #[test]
     fn events_are_searched_only_when_asked_for() {
-        check!(ApiQuery::parse("events=true").kinds == SearchKinds::Both);
-        check!(ApiQuery::parse("events=true&projects=false").kinds == SearchKinds::EventsOnly);
-        check!(ApiQuery::parse("projects=false").kinds == SearchKinds::Neither);
+        check!(parse("events=true").kinds == SearchKinds::Both);
+        check!(parse("events=true&projects=false").kinds == SearchKinds::EventsOnly);
+        check!(parse("projects=false").kinds == SearchKinds::Neither);
     }
 
     #[test]
     fn all_status_takes_in_finished_projects() {
-        check!(
-            ApiQuery::parse("all-status=true")
-                .finder
-                .show_completed
-                .as_deref()
-                == Some("on")
-        );
-        check!(
-            ApiQuery::parse("all-status=false")
-                .finder
-                .show_completed
-                .is_none()
-        );
+        check!(parse("all-status=true").finder.show_completed.as_deref() == Some("on"));
+        check!(parse("all-status=false").finder.show_completed.is_none());
     }
 
     #[test]
     fn an_unreadable_or_zero_coordinate_or_page_is_ignored() {
-        let query = ApiQuery::parse("lat=north&lng=0&page=-3");
+        let query = parse("lat=north&lng=0&page=-3");
 
         check!(query.finder.lat.is_none());
         check!(query.finder.lng.is_none());
@@ -539,14 +499,19 @@ mod tests {
 
     #[test]
     fn csv_is_asked_for_by_format() {
-        check!(ApiQuery::parse("format=csv").format == Format::Csv);
+        check!(parse("format=csv").format == Format::Csv);
     }
 
     #[test]
     fn a_choice_field_carries_orrerys_ids() {
         check!(
-            choices(choice_ids::TOPICS, &["Birds".to_string()])
-                == json!([{"value": 11, "label": "Birds"}])
+            choices(&[
+                value(ChoiceList::Topic, 13, "Astronomy & Space"),
+                value(ChoiceList::Topic, 11, "Birds"),
+            ]) == json!([
+                {"value": 13, "label": "Astronomy & Space"},
+                {"value": 11, "label": "Birds"},
+            ])
         );
     }
 

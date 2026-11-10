@@ -2,7 +2,7 @@
     <% for (index, item) in self.items.iter().enumerate() { %>
         <div class="flex items-center space-x-2 p-2 bg-gray-50 rounded">
             <% if self.vocabulary.is_some() { %>
-                <span class="flex-1 min-w-0 px-2 py-1 text-sm text-gray-900"><%= item.value %></span>
+                <span class="flex-1 min-w-0 px-2 py-1 text-sm text-gray-900"><%= item.resolved_name.as_deref().unwrap_or(&item.value) %></span>
             <% } else if self.field_type.to_string() == "associated_projects" { %>
                 <% if let Some(name) = &item.resolved_name { %>
                     <%+ crate::admin::autocomplete::EntityAutocomplete::new_project_selector(
@@ -57,8 +57,8 @@
             <select class="flex-1 min-w-0 px-2 py-1 border border-gray-300 rounded text-sm bg-white"
                     name="value">
                 <option value="">Select an option...</option>
-                <% for option in vocab { %>
-                  <option value="<%= option %>"><%= option %></option>
+                <% for (value, label) in vocab { %>
+                  <option value="<%= value %>"><%= label %></option>
                 <% } %>
             </select>
         <% } else if self.field_type == crate::project::field::ProjectFieldType::AssociatedProjects { %>

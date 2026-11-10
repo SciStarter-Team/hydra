@@ -293,25 +293,25 @@ impl ProjectStats {
             .await?;
 
         let mut topics = QueryBuilder::new(
-            "SELECT t.topic AS label, COUNT(*) AS value \
-            FROM project_topics t \
-            JOIN projects p ON p.project_id = t.project_id \
+            "SELECT t.name AS label, COUNT(*) AS value \
+            FROM choice_names t \
+            JOIN projects p ON p.project_id = t.target AND t.list = 'Topic' \
             JOIN entities e ON e.target = p.project_id AND e.kind = 'Project' \
             WHERE e.publish = 1",
         );
         push_listing_rule(&mut topics, &ProjectStatus::LISTED_WHEN_INACTIVE);
-        topics.push(" GROUP BY t.topic ORDER BY COUNT(*) DESC, t.topic");
+        topics.push(" GROUP BY t.name ORDER BY COUNT(*) DESC, t.name");
         let topics = topics.build_query_as::<Bar>().fetch_all(db()).await?;
 
         let mut audiences = QueryBuilder::new(
-            "SELECT a.audience AS label, COUNT(*) AS value \
-            FROM project_audiences a \
-            JOIN projects p ON p.project_id = a.project_id \
+            "SELECT a.name AS label, COUNT(*) AS value \
+            FROM choice_names a \
+            JOIN projects p ON p.project_id = a.target AND a.list = 'Audience' \
             JOIN entities e ON e.target = p.project_id AND e.kind = 'Project' \
             WHERE e.publish = 1",
         );
         push_listing_rule(&mut audiences, &ProjectStatus::LISTED_WHEN_INACTIVE);
-        audiences.push(" GROUP BY a.audience ORDER BY COUNT(*) DESC, a.audience");
+        audiences.push(" GROUP BY a.name ORDER BY COUNT(*) DESC, a.name");
         let audiences = audiences.build_query_as::<Bar>().fetch_all(db()).await?;
 
         Ok(ProjectStats {

@@ -9,6 +9,7 @@ pub mod badge;
 pub mod builder;
 pub mod certificates;
 pub mod channel;
+pub mod choice;
 pub mod communities;
 pub mod component;
 pub mod concierge;
@@ -62,6 +63,7 @@ pub mod schedule;
 pub mod search;
 pub mod session;
 pub mod sitemap;
+pub mod slug;
 pub mod ssrf;
 pub mod staff;
 pub mod staff_pick;
@@ -684,6 +686,8 @@ async fn main() -> Result<(), Error> {
     let _project_field_updates = tokio::spawn(ProjectField::peering_task());
     let _event_all_updates = tokio::spawn(EventAll::peering_task());
     let _event_field_updates = tokio::spawn(EventField::peering_task());
+    let _choice_value_updates = tokio::spawn(choice::ChoiceValue::peering_task());
+    let _choice_list_copy_updates = tokio::spawn(choice::ChoiceListCopy::peering_task());
     let _exchange_updates = tokio::spawn(exchange::Exchange::peering_task());
     let _oauth2_client_updates = tokio::spawn(oauth2::types::Client::peering_task());
     let _oauth2_authz_code_updates = tokio::spawn(oauth2::types::AuthorizationCode::peering_task());
@@ -883,7 +887,10 @@ async fn periodic_maintenance() {
 }
 
 mod sync {
-    use std::time::Duration;
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        time::Duration,
+    };
 
     use common::{
         insensitivestring::InsensitiveString,
@@ -897,6 +904,7 @@ mod sync {
     use ulid::Ulid;
 
     use crate::{
+        choice::{ChoiceList, ChoiceListCopy, ChoiceValue, OrreryChoice, OrreryList},
         contact::{Contact, ContactRole},
         entity::Entity,
         event::{EventInstance, all::EventAll},
@@ -980,6 +988,109 @@ mod sync {
         saved
             .and_then(|saved| saved.parse().ok())
             .unwrap_or_else(|| "2000-01-01T00:00:00Z".parse().expect("a valid timestamp"))
+    }
+
+    /// One value of one of orrery's choice lists, as `/staff/sync/choices`
+    /// gives it.
+    #[derive(Debug, serde::Deserialize)]
+    struct ChoiceData {
+        list: String,
+        id: i64,
+        name: String,
+
+        /// Where the value comes in its list; a value without one comes after
+        /// those with, by id.
+        position: Option<i64>,
+
+        #[serde(default)]
+        facet: String,
+    }
+
+    /// Bring the copies of orrery's choice lists up to date, so that every
+    /// value a batch of projects or events picks by id is here to be found.
+    /// Run before each batch.
+    async fn synchronize_choices(client: &reqwest::Client) -> Result<(), anyhow::Error> {
+        let choices: Vec<ChoiceData> = client
+            .get("https://scistarter.org/staff/sync/choices")
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        let mut lists: BTreeMap<OrreryList, Vec<ChoiceData>> = BTreeMap::new();
+        for choice in choices {
+            match OrreryList::from_name(&choice.list) {
+                Some(from) => lists.entry(from).or_default().push(choice),
+                None => tracing::warn!("Ignoring the value {choice:?} of a list hydra has not got"),
+            }
+        }
+
+        // A list absent from the response is left as it is, rather than
+        // taken for one orrery has emptied.
+        for (from, mut values) in lists {
+            values.sort_by_key(|choice| (choice.position.is_none(), choice.position, choice.id));
+
+            let copy = ChoiceListCopy::new(
+                from,
+                values
+                    .into_iter()
+                    .filter_map(|choice| match from.list_for(&choice.facet) {
+                        Some(list) => Some(OrreryChoice {
+                            id: choice.id,
+                            name: choice.name,
+                            list,
+                        }),
+                        None => {
+                            tracing::warn!(
+                                "Leaving out orrery's {from:?} value {} ({:?}), whose facet {:?} names no list here",
+                                choice.id,
+                                choice.name,
+                                choice.facet
+                            );
+                            None
+                        }
+                    })
+                    .collect(),
+            );
+
+            if ChoiceListCopy::read_from_database(from).await? != copy {
+                tracing::info!("Copying orrery's {from:?} list");
+                copy.store().await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// The slugs of the values copied from `from` that orrery picks by `ids`,
+    /// which it joins by commas, by the list each is in here.
+    async fn orrery_picks(
+        from: OrreryList,
+        ids: Option<&str>,
+    ) -> Result<BTreeMap<ChoiceList, BTreeSet<String>>, anyhow::Error> {
+        let ids = ids
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(str::parse::<i64>)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        ChoiceValue::slugs_of_orrery_ids(from, &ids).await
+    }
+
+    /// What orrery picks by the ids `picked` gives for each of its lists, by
+    /// the list each value is in here.
+    async fn all_orrery_picks(
+        picked: [(OrreryList, Option<&str>); 3],
+    ) -> Result<BTreeMap<ChoiceList, BTreeSet<String>>, anyhow::Error> {
+        let mut picks = BTreeMap::new();
+        for (from, ids) in picked {
+            picks.extend(orrery_picks(from, ids).await?);
+        }
+        Ok(picks)
     }
 
     #[derive(Default, Debug, serde::Deserialize)]
@@ -1075,7 +1186,9 @@ mod sync {
         facebook_page: String,
         instagram_page: String,
         // section Categorization
-        topics: String,            // multiple, joined by ||
+        /// Orrery's ids of the project's topics, joined by commas. Absent
+        /// from an orrery that predates them; see [`synchronize_projects`].
+        topic_ids: Option<String>,
         fields_of_science: String, // multiple, joined by ||
         practices: String,         // multiple, joined by ||
         practices_how: String,
@@ -1083,7 +1196,8 @@ mod sync {
         difficulty: String, // choices = [[1, "Easy"], [2, "medium"], [3, "Difficult"]]
         diy: bool,
         // section Joining
-        audience: String, // multiple, joined by ||
+        /// Orrery's ids of the project's audiences, joined by commas.
+        audience_ids: Option<String>,
         signup_url: String,
         prefix_how_to_logged_in: String,
         prefix_how_to_logged_out: String,
@@ -1141,7 +1255,8 @@ mod sync {
         month_completed: Option<i32>,
         // section Skills
         participation_tasks: String, // multiple, joined by ||
-        activities: String,          // multiple, joined by ||
+        /// Orrery's ids of the project's activities, joined by commas.
+        activity_ids: Option<String>,
         special_skills: String,
         indoors: bool,
         outdoors: bool,
@@ -1222,6 +1337,14 @@ mod sync {
 
             let client = reqwest::Client::new();
 
+            if let Err(err) = synchronize_choices(&client).await {
+                tracing::error!(
+                    "Projects wait for orrery's choice lists, which failed to copy: {err}"
+                );
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+
             tracing::info!("Retrieving projects since {} {}...", &last_update, last_id);
 
             let projects: Vec<ProjectData> = match client
@@ -1269,6 +1392,21 @@ mod sync {
 
             let got_projects = projects.len();
             tracing::info!("Synchronization received {} projects", got_projects);
+
+            // An orrery that sends no choice ids predates them. Reading their
+            // absence as no picks would clear every project's, so the batch
+            // waits, its bookmark unmoved, for an orrery that sends them.
+            if projects.iter().any(|data| {
+                data.topic_ids.is_none()
+                    || data.audience_ids.is_none()
+                    || data.activity_ids.is_none()
+            }) {
+                tracing::error!(
+                    "Orrery sent projects without their choice ids; waiting for it to send them"
+                );
+                sleep(Duration::from_secs(60 * 60)).await;
+                continue;
+            }
 
             for data in projects {
                 let changed = data.changed.unwrap_or(data.updated);
@@ -1479,12 +1617,6 @@ mod sync {
                 proj.twitter_name = data.twitter_name;
                 proj.facebook_page = data.facebook_page;
                 proj.instagram_page = data.instagram_page;
-                proj.topics = data
-                    .topics
-                    .split("||")
-                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
                 proj.fields_of_science = data
                     .fields_of_science
                     .split("||")
@@ -1501,12 +1633,6 @@ mod sync {
                 proj.search_terms = data.search_terms;
                 proj.difficulty = data.difficulty;
                 proj.diy = data.diy;
-                proj.audience = data
-                    .audience
-                    .split("||")
-                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
                 proj.signup_url = data.signup_url;
                 proj.prefix_how_to_logged_in = data.prefix_how_to_logged_in;
                 proj.prefix_how_to_logged_out = data.prefix_how_to_logged_out;
@@ -1580,12 +1706,23 @@ mod sync {
                     .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
                     .collect::<Vec<_>>()
                     .into_boxed_slice();
-                proj.activities = data
-                    .activities
-                    .split("||")
-                    .filter_map(|s| s.trim_matches('|').to_string().empty_as_none())
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
+                let picks = all_orrery_picks([
+                    (OrreryList::Topics, data.topic_ids.as_deref()),
+                    (OrreryList::Audience, data.audience_ids.as_deref()),
+                    (OrreryList::Activities, data.activity_ids.as_deref()),
+                ]);
+                match picks.await {
+                    Ok(mut picks) => {
+                        let mut take = |list| picks.remove(&list).unwrap_or_default();
+                        proj.topics = take(ChoiceList::Topic);
+                        proj.audience = take(ChoiceList::Audience);
+                        proj.activities = take(ChoiceList::Activity);
+                    }
+                    Err(err) => {
+                        tracing::error!("Error reading the choices of {}: {}", &proj.name, err);
+                        continue;
+                    }
+                };
                 proj.special_skills = data.special_skills;
                 proj.data_results = data.data_results;
                 proj.data_aggregation = data
@@ -1795,7 +1932,15 @@ mod sync {
         country: String,
         regions: Option<String>,
         point: Option<String>,
-        event_type: String,                  // EventType,
+        /// Orrery's ids of the event's types, joined by commas. Absent from
+        /// an orrery that predates them; see [`synchronize_events`].
+        event_type_ids: Option<String>,
+
+        /// Orrery's ids of the event's topics, joined by commas.
+        topic_ids: Option<String>,
+
+        /// Orrery's ids of the event's audiences, joined by commas.
+        audience_ids: Option<String>,
         ticketing_begins: Option<Timestamp>, // TimeString,
         outcomes_label: String,
         outcomes_link: String,
@@ -1865,6 +2010,14 @@ mod sync {
 
             let client = reqwest::Client::new();
 
+            if let Err(err) = synchronize_choices(&client).await {
+                tracing::error!(
+                    "Events wait for orrery's choice lists, which failed to copy: {err}"
+                );
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+
             tracing::info!("Retrieving events since {} {}...", &last_update, last_id);
 
             let events: Vec<EventData> = match client
@@ -1912,6 +2065,19 @@ mod sync {
 
             let got_events = events.len();
             tracing::info!("Synchronization received {} events", got_events);
+
+            // As for projects: without the ids, the batch waits.
+            if events.iter().any(|data| {
+                data.event_type_ids.is_none()
+                    || data.topic_ids.is_none()
+                    || data.audience_ids.is_none()
+            }) {
+                tracing::error!(
+                    "Orrery sent events without their choice ids; waiting for it to send them"
+                );
+                sleep(Duration::from_secs(60 * 60)).await;
+                continue;
+            }
 
             for data in events {
                 let updated = data.event_last_edited.unwrap_or_else(Timestamp::now);
@@ -2014,7 +2180,24 @@ mod sync {
                 evt.country = data.country;
                 evt.regions = data.regions;
                 evt.point = data.point;
-                evt.event_type = data.event_type.parse().unwrap_or_default();
+                let picks = all_orrery_picks([
+                    (OrreryList::EventType, data.event_type_ids.as_deref()),
+                    (OrreryList::Topics, data.topic_ids.as_deref()),
+                    (OrreryList::Audience, data.audience_ids.as_deref()),
+                ]);
+                match picks.await {
+                    Ok(picks) => {
+                        for (list, slugs) in picks {
+                            if let Some(picked) = evt.picks_mut(list) {
+                                *picked = slugs;
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        tracing::error!("Error reading the choices of {}: {}", &evt.name, err);
+                        continue;
+                    }
+                };
                 evt.ticketing_begins = data.ticketing_begins.map(|ts| ts.into());
                 evt.outcomes_label = data.outcomes_label.empty_as_none();
                 evt.outcomes_link = data.outcomes_link.empty_as_none();
@@ -2819,7 +3002,10 @@ mod sync {
             }
 
             if moved > 0 {
-                tracing::info!("{} region(s) changed; rebuilding project and event matches", moved);
+                tracing::info!(
+                    "{} region(s) changed; rebuilding project and event matches",
+                    moved
+                );
 
                 if let Err(e) = crate::region::rebuild_all().await {
                     eprintln!("Region match rebuild failed: {}", e);

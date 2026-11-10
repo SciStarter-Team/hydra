@@ -116,10 +116,12 @@
                   </td>
                 </tr>
                 <% } %>
+                <% if !self.event.event_types.is_empty() { %>
                 <tr>
                   <th scope="row">Type of Event</th>
-                  <td><%= &self.event.event_type %></td>
+                  <td><%= self.event.event_types.join(", ") %></td>
                 </tr>
+                <% } %>
                 <% if !self.event.tags.is_empty() { %>
                 <tr>
                   <th scope="row">Tags</th>

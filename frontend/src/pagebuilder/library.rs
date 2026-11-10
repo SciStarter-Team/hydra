@@ -95,25 +95,15 @@ pub async fn import_from_zip(bytes: Vec<u8>) -> Result<ImportReport, Error> {
     Ok(report)
 }
 
+/// A component's slug: [`crate::slug::slugify`], or "component" for a name
+/// that gives none.
 fn slugify(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut prev_dash = false;
-    for c in input.chars() {
-        if c.is_ascii_alphanumeric() {
-            out.push(c.to_ascii_lowercase());
-            prev_dash = false;
-        } else if !prev_dash && !out.is_empty() {
-            out.push('-');
-            prev_dash = true;
-        }
-    }
-    while out.ends_with('-') {
-        out.pop();
-    }
+    let out = crate::slug::slugify(input);
     if out.is_empty() {
-        out.push_str("component");
+        "component".to_string()
+    } else {
+        out
     }
-    out
 }
 
 #[cfg(test)]

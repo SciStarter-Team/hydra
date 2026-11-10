@@ -1,4 +1,6 @@
 use common::message::log::PageChange;
+use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use jiff::{Zoned, civil, tz::TimeZone};
@@ -20,6 +22,7 @@ use common::{
 };
 
 use crate::{
+    choice::{ChoiceCheckboxes, ChoiceList, ChoiceValue, limited_heading},
     component::{
         Component, Head, StandardLayout,
         facebook_questions::{self, FacebookAnswers},
@@ -28,7 +31,7 @@ use crate::{
     },
     contact::{Contact, ContactRole},
     entity::{Entity, EntityKind, EntityTarget},
-    event::{EventInstance, EventType, all::EventAll, facebook::FacebookEvent},
+    event::{EventInstance, all::EventAll, facebook::FacebookEvent},
     form::QsForm,
     middleware::authorization::Authenticated,
     peering::LoadStorePeered,
@@ -277,8 +280,20 @@ struct AddEventForm {
     regions: String,
     #[serde(default)]
     url: String,
+    /// The slugs of the formats, programs or campaigns and kinds of venue
+    /// ticked.
     #[serde(default)]
-    event_type: String,
+    formats: Vec<String>,
+    #[serde(default)]
+    programs: Vec<String>,
+    #[serde(default)]
+    venues: Vec<String>,
+    /// The slugs of the topics ticked.
+    #[serde(default)]
+    topics: Vec<String>,
+    /// The slugs of the audiences ticked.
+    #[serde(default)]
+    audience: Vec<String>,
     #[serde(default)]
     presenter: String,
     #[serde(default)]
@@ -372,7 +387,11 @@ struct EventFormValues {
     longitude: String,
     regions: String,
     url: String,
-    event_type: String,
+    formats: Vec<String>,
+    programs: Vec<String>,
+    venues: Vec<String>,
+    topics: Vec<String>,
+    audience: Vec<String>,
     presenter: String,
     image: String,
     image_credit: String,
@@ -432,11 +451,11 @@ impl From<&AddEventForm> for EventFormValues {
             longitude: f.longitude.clone(),
             regions: f.regions.clone(),
             url: f.url.clone(),
-            event_type: if f.event_type.is_empty() {
-                EventType::Other.to_string()
-            } else {
-                f.event_type.clone()
-            },
+            formats: f.formats.clone(),
+            programs: f.programs.clone(),
+            venues: f.venues.clone(),
+            topics: f.topics.clone(),
+            audience: f.audience.clone(),
             presenter: f.presenter.clone(),
             image: f.image.clone(),
             image_credit: f.image_credit.clone(),
@@ -472,7 +491,9 @@ struct AddEventPage {
 struct AddEventContent {
     error: Option<FormError>,
     values: EventFormValues,
-    event_types: Vec<String>,
+    event_types: ChoiceGroup,
+    topics: ChoiceGroup,
+    audience: ChoiceGroup,
     location: LocationPicker,
     image: ImageField,
     tags: TagInput,
@@ -614,12 +635,15 @@ impl TimezoneField {
 #[template(path = "site/add_section_summary.stpl.html")]
 struct SectionSummary {
     icon: SectionIcon,
-    title: &'static str,
+    title: Cow<'static, str>,
 }
 
 impl SectionSummary {
-    fn new(icon: SectionIcon, title: &'static str) -> Self {
-        SectionSummary { icon, title }
+    fn new(icon: SectionIcon, title: impl Into<Cow<'static, str>>) -> Self {
+        SectionSummary {
+            icon,
+            title: title.into(),
+        }
     }
 }
 
@@ -632,9 +656,81 @@ enum SectionIcon {
     Contact,
     Ticket,
     Topics,
+    EventTypes,
     Science,
     Audience,
     Activities,
+}
+
+/// One of an add form's choice fields, as one of its optional sections: a
+/// checkbox for each value of a list, grouped under the question each
+/// answers when the list's values answer several.
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/add_choice_group.stpl.html")]
+struct ChoiceGroup {
+    icon: SectionIcon,
+
+    /// The section's title, which says how many may be picked when there is
+    /// one list with a limit.
+    title: Cow<'static, str>,
+
+    /// The form fields, each submitted as `field[]`.
+    fields: Vec<&'static str>,
+    help: Option<String>,
+    checkboxes: Vec<ChoiceCheckboxes>,
+    invalid: bool,
+}
+
+impl ChoiceGroup {
+    /// A section picking from `lists`, each list's boxes submitted as its
+    /// field with its picks ticked, and limited as `limit` says. One list
+    /// is the whole section; each of several is a fieldset under its
+    /// heading.
+    async fn load(
+        icon: SectionIcon,
+        title: &'static str,
+        lists: &[(ChoiceList, &'static str, &[String])],
+        limit: fn(ChoiceList) -> Option<usize>,
+    ) -> Result<Self, anyhow::Error> {
+        let mut checkboxes = Vec::with_capacity(lists.len());
+        for (list, field, picked) in lists {
+            let boxes = ChoiceCheckboxes::load(
+                *field,
+                *list,
+                picked.iter().cloned().collect(),
+                limit(*list),
+            )
+            .await?;
+            checkboxes.push(if lists.len() > 1 {
+                boxes.with_legend(limited_heading(list.heading(), limit(*list)))
+            } else {
+                boxes
+            });
+        }
+
+        Ok(ChoiceGroup {
+            icon,
+            title: match lists {
+                [(list, _, _)] => limited_heading(title, limit(*list)),
+                _ => title.into(),
+            },
+            fields: lists.iter().map(|(_, field, _)| *field).collect(),
+            help: None,
+            checkboxes,
+            invalid: false,
+        })
+    }
+
+    fn with_help(mut self, help: impl Into<String>) -> Self {
+        self.help = Some(help.into());
+        self
+    }
+
+    /// Mark the section invalid when `error` is about one of its fields.
+    fn errors(mut self, error: Option<&FormError>) -> Self {
+        self.invalid = error.is_some_and(|e| self.fields.iter().any(|field| e.is_about(field)));
+        self
+    }
 }
 
 /// The tag-pill widget with HTMX autocomplete, backed by `js/tags-input.js`.
@@ -685,7 +781,6 @@ pub async fn add_event_page(
 
     let mut values = EventFormValues::default();
     values.exchange = query.exchange;
-    values.event_type = EventType::Other.to_string();
     values.repeat_frequency = RepeatFrequency::Once.as_str().to_string();
     values.instances.push(InstanceValues::default());
 
@@ -710,6 +805,17 @@ pub async fn add_event_submit(
             // Submitted through an exchange, it waits in that exchange's
             // approval queue (`reviewed` starts false).
             event.exchange = crate::exchange::submitted_through(&form.exchange).await?;
+
+            event.formats =
+                ChoiceValue::known(ChoiceList::EventFormat, form.formats.iter().cloned()).await?;
+            event.programs =
+                ChoiceValue::known(ChoiceList::EventProgram, form.programs.iter().cloned()).await?;
+            event.venues =
+                ChoiceValue::known(ChoiceList::EventVenue, form.venues.iter().cloned()).await?;
+            event.topics =
+                ChoiceValue::known(ChoiceList::Topic, form.topics.iter().cloned()).await?;
+            event.audience =
+                ChoiceValue::known(ChoiceList::Audience, form.audience.iter().cloned()).await?;
 
             let name = event.name.clone();
             let event_id = event.event_id;
@@ -802,10 +908,42 @@ async fn render_event_form(
         value: values.tags.clone(),
     };
 
+    let event_types = ChoiceGroup::load(
+        SectionIcon::EventTypes,
+        "Kind of event",
+        &[
+            (ChoiceList::EventFormat, "formats", &values.formats),
+            (ChoiceList::EventProgram, "programs", &values.programs),
+            (ChoiceList::EventVenue, "venues", &values.venues),
+        ],
+        crate::event::pick_limit,
+    )
+    .await?
+    .with_help("Tick any that describe the event.")
+    .errors(error.as_ref());
+    let topics = ChoiceGroup::load(
+        SectionIcon::Topics,
+        "Topics",
+        &[(ChoiceList::Topic, "topics", &values.topics)],
+        crate::event::pick_limit,
+    )
+    .await?
+    .errors(error.as_ref());
+    let audience = ChoiceGroup::load(
+        SectionIcon::Audience,
+        "Audience",
+        &[(ChoiceList::Audience, "audience", &values.audience)],
+        crate::event::pick_limit,
+    )
+    .await?
+    .errors(error.as_ref());
+
     let content = AddEventContent {
         error,
         values,
-        event_types: EventType::ALL.iter().map(|e| e.to_string()).collect(),
+        event_types,
+        topics,
+        audience,
         location,
         image,
         tags,
@@ -1432,6 +1570,11 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, Fo
         return Err(FormError::at("name", "Please enter a name for your event."));
     }
 
+    let topics = form.topics.iter().collect::<BTreeSet<_>>().len();
+    if let Some(refusal) = crate::event::refuse_picks(ChoiceList::Topic, topics) {
+        return Err(FormError::at("topics", refusal));
+    }
+
     let description = form.description.trim();
     if description.is_empty() {
         return Err(FormError::at(
@@ -1564,7 +1707,6 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, Fo
     event.image = form.image.trim().to_string();
     event.image_credit = form.image_credit.trim().to_string();
     event.how_to_join = form.how_to_join.trim().to_string();
-    event.event_type = form.event_type.parse().unwrap_or_default();
     event.part_of = form.part_of.trim().parse::<Ulid>().ok();
     // A location note is meaningful in every mode.
     event.location_description = form.location_description.trim().to_string();
@@ -1948,6 +2090,9 @@ struct AddProjectPage {
 struct AddProjectContent {
     error: Option<FormError>,
     values: ProjectFormValues,
+    topics: ChoiceGroup,
+    audience: ChoiceGroup,
+    activities: ChoiceGroup,
     location: LocationPicker,
     image: ImageField,
     tags: TagInput,
@@ -1993,6 +2138,13 @@ pub async fn add_project_submit(
             // imports, as orrery gives a project made through its form full
             // authority.
             project.update_source = Some(crate::project::field_source::FieldSource::Form);
+
+            project.topics =
+                ChoiceValue::known(ChoiceList::Topic, form.topics.iter().cloned()).await?;
+            project.audience =
+                ChoiceValue::known(ChoiceList::Audience, form.audience.iter().cloned()).await?;
+            project.activities =
+                ChoiceValue::known(ChoiceList::Activity, form.activities.iter().cloned()).await?;
 
             let name = project.name.clone();
             // Public submissions stay unpublished pending review.
@@ -2045,9 +2197,34 @@ async fn render_project_form(
         value: values.tags.clone(),
     };
 
+    let topics = ChoiceGroup::load(
+        SectionIcon::Topics,
+        "Topics",
+        &[(ChoiceList::Topic, "topics", &values.topics)],
+        |_| None,
+    )
+    .await?;
+    let audience = ChoiceGroup::load(
+        SectionIcon::Audience,
+        "Audience",
+        &[(ChoiceList::Audience, "audience", &values.audience)],
+        |_| None,
+    )
+    .await?;
+    let activities = ChoiceGroup::load(
+        SectionIcon::Activities,
+        "Activities",
+        &[(ChoiceList::Activity, "activities", &values.activities)],
+        |_| None,
+    )
+    .await?;
+
     let content = AddProjectContent {
         error,
         values,
+        topics,
+        audience,
+        activities,
         location,
         image,
         tags,
@@ -2148,14 +2325,12 @@ fn validate_and_build_project(
         .map(InsensitiveString::from)
         .collect();
 
-    use crate::project::field::{
-        ACTIVITIES_VOCABULARY, AUDIENCE_VOCABULARY, FIELDS_OF_SCIENCE_VOCABULARY, TOPICS_VOCABULARY,
-    };
-    project.topics = filter_to_vocabulary(&form.topics, TOPICS_VOCABULARY);
-    project.fields_of_science =
-        filter_to_vocabulary(&form.fields_of_science, FIELDS_OF_SCIENCE_VOCABULARY);
-    project.audience = filter_to_vocabulary(&form.audience, AUDIENCE_VOCABULARY);
-    project.activities = filter_to_vocabulary(&form.activities, ACTIVITIES_VOCABULARY);
+    // The topics, audience and activities are read against their lists by
+    // the handler, which can reach the database.
+    project.fields_of_science = filter_to_vocabulary(
+        &form.fields_of_science,
+        crate::project::field::FIELDS_OF_SCIENCE_VOCABULARY,
+    );
 
     let contact_email = form.contact_email.trim();
     if !contact_email.is_empty() || !form.contact_name.trim().is_empty() {

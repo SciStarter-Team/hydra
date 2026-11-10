@@ -20,9 +20,9 @@ use serde::Deserialize;
 ///
 /// The IPBES report SciStarter contributes to is about ecology and the
 /// environment, so that view answers "where can you do ecological citizen
-/// science". orrery spells this as the integer id of a choice value; hydra
-/// stores the topic by name.
-const IPBES_TOPIC: &str = "Ecology & Environment";
+/// science". This is the topic's slug in [`crate::choice::ChoiceList::Topic`],
+/// which a rename leaves alone.
+const IPBES_TOPIC: &str = "ecology-environment";
 
 /// How many projects one page of the streamed response carries. The geometry
 /// dominates the response size, so the page is small.
@@ -117,8 +117,8 @@ async fn page(offset: i64, ipbes: bool) -> Result<Vec<Feature>, anyhow::Error> {
             WHERE e.publish = 1
               AND p.regions IS NOT NULL
               AND EXISTS (
-                  SELECT 1 FROM project_topics t
-                  WHERE t.project_id = p.project_id AND t.topic = ?1
+                  SELECT 1 FROM choice_assignments t
+                  WHERE t.target = p.project_id AND t.list = 'Topic' AND t.value = ?1
               )
             ORDER BY p.project_id
             LIMIT ?2 OFFSET ?3

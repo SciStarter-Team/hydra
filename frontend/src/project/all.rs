@@ -1,5 +1,5 @@
 use common::message::log::PageChange;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use anyhow::Error;
 use common::{
@@ -9,6 +9,7 @@ use common::{
 use ulid::Ulid;
 
 use crate::{
+    choice::{ChoiceList, ChoiceValue},
     contact::{Contact, ContactRole},
     participant_file::ParticipantFile,
     peering::LoadStorePeered,
@@ -114,7 +115,9 @@ pub struct ProjectAll {
     pub instagram_page: String,
 
     // section Categorization
-    pub topics: Box<[String]>,
+    /// The slugs of the project's topics, from the list [`crate::choice`]
+    /// keeps.
+    pub topics: BTreeSet<String>,
     pub fields_of_science: Box<[String]>,
     pub practices: Box<[String]>,
     pub practices_how: String,
@@ -123,7 +126,8 @@ pub struct ProjectAll {
     pub diy: bool,
 
     // section Joining
-    pub audience: Box<[String]>,
+    /// The slugs of the project's audiences, likewise.
+    pub audience: BTreeSet<String>,
     pub signup_url: String,
     pub prefix_how_to_logged_in: String,
     pub prefix_how_to_logged_out: String,
@@ -187,7 +191,8 @@ pub struct ProjectAll {
 
     // section Skills
     pub participation_tasks: Box<[String]>,
-    pub activities: Box<[String]>,
+    /// The slugs of the project's activities, likewise.
+    pub activities: BTreeSet<String>,
     pub special_skills: String,
 
     // section Data
@@ -232,13 +237,10 @@ impl ProjectAll {
     /// are minted afresh whenever the contacts are written wholesale.
     pub fn canonical(mut self) -> ProjectAll {
         for set in [
-            &mut self.topics,
             &mut self.fields_of_science,
             &mut self.practices,
-            &mut self.audience,
             &mut self.geographic_scope,
             &mut self.participation_tasks,
-            &mut self.activities,
             &mut self.data_aggregation,
             &mut self.data_consent,
             &mut self.data_access,
@@ -965,29 +967,13 @@ impl ProjectAll {
             .await?;
         }
 
-        // "topics",
-        sqlx::query!(
-            r#"delete from project_topics where project_id = ?"#,
-            project_id
-        )
-        .execute(&mut tx)
-        .await?;
-
-        for val in self.topics.iter() {
-            sqlx::query!(
-                r#"insert into project_topics (
-              "project_id",
-              "topic"
-            )
-            values (
-              ?,
-              ?
-            )"#,
-                project_id,
-                val,
-            )
-            .execute(&mut tx)
-            .await?;
+        // "topics", "audience" and "activities",
+        for (list, slugs) in [
+            (ChoiceList::Topic, &self.topics),
+            (ChoiceList::Audience, &self.audience),
+            (ChoiceList::Activity, &self.activities),
+        ] {
+            crate::choice::assign(&mut tx, &project_id, list, slugs).await?;
         }
 
         // "fields_of_science",
@@ -1028,31 +1014,6 @@ impl ProjectAll {
                 r#"insert into project_practices (
               "project_id",
               "practice"
-            )
-            values (
-              ?,
-              ?
-            )"#,
-                project_id,
-                val,
-            )
-            .execute(&mut tx)
-            .await?;
-        }
-
-        // "audience",
-        sqlx::query!(
-            r#"delete from project_audiences where project_id = ?"#,
-            project_id
-        )
-        .execute(&mut tx)
-        .await?;
-
-        for val in self.audience.iter() {
-            sqlx::query!(
-                r#"insert into project_audiences (
-              "project_id",
-              "audience"
             )
             values (
               ?,
@@ -1129,31 +1090,6 @@ impl ProjectAll {
                 r#"insert into project_participation_tasks (
               "project_id",
               "participation_task"
-            )
-            values (
-              ?,
-              ?
-            )"#,
-                project_id,
-                val,
-            )
-            .execute(&mut tx)
-            .await?;
-        }
-
-        // "activities",
-        sqlx::query!(
-            r#"delete from project_activities where project_id = ?"#,
-            project_id
-        )
-        .execute(&mut tx)
-        .await?;
-
-        for val in self.activities.iter() {
-            sqlx::query!(
-                r#"insert into project_activities (
-              "project_id",
-              "activity"
             )
             values (
               ?,
@@ -1641,16 +1577,7 @@ impl LoadStorePeered for ProjectAll {
         .await?;
 
         // Read array fields from separate tables
-        let topics = sqlx::query!(
-            "SELECT topic FROM project_topics WHERE project_id = ? ORDER BY topic",
-            project_id_str
-        )
-        .fetch_all(db())
-        .await?
-        .into_iter()
-        .map(|row| row.topic)
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
+        let topics = ChoiceValue::of_target(ChoiceList::Topic, &project_id_str).await?;
 
         let fields_of_science = sqlx::query!(
             "SELECT field_of_science FROM project_fields_of_science WHERE project_id = ? ORDER BY field_of_science",
@@ -1674,16 +1601,7 @@ impl LoadStorePeered for ProjectAll {
         .collect::<Vec<_>>()
         .into_boxed_slice();
 
-        let audience = sqlx::query!(
-            "SELECT audience FROM project_audiences WHERE project_id = ? ORDER BY audience",
-            project_id_str
-        )
-        .fetch_all(db())
-        .await?
-        .into_iter()
-        .map(|row| row.audience)
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
+        let audience = ChoiceValue::of_target(ChoiceList::Audience, &project_id_str).await?;
 
         // Read contacts
         let contact_rows = sqlx::query!(
@@ -1991,18 +1909,7 @@ impl LoadStorePeered for ProjectAll {
                 .collect::<Vec<_>>();
                 tasks.into_boxed_slice()
             },
-            activities: {
-                let activities = sqlx::query!(
-                    "SELECT activity FROM project_activities WHERE project_id = ?",
-                    project_id_str
-                )
-                .fetch_all(db())
-                .await?
-                .into_iter()
-                .map(|row| row.activity)
-                .collect::<Vec<_>>();
-                activities.into_boxed_slice()
-            },
+            activities: ChoiceValue::of_target(ChoiceList::Activity, &project_id_str).await?,
             geographic_scope: {
                 let scopes = sqlx::query!(
                     "SELECT geographic_scope FROM project_geographic_scopes WHERE project_id = ?",

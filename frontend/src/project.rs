@@ -1,6 +1,5 @@
 pub mod ala;
 pub mod all;
-pub mod choice_ids;
 pub mod field;
 pub mod field_source;
 pub mod inaturalist;

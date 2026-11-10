@@ -45,7 +45,13 @@ pub enum EventFieldValue {
     Zip(String),
     State(String),
     Country(String),
-    EventType(crate::event::EventType),
+    /// The slugs of the event's formats, programs or campaigns, kinds of
+    /// venue, topics and audiences, from the lists [`crate::choice`] keeps.
+    Formats(std::collections::BTreeSet<String>),
+    Programs(std::collections::BTreeSet<String>),
+    Venues(std::collections::BTreeSet<String>),
+    Topics(std::collections::BTreeSet<String>),
+    Audience(std::collections::BTreeSet<String>),
     TicketingBegins(Option<TimeString>),
     OutcomesLabel(Option<String>),
     OutcomesLink(Option<String>),
@@ -56,6 +62,26 @@ pub enum EventFieldValue {
     PageEditorIds(Box<[Ulid]>),
     Reviewed(bool),
     FacebookEvent(FacebookEvent),
+}
+
+impl EventFieldValue {
+    /// The field holding the slugs an event picks from `list`, or `None` for
+    /// a list events pick nothing from.
+    pub fn choices(
+        list: crate::choice::ChoiceList,
+        slugs: std::collections::BTreeSet<String>,
+    ) -> Option<Self> {
+        use crate::choice::ChoiceList;
+
+        Some(match list {
+            ChoiceList::EventFormat => EventFieldValue::Formats(slugs),
+            ChoiceList::EventProgram => EventFieldValue::Programs(slugs),
+            ChoiceList::EventVenue => EventFieldValue::Venues(slugs),
+            ChoiceList::Topic => EventFieldValue::Topics(slugs),
+            ChoiceList::Audience => EventFieldValue::Audience(slugs),
+            ChoiceList::Activity => return None,
+        })
+    }
 }
 
 impl EventField {
@@ -92,7 +118,11 @@ impl EventField {
             EventFieldValue::Zip(_) => EventFieldType::Zip,
             EventFieldValue::State(_) => EventFieldType::State,
             EventFieldValue::Country(_) => EventFieldType::Country,
-            EventFieldValue::EventType(_) => EventFieldType::EventType,
+            EventFieldValue::Formats(_) => EventFieldType::Formats,
+            EventFieldValue::Programs(_) => EventFieldType::Programs,
+            EventFieldValue::Venues(_) => EventFieldType::Venues,
+            EventFieldValue::Topics(_) => EventFieldType::Topics,
+            EventFieldValue::Audience(_) => EventFieldType::Audience,
             EventFieldValue::TicketingBegins(_) => EventFieldType::TicketingBegins,
             EventFieldValue::OutcomesLabel(_) => EventFieldType::OutcomesLabel,
             EventFieldValue::OutcomesLink(_) => EventFieldType::OutcomesLink,
@@ -637,16 +667,18 @@ impl EventField {
         Ok(())
     }
 
-    async fn save_event_type(&self, event_type: &crate::event::EventType) -> Result<(), Error> {
+    async fn save_choices(
+        &self,
+        list: crate::choice::ChoiceList,
+        slugs: &std::collections::BTreeSet<String>,
+    ) -> Result<(), Error> {
         use common::shared::db;
-        let event_id_str = self.event_id.to_string();
-        sqlx::query!(
-            "UPDATE events SET event_type = ? WHERE event_id = ?",
-            event_type,
-            event_id_str
-        )
-        .execute(db())
-        .await?;
+        use common::transaction::Immediate;
+
+        let event_id = self.event_id.to_string();
+        let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
+        crate::choice::assign(&mut tx, &event_id, list, slugs).await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -1099,19 +1131,13 @@ impl EventField {
         Ok(EventField::new(event_id, EventFieldValue::Country(country)))
     }
 
-    async fn read_event_type(event_id: Ulid) -> Result<Self, Error> {
-        use common::shared::db;
-        let event_id_str = event_id.to_string();
-        let event_type = sqlx::query_scalar!(
-            r#"SELECT event_type as "event_type: crate::event::EventType" FROM events WHERE event_id = ?"#,
-            event_id_str
-        )
-        .fetch_one(db())
-        .await?;
-        Ok(EventField::new(
-            event_id,
-            EventFieldValue::EventType(event_type),
-        ))
+    async fn read_choices(
+        event_id: Ulid,
+        list: crate::choice::ChoiceList,
+        field: fn(std::collections::BTreeSet<String>) -> EventFieldValue,
+    ) -> Result<Self, Error> {
+        let slugs = crate::choice::ChoiceValue::of_target(list, &event_id.to_string()).await?;
+        Ok(EventField::new(event_id, field(slugs)))
     }
 
     async fn read_ticketing_begins(event_id: Ulid) -> Result<Self, Error> {
@@ -1285,7 +1311,26 @@ impl LoadStorePeered for EventField {
                 }
                 result
             }
-            EventFieldValue::EventType(event_type) => self.save_event_type(event_type).await,
+            EventFieldValue::Formats(slugs) => {
+                self.save_choices(crate::choice::ChoiceList::EventFormat, slugs)
+                    .await
+            }
+            EventFieldValue::Programs(slugs) => {
+                self.save_choices(crate::choice::ChoiceList::EventProgram, slugs)
+                    .await
+            }
+            EventFieldValue::Venues(slugs) => {
+                self.save_choices(crate::choice::ChoiceList::EventVenue, slugs)
+                    .await
+            }
+            EventFieldValue::Topics(slugs) => {
+                self.save_choices(crate::choice::ChoiceList::Topic, slugs)
+                    .await
+            }
+            EventFieldValue::Audience(slugs) => {
+                self.save_choices(crate::choice::ChoiceList::Audience, slugs)
+                    .await
+            }
             EventFieldValue::TicketingBegins(ticketing_begins) => {
                 self.save_ticketing_begins(ticketing_begins).await
             }
@@ -1344,7 +1389,46 @@ impl LoadStorePeered for EventField {
             EventFieldType::Zip => Self::read_zip(event_id).await,
             EventFieldType::State => Self::read_state(event_id).await,
             EventFieldType::Country => Self::read_country(event_id).await,
-            EventFieldType::EventType => Self::read_event_type(event_id).await,
+            EventFieldType::Formats => {
+                Self::read_choices(
+                    event_id,
+                    crate::choice::ChoiceList::EventFormat,
+                    EventFieldValue::Formats,
+                )
+                .await
+            }
+            EventFieldType::Programs => {
+                Self::read_choices(
+                    event_id,
+                    crate::choice::ChoiceList::EventProgram,
+                    EventFieldValue::Programs,
+                )
+                .await
+            }
+            EventFieldType::Venues => {
+                Self::read_choices(
+                    event_id,
+                    crate::choice::ChoiceList::EventVenue,
+                    EventFieldValue::Venues,
+                )
+                .await
+            }
+            EventFieldType::Topics => {
+                Self::read_choices(
+                    event_id,
+                    crate::choice::ChoiceList::Topic,
+                    EventFieldValue::Topics,
+                )
+                .await
+            }
+            EventFieldType::Audience => {
+                Self::read_choices(
+                    event_id,
+                    crate::choice::ChoiceList::Audience,
+                    EventFieldValue::Audience,
+                )
+                .await
+            }
             EventFieldType::TicketingBegins => Self::read_ticketing_begins(event_id).await,
             EventFieldType::OutcomesLabel => Self::read_outcomes_label(event_id).await,
             EventFieldType::OutcomesLink => Self::read_outcomes_link(event_id).await,

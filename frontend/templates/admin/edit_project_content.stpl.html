@@ -1155,8 +1155,8 @@
         <div class="md:col-span-2">
           <form hx-put="/-admin/projects/<%= self.project.id %>/multiselect/topics" hx-target="this" hx-swap="none">
             <wa-select name="value[]" label="Topics" multiple with-clear>
-              <% for option in crate::project::field::TOPICS_VOCABULARY { %>
-                <wa-option value="<%= option %>"<% if self.project.topics.contains(&(*option).to_string()) { %> selected<% } %>><%= option %></wa-option>
+              <% for topic in &self.project.topic_choices { %>
+                <wa-option value="<%= topic.slug %>"<% if self.project.topics.contains(&topic.slug) { %> selected<% } %>><%= topic.name %></wa-option>
               <% } %>
             </wa-select>
             <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save Topics</button>
@@ -1227,8 +1227,8 @@
         <div class="md:col-span-2">
           <form hx-put="/-admin/projects/<%= self.project.id %>/multiselect/audience" hx-target="this" hx-swap="none">
             <wa-select name="value[]" label="Audience" multiple with-clear>
-              <% for option in crate::project::field::AUDIENCE_VOCABULARY { %>
-                <wa-option value="<%= option %>"<% if self.project.audience.contains(&(*option).to_string()) { %> selected<% } %>><%= option %></wa-option>
+              <% for audience in &self.project.audience_choices { %>
+                <wa-option value="<%= audience.slug %>"<% if self.project.audience.contains(&audience.slug) { %> selected<% } %>><%= audience.name %></wa-option>
               <% } %>
             </wa-select>
             <button type="submit" class="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-gray-50 hover:bg-gray-100 text-sm text-gray-700">Save Audience</button>

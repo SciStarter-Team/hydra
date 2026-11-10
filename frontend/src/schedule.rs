@@ -211,9 +211,10 @@ impl Schedule {
                       COALESCE(p.state, ev.state, '') as "state: String",
                       COALESCE(p.country, ev.country, '') as "country: String",
                       p.project_timing as "project_timing: String",
-                      (SELECT GROUP_CONCAT(topic, ', ')
-                       FROM project_topics
-                       WHERE project_id = e.target
+                      (SELECT GROUP_CONCAT(cn.name, ', ' ORDER BY cn.position, cn.name)
+                       FROM choice_names cn
+                       WHERE cn.target = e.target
+                         AND cn.list = 'Topic'
                          AND e.kind = 'Project') as "topics: String",
                       (SELECT ei.begin
                        FROM event_instances ei

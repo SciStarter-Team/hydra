@@ -115,8 +115,7 @@
               </div>
 
               <!-- Age Groups -->
-              <div class="project-filter">
-                <span class="kind-note">Projects only</span>
+              <div>
                 <select multiple name="audience[]" data-placeholder="Age Group(s)">
                   <% for audience in &self.available_audiences { %>
                     <option value="<%= audience %>" <% if

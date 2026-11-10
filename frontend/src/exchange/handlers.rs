@@ -12,7 +12,6 @@ use poem::{
     web::{Html, Path, Query},
 };
 use sailfish::TemplateOnce;
-use std::sync::OnceLock;
 use ulid::Ulid;
 
 use crate::local_time::{TimeFormat, local_time, local_time_range};
@@ -25,14 +24,13 @@ use super::tracking::{self, TrackedAction, TrackedPage};
 use super::{
     Exchange, ExchangeInfo, HiddenProject, SearchParams, TemplateExchange, TemplateUser, access,
 };
+use crate::choice::{ChoiceList, ChoiceValue};
 use crate::component::html_escape;
 use crate::middleware::error_pages::error_response;
 use crate::project::all::ProjectAll;
 use crate::project::location::Where;
 use crate::project::{ProjectStatus, push_listing_rule};
-
-// Cache for filter options (loaded once on first use)
-static FILTER_CACHE: OnceLock<FilterOptions> = OnceLock::new();
+use crate::search::push_choice_filter;
 
 #[derive(Clone)]
 struct FilterOptions {
@@ -41,53 +39,17 @@ struct FilterOptions {
     audiences: Vec<(String, String)>,
 }
 
-async fn load_filter_options() -> Result<FilterOptions, Error> {
-    let activity_rows =
-        sqlx::query!("SELECT DISTINCT activity FROM project_activities ORDER BY activity")
-            .fetch_all(common::shared::db())
-            .await?;
-    let activities: Vec<(String, String)> = activity_rows
-        .into_iter()
-        .map(|r| (r.activity.clone(), r.activity))
-        .collect();
-
-    let topic_rows = sqlx::query!("SELECT DISTINCT topic FROM project_topics ORDER BY topic")
-        .fetch_all(common::shared::db())
-        .await?;
-    let topics: Vec<(String, String)> = topic_rows
-        .into_iter()
-        .map(|r| (r.topic.clone(), r.topic))
-        .collect();
-
-    let audience_rows =
-        sqlx::query!("SELECT DISTINCT audience FROM project_audiences ORDER BY audience")
-            .fetch_all(common::shared::db())
-            .await?;
-    let audiences: Vec<(String, String)> = audience_rows
-        .into_iter()
-        .map(|r| (r.audience.clone(), r.audience))
-        .collect();
+/// What the exchange's sidebar offers, which is what the finder offers: the
+/// values something picks, as they now stand.
+async fn get_filter_options() -> Result<FilterOptions, Error> {
+    let (topics, audiences, activities) = crate::search::load_filter_options().await?;
+    let pairs = |names: Vec<String>| names.into_iter().map(|name| (name.clone(), name)).collect();
 
     Ok(FilterOptions {
-        activities,
-        topics,
-        audiences,
+        activities: pairs(activities),
+        topics: pairs(topics),
+        audiences: pairs(audiences),
     })
-}
-
-async fn get_filter_options() -> Result<FilterOptions, Error> {
-    // Try to get from cache
-    if let Some(cached) = FILTER_CACHE.get() {
-        return Ok(cached.clone());
-    }
-
-    // Not cached yet, load from database
-    let options = load_filter_options().await?;
-
-    // Try to store in cache (ignore if another thread already did)
-    let _ = FILTER_CACHE.set(options.clone());
-
-    Ok(options)
 }
 
 // Helper functions
@@ -114,6 +76,10 @@ pub(super) struct Catalogue {
     /// it; see [`crate::region`].
     regions: &'static str,
     regions_owner: &'static str,
+
+    /// Whether what is listed picks activities, as projects do and events
+    /// do not.
+    has_activities: bool,
 }
 
 pub(super) const PROJECTS: Catalogue = Catalogue {
@@ -123,6 +89,7 @@ pub(super) const PROJECTS: Catalogue = Catalogue {
     tags_owner: "project_id",
     regions: "project_regions",
     regions_owner: "project_id",
+    has_activities: true,
 };
 
 pub(super) const EVENTS: Catalogue = Catalogue {
@@ -132,6 +99,7 @@ pub(super) const EVENTS: Catalogue = Catalogue {
     tags_owner: "event_id",
     regions: "event_regions",
     regions_owner: "event_id",
+    has_activities: false,
 };
 
 /// Exclude what this exchange has hidden, unless the viewer runs it.
@@ -356,6 +324,7 @@ pub(super) fn push_membership(
         tags_owner,
         regions,
         regions_owner,
+        has_activities: _,
     } = catalogue;
 
     if settings.exclude_scistarter {
@@ -460,6 +429,47 @@ fn push_listing_filter(
     }
 }
 
+/// Narrow a search to what picks the topic and audiences asked for, and,
+/// for projects, the activity: any of the values asked for from each list,
+/// and every list asked of. Events have no activities, so a search asking for
+/// one lists none ([`SearchParams::filters_projects_only`]). Orrery's
+/// exchange narrows both the same way (`push_event_choice_condition` in its
+/// src/common.rs).
+pub(super) fn push_choice_conditions(
+    query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    catalogue: &Catalogue,
+    params: &SearchParams,
+) {
+    let one = |value: &Option<String>| -> Vec<String> {
+        value
+            .iter()
+            .filter(|value| !value.is_empty())
+            .cloned()
+            .collect()
+    };
+
+    if catalogue.has_activities {
+        push_choice_filter(
+            query_builder,
+            catalogue.id,
+            ChoiceList::Activity,
+            &one(&params.activity),
+        );
+    }
+    push_choice_filter(
+        query_builder,
+        catalogue.id,
+        ChoiceList::Topic,
+        &one(&params.topic),
+    );
+    push_choice_filter(
+        query_builder,
+        catalogue.id,
+        ChoiceList::Audience,
+        &params.audience,
+    );
+}
+
 /// Apply common search filters to a query builder
 fn apply_search_filters<'a>(
     query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
@@ -471,38 +481,7 @@ fn apply_search_filters<'a>(
     push_listing_filter(query_builder, params, &scope.now);
     push_named_regions(query_builder, &PROJECTS, &scope.regions);
 
-    // Add activity filter
-    if let Some(ref activity) = params.activity {
-        if !activity.is_empty() {
-            query_builder.push(
-                " AND p.project_id IN (SELECT project_id FROM project_activities WHERE activity = ",
-            );
-            query_builder.push_bind(activity);
-            query_builder.push(")");
-        }
-    }
-
-    // Add topic filter
-    if let Some(ref topic) = params.topic {
-        if !topic.is_empty() {
-            query_builder
-                .push(" AND p.project_id IN (SELECT project_id FROM project_topics WHERE topic = ");
-            query_builder.push_bind(topic);
-            query_builder.push(")");
-        }
-    }
-
-    // Add audience filters
-    if !params.audience.is_empty() {
-        query_builder.push(
-            " AND p.project_id IN (SELECT project_id FROM project_audiences WHERE audience IN (",
-        );
-        let mut separated = query_builder.separated(", ");
-        for audience in &params.audience {
-            separated.push_bind(audience);
-        }
-        query_builder.push("))");
-    }
+    push_choice_conditions(query_builder, &PROJECTS, params);
 }
 
 /// Create a TemplateExchange with proper authorization checking
@@ -849,7 +828,9 @@ pub struct ExchangeEventDetail {
     pub description: String,
     /// Rendered, sanitized HTML.
     pub how_to_join: String,
-    pub event_type: String,
+    /// The names of the event's formats, programs or campaigns, and kinds
+    /// of venue, in that order, each in list order.
+    pub event_types: Vec<String>,
     /// When it happens, earliest first.
     pub instances: Vec<super::events::Session>,
     /// The venue, when the event names one.
@@ -889,7 +870,6 @@ async fn load_exchange_event_detail(id: Ulid, slug: &str) -> Result<ExchangeEven
     let row = sqlx::query!(
         r#"
         SELECT name, presenter, image, image_credit, url, description, how_to_join,
-               event_type as "event_type: crate::event::EventType",
                location_type, entirely_online as "entirely_online: bool",
                location_name, location_description, address, city, state, country,
                AsGeoJSON(regions) as "coverage: Option<String>"
@@ -941,6 +921,12 @@ async fn load_exchange_event_detail(id: Ulid, slug: &str) -> Result<ExchangeEven
     };
     let coverage = if location.has_map() { coverage } else { None };
 
+    // All in one row, as orrery's exchange shows them.
+    let mut event_types = Vec::new();
+    for list in ChoiceList::EVENT_TYPES {
+        event_types.extend(ChoiceValue::names_of_target(list, &id_str).await?);
+    }
+
     Ok(ExchangeEventDetail {
         id,
         slug: slug.to_string(),
@@ -955,7 +941,7 @@ async fn load_exchange_event_detail(id: Ulid, slug: &str) -> Result<ExchangeEven
         how_to_join: content_to_html(&row.how_to_join)
             .map(|(html, _)| html)
             .unwrap_or(row.how_to_join),
-        event_type: row.event_type.to_string(),
+        event_types,
         instances,
         location_name: row.location_name,
         location,
@@ -1241,41 +1227,15 @@ async fn load_exchange_project_detail(
         .filter(|t| !crate::project::is_hidden_tag(t))
         .collect();
 
-    // Load activities
-    let activity_rows = sqlx::query!(
-        "SELECT activity FROM project_activities WHERE project_id = ? ORDER BY activity",
-        project_id
-    )
-    .fetch_all(common::shared::db())
-    .await?;
-    let activities: Vec<(String, String)> = activity_rows
-        .into_iter()
-        .map(|r| (r.activity.clone(), r.activity))
-        .collect();
-
-    // Load topics
-    let topic_rows = sqlx::query!(
-        "SELECT topic FROM project_topics WHERE project_id = ? ORDER BY topic",
-        project_id
-    )
-    .fetch_all(common::shared::db())
-    .await?;
-    let topics: Vec<(String, String)> = topic_rows
-        .into_iter()
-        .map(|r| (r.topic.clone(), r.topic))
-        .collect();
-
-    // Load audiences
-    let audience_rows = sqlx::query!(
-        "SELECT audience FROM project_audiences WHERE project_id = ? ORDER BY audience",
-        project_id
-    )
-    .fetch_all(common::shared::db())
-    .await?;
-    let audience: Vec<(String, String)> = audience_rows
-        .into_iter()
-        .map(|r| (r.audience.clone(), r.audience))
-        .collect();
+    let pairs = |values: Vec<ChoiceValue>| -> Vec<(String, String)> {
+        values
+            .into_iter()
+            .map(|value| (value.name.clone(), value.name))
+            .collect()
+    };
+    let activities = pairs(ChoiceValue::picked_by(ChoiceList::Activity, project_id).await?);
+    let topics = pairs(ChoiceValue::picked_by(ChoiceList::Topic, project_id).await?);
+    let audience = pairs(ChoiceValue::picked_by(ChoiceList::Audience, project_id).await?);
 
     // Like count is cached per-project on this frontend instance; the log-service
     // stays authoritative and unifies orrery-synced history with new hydra likes.
@@ -1800,7 +1760,9 @@ pub async fn exchange_csv(
             contact_address: contact.and_then(|contact| contact.address.clone()),
             created: project.created.to_string(),
             updated: updates.get(&project_id).map(|when| when.to_string()),
-            audience: project.audience.join(";"),
+            audience: ChoiceValue::names(ChoiceList::Audience, &project.audience)
+                .await?
+                .join(";"),
             classroom_materials: project.classroom_materials,
             admin_link,
         })?;
@@ -3265,7 +3227,56 @@ pub async fn unsquelch_project(
 mod tests {
     use super::super::ExchangeSettings;
     use super::*;
+    use assert2::check;
     use sqlx::SqlitePool;
+
+    /// The topic, the audiences and the activity asked for, as a search
+    /// narrows each kind of thing an exchange lists by them.
+    fn choice_sql(catalogue: &Catalogue) -> String {
+        let params = SearchParams {
+            topic: Some("birds".to_string()),
+            audience: vec!["adults".to_string(), "families".to_string()],
+            activity: Some("at-home".to_string()),
+            ..Default::default()
+        };
+        let mut query_builder = sqlx::QueryBuilder::new("SELECT 1 WHERE 1");
+        push_choice_conditions(&mut query_builder, catalogue, &params);
+        query_builder.sql().as_str().to_string()
+    }
+
+    #[test]
+    fn a_topic_and_audiences_narrow_projects_and_events_alike() {
+        let projects = choice_sql(&PROJECTS);
+        let events = choice_sql(&EVENTS);
+
+        check!(
+            projects
+                .matches("p.project_id IN (SELECT target FROM choice_names")
+                .count()
+                == 3
+        );
+        check!(
+            events
+                .matches("ev.event_id IN (SELECT target FROM choice_names")
+                .count()
+                == 2
+        );
+    }
+
+    #[test]
+    fn only_an_activity_keeps_events_off_the_listing() {
+        let search =
+            |topic: Option<&str>, audience: &[&str], activity: Option<&str>| SearchParams {
+                topic: topic.map(str::to_string),
+                audience: audience.iter().map(|value| value.to_string()).collect(),
+                activity: activity.map(str::to_string),
+                ..Default::default()
+            };
+
+        check!(!search(Some("birds"), &["adults"], None).filters_projects_only());
+        check!(!search(Some(""), &[], Some("")).filters_projects_only());
+        check!(search(None, &[], Some("at-home")).filters_projects_only());
+    }
 
     const EXCHANGE: &str = "01K00000000000000000000EXC";
     const OTHER_EXCHANGE: &str = "01K00000000000000000000OTH";

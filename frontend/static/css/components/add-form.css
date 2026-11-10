@@ -342,13 +342,13 @@ form .add-section[open] > summary::after {
 form .add-section-body {
     @apply flex flex-col gap-2 pb-4;
 }
-form .add-section-body.checkbox-grid {
+form .checkbox-grid {
     display: grid;
     grid-template-columns: 1fr;
     gap: 0.25rem 1rem;
 }
 @media (min-width: 640px) {
-    form .add-section-body.checkbox-grid {
+    form .checkbox-grid {
         grid-template-columns: 1fr 1fr;
     }
 }
@@ -394,15 +394,15 @@ form .add-form-cancel {
        row heights, so opening one would open a gap beside it); inside an open
        one, the fields sit two across, and help lines and multi-part widgets
        take the full width. */
-    form .add-section-body:not(.checkbox-grid) {
+    form .add-section-body {
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         gap: 0.5rem 1rem;
     }
-    form .add-section-body:not(.checkbox-grid) > :not(.pill-field, [data-tag-input]) {
+    form .add-section-body > :not(.pill-field, [data-tag-input]) {
         grid-column: 1 / -1;
     }
-    form .add-section-body.checkbox-grid {
+    form .checkbox-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
     /* A full-width button across 60rem would read as a banner, not a button. */

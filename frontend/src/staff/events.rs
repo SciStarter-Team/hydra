@@ -57,6 +57,8 @@ struct EventRow {
     zip: String,
     /// Every instance of this event, in time order, as `(begin, end)`.
     instances: Vec<(String, String)>,
+    topics: String,
+    audience: String,
 }
 
 /// One contact row, with the nullable columns already defaulted, so the export
@@ -75,17 +77,30 @@ struct Contact {
 const INSTANCES_SQL: &str = r#"SELECT event_id, "begin", "end" FROM event_instances
                                WHERE event_id IN"#;
 const TAGS_SQL: &str = "SELECT event_id, tag FROM event_tags WHERE event_id IN";
+/// Its second column numbers each event's types in the order they are asked
+/// (formats, then programs, then venues), each list in list order.
+const EVENT_TYPES_SQL: &str = "SELECT event_id, place, name FROM (
+                                   SELECT target AS event_id, name,
+                                          row_number() OVER (PARTITION BY target
+                                                             ORDER BY rank, position, name) AS place
+                                   FROM event_type_names)
+                               WHERE event_id IN";
+const TOPICS_SQL: &str = "SELECT target AS event_id, position, name FROM choice_names
+                          WHERE list = 'Topic' AND target IN";
+const AUDIENCE_SQL: &str = "SELECT target AS event_id, position, name FROM choice_names
+                            WHERE list = 'Audience' AND target IN";
 const CONTACTS_SQL: &str = r#"SELECT event_id, role, name, affiliation, email, phone, address
                               FROM event_contacts WHERE event_id IN"#;
 
-/// Run one `… WHERE event_id IN (…)` query and group its rows by event.
+/// Run one `… IN (…)` query over the event ids and group its rows by event.
 ///
 /// `extract` turns a row into the event id it belongs to and the value to file
-/// under it. Grouping here rather than in each caller keeps the three lookups
+/// under it. Grouping here rather than in each caller keeps the four lookups
 /// to one shape.
 ///
-/// Ordering is by event then by the query's remaining columns, so instances
-/// come back in time order and tags alphabetically without a sort per event.
+/// Ordering is by event then by the query's second column, so instances come
+/// back in time order, tags alphabetically and event types in list order
+/// without a sort per event.
 async fn collect<T, F>(
     ids: &[String],
     sql: &str,
@@ -123,7 +138,7 @@ where
 }
 
 /// The fixed columns, in the order orrery's export puts them. The per-instance
-/// `begin N`/`end N` pairs follow.
+/// `begin N`/`end N` pairs follow, then [`TRAILING_COLUMNS`].
 const FIXED_COLUMNS: &[&str] = &[
     "title",
     "tags",
@@ -149,6 +164,10 @@ const FIXED_COLUMNS: &[&str] = &[
     "country",
     "zip",
 ];
+
+/// The columns after the schedule, which orrery added there so that every
+/// column before them kept its place.
+const TRAILING_COLUMNS: &[&str] = &["topics", "audience"];
 
 /// GET `/staff/events/events.html` — the date-range form.
 #[handler]
@@ -200,7 +219,6 @@ pub async fn export_csv(Query(range): Query<RangeQuery>) -> Result<Response, any
         name: String,
         presenter: String,
         url: String,
-        event_type: String,
         location_type: String,
         entirely_online: bool,
         location_description: String,
@@ -219,7 +237,6 @@ pub async fn export_csv(Query(range): Query<RangeQuery>) -> Result<Response, any
             ev.name AS "name!",
             ev.presenter AS "presenter!",
             ev.url AS "url!",
-            ev.event_type AS "event_type!",
             ev.location_type AS "location_type!",
             ev.entirely_online AS "entirely_online!: bool",
             ev.location_description AS "location_description!",
@@ -245,7 +262,7 @@ pub async fn export_csv(Query(range): Query<RangeQuery>) -> Result<Response, any
 
     let ids: Vec<String> = rows.iter().map(|r| r.event_id.clone()).collect();
 
-    // Three batched lookups rather than three per event: the export covers a
+    // Four batched lookups rather than four per event: the export covers a
     // whole month of events, and a query per row per table made it the slowest
     // page staff had.
     let mut instances = collect(&ids, INSTANCES_SQL, |row| {
@@ -259,6 +276,11 @@ pub async fn export_csv(Query(range): Query<RangeQuery>) -> Result<Response, any
         (row.get::<String, _>(0), row.get::<String, _>(1))
     })
     .await?;
+    // Ordered by position, so each event's choices come in list order.
+    let names = |row: &sqlx::sqlite::SqliteRow| (row.get::<String, _>(0), row.get::<String, _>(2));
+    let mut event_types = collect(&ids, EVENT_TYPES_SQL, names).await?;
+    let mut topics = collect(&ids, TOPICS_SQL, names).await?;
+    let mut audience = collect(&ids, AUDIENCE_SQL, names).await?;
     let mut contacts = collect(&ids, CONTACTS_SQL, |row| {
         (
             row.get::<String, _>(0),
@@ -295,7 +317,11 @@ pub async fn export_csv(Query(range): Query<RangeQuery>) -> Result<Response, any
         events.push(EventRow {
             title: row.name,
             tags: tags.remove(&row.event_id).unwrap_or_default().join("||"),
-            event_type: row.event_type,
+            // Joined as orrery's export joins them.
+            event_type: event_types
+                .remove(&row.event_id)
+                .unwrap_or_default()
+                .join("||"),
             manager_name: manager.name,
             manager_affiliation: manager.affiliation,
             manager_email: manager.email,
@@ -317,6 +343,11 @@ pub async fn export_csv(Query(range): Query<RangeQuery>) -> Result<Response, any
             country: row.country,
             zip: row.zip,
             instances: instances.remove(&row.event_id).unwrap_or_default(),
+            topics: topics.remove(&row.event_id).unwrap_or_default().join("||"),
+            audience: audience
+                .remove(&row.event_id)
+                .unwrap_or_default()
+                .join("||"),
         });
     }
 
@@ -348,6 +379,10 @@ fn render_csv(events: &[EventRow]) -> String {
     let mut csv = FIXED_COLUMNS.join(",");
     for slot in 1..=slots {
         csv.push_str(&format!(",begin {slot},end {slot}"));
+    }
+    for column in TRAILING_COLUMNS {
+        csv.push(',');
+        csv.push_str(column);
     }
     csv.push('\n');
 
@@ -394,6 +429,9 @@ fn render_csv(events: &[EventRow]) -> String {
             line.push(csv_field(end));
         }
 
+        line.push(csv_field(&event.topics));
+        line.push(csv_field(&event.audience));
+
         csv.push_str(&line.join(","));
         csv.push('\n');
     }
@@ -434,6 +472,8 @@ mod tests {
                 .iter()
                 .map(|(b, e)| (b.to_string(), e.to_string()))
                 .collect(),
+            topics: String::new(),
+            audience: String::new(),
         }
     }
 
@@ -442,7 +482,10 @@ mod tests {
         let csv = render_csv(&[event("One", &[("a", "b")])]);
         let header = csv.lines().next().expect("a header");
 
-        assert!(header.ends_with(",begin 1,end 1"), "{header}");
+        assert!(
+            header.ends_with(",begin 1,end 1,topics,audience"),
+            "{header}"
+        );
     }
 
     #[test]
@@ -454,7 +497,7 @@ mod tests {
         let header = csv.lines().next().expect("a header");
 
         assert!(
-            header.ends_with(",begin 1,end 1,begin 2,end 2,begin 3,end 3"),
+            header.ends_with(",begin 1,end 1,begin 2,end 2,begin 3,end 3,topics,audience"),
             "{header}"
         );
     }
@@ -481,6 +524,24 @@ mod tests {
 
         assert_eq!(csv.lines().count(), 1);
         assert!(csv.starts_with("title,tags,"));
+    }
+
+    #[test]
+    fn topics_and_audience_follow_the_schedule() {
+        let mut one = event("One", &[("a", "b")]);
+        one.topics = "Birds||Astronomy & Space".to_string();
+        one.audience = "Adults".to_string();
+        let two = event("Two", &[("a", "b"), ("c", "d")]);
+
+        let csv = render_csv(&[one, two]);
+        let lines: Vec<&str> = csv.lines().collect();
+
+        assert!(
+            lines[1].ends_with(",a,b,,,Birds||Astronomy & Space,Adults"),
+            "{}",
+            lines[1]
+        );
+        assert!(lines[2].ends_with(",a,b,c,d,,"), "{}", lines[2]);
     }
 
     #[test]

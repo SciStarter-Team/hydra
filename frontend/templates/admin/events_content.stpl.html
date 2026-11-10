@@ -51,7 +51,7 @@
         <div>Next Date</div>
         <div>Location</div>
         <div>Instances</div>
-        <div>Type</div>
+        <div>Event types</div>
         <div>Actions</div>
     </div>
     
@@ -97,12 +97,14 @@
                     </div>
                 </div>
               
-                <!-- Type -->
+                <!-- Event types -->
                 <div class="lg:col-span-1">
-                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Type</div>
+                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Event types</div>
+                    <% if !event.event_types.is_empty() { %>
                     <span class="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                        <%= event.event_type %>
+                        <%= event.event_types %>
                     </span>
+                    <% } %>
                 </div>
               
                 <!-- Actions -->

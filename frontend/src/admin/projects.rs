@@ -1,3 +1,4 @@
+use crate::choice::{ChoiceList, ChoiceValue};
 use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
 use crate::contact::Contact;
 use crate::entity::{Entity, EntityKind};
@@ -7,12 +8,11 @@ use crate::participant_file::ParticipantFile;
 use crate::peering::LoadStorePeered;
 use crate::project::all::ProjectAll;
 use crate::project::field::{
-    ACTIVITIES_VOCABULARY, AUDIENCE_VOCABULARY, DATA_ACCESS_VOCABULARY,
-    DATA_AGGREGATION_VOCABULARY, DATA_CONSENT_VOCABULARY, DIFFICULTY_VOCABULARY,
-    FIELDS_OF_SCIENCE_VOCABULARY, GEOGRAPHIC_SCOPE_VOCABULARY, INTENDED_OUTCOMES_VOCABULARY,
-    PARTICIPATION_TASKS_VOCABULARY, PRACTICES_VOCABULARY, ProjectField, ProjectFieldType,
-    ProjectFieldValue, SPONSORS_VOCABULARY, STAKEHOLDERS_VOCABULARY,
-    SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY, TOPICS_VOCABULARY,
+    DATA_ACCESS_VOCABULARY, DATA_AGGREGATION_VOCABULARY, DATA_CONSENT_VOCABULARY,
+    DIFFICULTY_VOCABULARY, FIELDS_OF_SCIENCE_VOCABULARY, GEOGRAPHIC_SCOPE_VOCABULARY,
+    INTENDED_OUTCOMES_VOCABULARY, PARTICIPATION_TASKS_VOCABULARY, PRACTICES_VOCABULARY,
+    ProjectField, ProjectFieldType, ProjectFieldValue, SPONSORS_VOCABULARY,
+    STAKEHOLDERS_VOCABULARY, SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY,
 };
 use crate::project::field_source::FieldSource;
 use crate::project::publish::Submitter;
@@ -217,14 +217,19 @@ pub struct AdminProjectFull {
     pub connect_opaque_url1: String,
     pub connect_opaque_url2: String,
     pub contacts: String, // JSON serialized Contact structs
-    pub topics: Vec<String>,
+    /// The slugs of the project's topics, and every topic it could pick.
+    pub topics: std::collections::BTreeSet<String>,
+    pub topic_choices: Vec<ChoiceValue>,
     pub fields_of_science: Vec<String>,
     pub practices: Vec<String>,
     pub practices_how: String,
     pub search_terms: String,
     pub difficulty: String,
     pub diy: bool,
-    pub audience: Vec<String>,
+    /// The slugs of the project's audiences, and every audience it could
+    /// pick.
+    pub audience: std::collections::BTreeSet<String>,
+    pub audience_choices: Vec<ChoiceValue>,
     pub signup_url: String,
     pub prefix_how_to_logged_in: String,
     pub prefix_how_to_logged_out: String,
@@ -280,7 +285,7 @@ pub struct AdminProjectFull {
     pub year_completed: Option<i32>,
     pub month_completed: Option<i32>,
     pub participation_tasks: Vec<String>,
-    pub activities: Vec<String>,
+    pub activities: std::collections::BTreeSet<String>,
     pub special_skills: String,
     // Data fields
     pub data_results: String,
@@ -391,14 +396,16 @@ impl AdminProjectFull {
             connect_opaque_url1: project.connect_opaque_url1,
             connect_opaque_url2: project.connect_opaque_url2,
             contacts: serde_json::to_string(&project.contacts.to_vec()).unwrap_or_default(),
-            topics: project.topics.to_vec(),
+            topics: project.topics,
+            topic_choices: ChoiceValue::all(ChoiceList::Topic).await?,
             fields_of_science: project.fields_of_science.to_vec(),
             practices: project.practices.to_vec(),
             practices_how: project.practices_how,
             search_terms: project.search_terms,
             difficulty: project.difficulty,
             diy: project.diy,
-            audience: project.audience.to_vec(),
+            audience: project.audience,
+            audience_choices: ChoiceValue::all(ChoiceList::Audience).await?,
             signup_url: project.signup_url,
             prefix_how_to_logged_in: project.prefix_how_to_logged_in,
             prefix_how_to_logged_out: project.prefix_how_to_logged_out,
@@ -455,7 +462,7 @@ impl AdminProjectFull {
             data_publication_url: project.data_publication_url,
             data_license: project.data_license,
             participation_tasks: project.participation_tasks.to_vec(),
-            activities: project.activities.to_vec(),
+            activities: project.activities,
             geographic_scope: project.geographic_scope.to_vec(),
             data_aggregation: project.data_aggregation.to_vec(),
             data_consent: project.data_consent.to_vec(),
@@ -958,7 +965,10 @@ struct ArrayItems {
     project_id: Ulid,
     field_type: ProjectFieldType,
     items: Vec<ArrayItem>,
-    vocabulary: Option<Vec<String>>,
+
+    /// What an item may be, as each value and its label, for a field that
+    /// picks from a vocabulary.
+    vocabulary: Option<Vec<(String, String)>>,
 }
 
 impl ArrayItems {
@@ -969,7 +979,7 @@ impl ArrayItems {
     ) -> Result<Self, anyhow::Error> {
         use crate::admin::autocomplete::{resolve_project_names, resolve_user_names};
 
-        let vocabulary = Self::get_vocabulary(field_type);
+        let vocabulary = Self::get_vocabulary(field_type).await?;
 
         let resolved_items = if field_type == ProjectFieldType::AssociatedProjects {
             // Parse ULIDs and resolve project names
@@ -1016,11 +1026,17 @@ impl ArrayItems {
                 })
                 .collect()
         } else {
+            // An item of a vocabulary is shown by its label.
             items
                 .into_iter()
                 .map(|value| ArrayItem {
+                    resolved_name: vocabulary.as_ref().and_then(|vocabulary| {
+                        vocabulary
+                            .iter()
+                            .find(|(held, _)| *held == value)
+                            .map(|(_, label)| label.clone())
+                    }),
                     value,
-                    resolved_name: None,
                 })
                 .collect()
         };
@@ -1033,88 +1049,47 @@ impl ArrayItems {
         })
     }
 
-    fn get_vocabulary(field_type: ProjectFieldType) -> Option<Vec<String>> {
-        match field_type {
-            ProjectFieldType::ParticipationTasks => Some(
-                PARTICIPATION_TASKS_VOCABULARY
+    /// The values of a choice list, by slug, with their names.
+    async fn choices(list: ChoiceList) -> Result<Vec<(String, String)>, anyhow::Error> {
+        Ok(ChoiceValue::all(list)
+            .await?
+            .into_iter()
+            .map(|value| (value.slug, value.name))
+            .collect())
+    }
+
+    async fn get_vocabulary(
+        field_type: ProjectFieldType,
+    ) -> Result<Option<Vec<(String, String)>>, anyhow::Error> {
+        let fixed = |words: &[&str]| {
+            Some(
+                words
                     .iter()
-                    .map(|s| s.to_string())
+                    .map(|word| (word.to_string(), word.to_string()))
                     .collect(),
-            ),
-            ProjectFieldType::Activities => Some(
-                ACTIVITIES_VOCABULARY
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            ),
-            ProjectFieldType::DataAggregation => Some(
-                DATA_AGGREGATION_VOCABULARY
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            ),
-            ProjectFieldType::DataConsent => Some(
-                DATA_CONSENT_VOCABULARY
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            ),
-            ProjectFieldType::DataAccess => Some(
-                DATA_ACCESS_VOCABULARY
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            ),
-            ProjectFieldType::IntendedOutcomes => Some(
-                INTENDED_OUTCOMES_VOCABULARY
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            ),
-            ProjectFieldType::Sponsors => {
-                Some(SPONSORS_VOCABULARY.iter().map(|s| s.to_string()).collect())
+            )
+        };
+
+        Ok(match field_type {
+            ProjectFieldType::ParticipationTasks => fixed(PARTICIPATION_TASKS_VOCABULARY),
+            ProjectFieldType::Activities => Some(Self::choices(ChoiceList::Activity).await?),
+            ProjectFieldType::Topics => Some(Self::choices(ChoiceList::Topic).await?),
+            ProjectFieldType::Audience => Some(Self::choices(ChoiceList::Audience).await?),
+            ProjectFieldType::DataAggregation => fixed(DATA_AGGREGATION_VOCABULARY),
+            ProjectFieldType::DataConsent => fixed(DATA_CONSENT_VOCABULARY),
+            ProjectFieldType::DataAccess => fixed(DATA_ACCESS_VOCABULARY),
+            ProjectFieldType::IntendedOutcomes => fixed(INTENDED_OUTCOMES_VOCABULARY),
+            ProjectFieldType::Sponsors => fixed(SPONSORS_VOCABULARY),
+            ProjectFieldType::Stakeholders => fixed(STAKEHOLDERS_VOCABULARY),
+            ProjectFieldType::Difficulty => fixed(DIFFICULTY_VOCABULARY),
+            ProjectFieldType::FieldsOfScience => fixed(FIELDS_OF_SCIENCE_VOCABULARY),
+            ProjectFieldType::Practices => fixed(PRACTICES_VOCABULARY),
+            ProjectFieldType::GeographicScope => fixed(GEOGRAPHIC_SCOPE_VOCABULARY),
+            ProjectFieldType::SustainableDevelopmentGoals => {
+                fixed(SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY)
             }
-            ProjectFieldType::Stakeholders => Some(
-                STAKEHOLDERS_VOCABULARY
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            ),
-            ProjectFieldType::Difficulty => Some(
-                DIFFICULTY_VOCABULARY
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            ),
-            ProjectFieldType::Topics => {
-                Some(TOPICS_VOCABULARY.iter().map(|s| s.to_string()).collect())
-            }
-            ProjectFieldType::FieldsOfScience => Some(
-                FIELDS_OF_SCIENCE_VOCABULARY
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            ),
-            ProjectFieldType::Practices => {
-                Some(PRACTICES_VOCABULARY.iter().map(|s| s.to_string()).collect())
-            }
-            ProjectFieldType::Audience => {
-                Some(AUDIENCE_VOCABULARY.iter().map(|s| s.to_string()).collect())
-            }
-            ProjectFieldType::GeographicScope => Some(
-                GEOGRAPHIC_SCOPE_VOCABULARY
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            ),
-            ProjectFieldType::SustainableDevelopmentGoals => Some(
-                SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            ),
             _ => None,
-        }
+        })
     }
 }
 
@@ -2284,7 +2259,9 @@ async fn projects_update_field(
                         anyhow::anyhow!("Invalid JSON format for topics array: {}", e)
                     })?
                 };
-                crate::project::field::ProjectFieldValue::Topics(topics.into_boxed_slice())
+                crate::project::field::ProjectFieldValue::Topics(
+                    ChoiceValue::known(ChoiceList::Topic, topics).await?,
+                )
             }
             crate::project::field::ProjectFieldType::FieldsOfScience => {
                 let fields: Vec<String> = if form_value.is_empty() {
@@ -2331,7 +2308,9 @@ async fn projects_update_field(
                         anyhow::anyhow!("Invalid JSON format for audience array: {}", e)
                     })?
                 };
-                crate::project::field::ProjectFieldValue::Audience(audience.into_boxed_slice())
+                crate::project::field::ProjectFieldValue::Audience(
+                    ChoiceValue::known(ChoiceList::Audience, audience).await?,
+                )
             }
             crate::project::field::ProjectFieldType::SignupUrl => {
                 crate::project::field::ProjectFieldValue::SignupUrl(form_value)
@@ -2637,7 +2616,9 @@ async fn projects_update_field(
                         anyhow::anyhow!("Invalid JSON format for activities array: {}", e)
                     })?
                 };
-                crate::project::field::ProjectFieldValue::Activities(activities.into_boxed_slice())
+                crate::project::field::ProjectFieldValue::Activities(
+                    ChoiceValue::known(ChoiceList::Activity, activities).await?,
+                )
             }
             crate::project::field::ProjectFieldType::SpecialSkills => {
                 crate::project::field::ProjectFieldValue::SpecialSkills(form_value)
@@ -2890,12 +2871,16 @@ async fn projects_update_multiselect_field(
     };
 
     let field_value = match field_type_enum {
-        ProjectFieldType::Topics => ProjectFieldValue::Topics(form.value.into_boxed_slice()),
+        ProjectFieldType::Topics => {
+            ProjectFieldValue::Topics(ChoiceValue::known(ChoiceList::Topic, form.value).await?)
+        }
         ProjectFieldType::FieldsOfScience => {
             ProjectFieldValue::FieldsOfScience(form.value.into_boxed_slice())
         }
         ProjectFieldType::Practices => ProjectFieldValue::Practices(form.value.into_boxed_slice()),
-        ProjectFieldType::Audience => ProjectFieldValue::Audience(form.value.into_boxed_slice()),
+        ProjectFieldType::Audience => {
+            ProjectFieldValue::Audience(ChoiceValue::known(ChoiceList::Audience, form.value).await?)
+        }
         ProjectFieldType::SustainableDevelopmentGoals => {
             ProjectFieldValue::SustainableDevelopmentGoals(form.value.join(","))
         }
@@ -2991,7 +2976,14 @@ async fn projects_add_array_item(
     let mut items: Vec<String> = (&project_field).try_into()?;
 
     let new_item = form.value.trim().to_string();
-    if !new_item.is_empty() && !items.contains(&new_item) {
+
+    // A field with a vocabulary takes only what the vocabulary offers.
+    let offered = match ArrayItems::get_vocabulary(field_enum).await? {
+        Some(vocabulary) => vocabulary.iter().any(|(value, _)| *value == new_item),
+        None => true,
+    };
+
+    if offered && !new_item.is_empty() && !items.contains(&new_item) {
         items.push(new_item.clone());
     }
 

@@ -23,12 +23,12 @@ use serde::Deserialize;
 use ulid::Ulid;
 
 use super::check_api_key_permission;
+use crate::choice::{ChoiceList, ChoiceLists, ChoiceValue};
 use crate::contact::{edit_contact_person, edit_manager};
 use crate::page_change::Stored;
 use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
 use crate::project::all::{ProjectAll, Submission, persist_new_project};
-use crate::project::choice_ids;
 use crate::project::field_source::FieldSource;
 use crate::project::location::{ANYWHERE, AT_AN_ADDRESS, IN_A_RANGE};
 
@@ -546,21 +546,19 @@ pub async fn get_project(
     .fetch_all(db())
     .await?;
 
-    // Fetch topics
-    let topics: Vec<String> = sqlx::query_scalar!(
-        "SELECT topic FROM project_topics WHERE project_id = ?",
-        entity_id
-    )
-    .fetch_all(db())
-    .await?;
+    let topics: Vec<serde_json::Value> = ChoiceValue::picked_by(ChoiceList::Topic, &entity_id)
+        .await?
+        .iter()
+        .map(|topic| topic.partner_json("code", "name"))
+        .collect();
 
     let mut result = serde_json::Map::new();
     result.insert("title".into(), serde_json::json!(project.name));
     result.insert("description".into(), serde_json::json!(project.description));
     result.insert("publish".into(), serde_json::json!(project.publish));
-    // NOTE: orrery returns topics/UN_regions as [{code, name}] from its Choice
-    // vocabularies; hydra stores them as plain strings without numeric codes, so
-    // `topics` is a string list here and `UN_regions` is omitted (see decisions).
+    // As orrery gives them, [{code, name}], code being orrery's id for the
+    // topic (null for one added in hydra). UN_regions is omitted: hydra has no
+    // codes for them.
     result.insert("topics".into(), serde_json::json!(topics));
     result.insert("country".into(), serde_json::json!(project.country));
     result.insert("origin".into(), serde_json::json!(project.origin));
@@ -1224,14 +1222,16 @@ pub async fn project_add(body: String) -> Result<Response, Error> {
         proj.is_affiliate = true;
     }
 
+    let lists = ChoiceLists::load().await?;
     if let Some(audience) = obj.get("audience") {
-        proj.audience = choice_ids::all_named(choice_ids::AUDIENCE, audience);
+        proj.audience = ChoiceValue::partner_all_named(lists.get(ChoiceList::Audience), audience);
     }
     if let Some(topics) = obj.get("topics") {
-        proj.topics = choice_ids::all_named(choice_ids::TOPICS, topics);
+        proj.topics = ChoiceValue::partner_all_named(lists.get(ChoiceList::Topic), topics);
     }
     if let Some(activities) = obj.get("activities") {
-        proj.activities = choice_ids::all_named(choice_ids::ACTIVITIES, activities);
+        proj.activities =
+            ChoiceValue::partner_all_named(lists.get(ChoiceList::Activity), activities);
     }
 
     match border {

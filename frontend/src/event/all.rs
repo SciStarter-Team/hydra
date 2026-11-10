@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use common::{
     insensitivestring::InsensitiveString, shared::db, timestring::TimeString,
@@ -6,9 +6,13 @@ use common::{
 };
 use ulid::Ulid;
 
-use crate::{contact::Contact, peering::LoadStorePeered};
+use crate::{
+    choice::{ChoiceList, ChoiceValue},
+    contact::Contact,
+    peering::LoadStorePeered,
+};
 
-use super::{EventInstance, EventType, facebook::FacebookEvent};
+use super::{EventInstance, facebook::FacebookEvent};
 
 /// Container for all event fields.
 ///
@@ -16,13 +20,13 @@ use super::{EventInstance, EventType, facebook::FacebookEvent};
 /// Only use when you actually need most/all fields. For common operations, use direct SQL queries:
 ///
 /// ```rust
-/// // ❌ DON'T: Loading full object just for name and type
+/// // ❌ DON'T: Loading full object just for name and presenter
 /// let event = EventAll::load(ulid).await?;
-/// println!("{}: {}", event.name, event.event_type);
+/// println!("{}: {}", event.name, event.presenter);
 ///
 /// // ✅ DO: Direct query for specific fields
 /// let result = sqlx::query!(
-///     r#"SELECT "name", "event_type" FROM "events" WHERE "event_id" = ?"#,
+///     r#"SELECT "name", "presenter" FROM "events" WHERE "event_id" = ?"#,
 ///     ulid_str
 /// ).fetch_one(db()).await?;
 /// ```
@@ -69,7 +73,15 @@ pub struct EventAll {
     pub country: String,
     pub regions: Option<String>,
     pub point: Option<String>,
-    pub event_type: EventType,
+
+    /// The slugs of the event's formats, programs or campaigns, kinds of
+    /// venue, topics and audiences, from the lists [`crate::choice`] keeps.
+    pub formats: BTreeSet<String>,
+    pub programs: BTreeSet<String>,
+    pub venues: BTreeSet<String>,
+    pub topics: BTreeSet<String>,
+    pub audience: BTreeSet<String>,
+
     pub ticketing_begins: Option<TimeString>,
     pub outcomes_label: Option<String>,
     pub outcomes_link: Option<String>,
@@ -99,6 +111,41 @@ impl EventAll {
             contact.contact_id = Ulid::nil();
         }
         self
+    }
+
+    /// The lists an event picks from.
+    pub const LISTS: [ChoiceList; 5] = [
+        ChoiceList::EventFormat,
+        ChoiceList::EventProgram,
+        ChoiceList::EventVenue,
+        ChoiceList::Topic,
+        ChoiceList::Audience,
+    ];
+
+    /// What the event picks from `list`, or `None` for a list events pick
+    /// nothing from.
+    pub fn picks(&self, list: ChoiceList) -> Option<&BTreeSet<String>> {
+        match list {
+            ChoiceList::EventFormat => Some(&self.formats),
+            ChoiceList::EventProgram => Some(&self.programs),
+            ChoiceList::EventVenue => Some(&self.venues),
+            ChoiceList::Topic => Some(&self.topics),
+            ChoiceList::Audience => Some(&self.audience),
+            ChoiceList::Activity => None,
+        }
+    }
+
+    /// What the event picks from `list`, to change, or `None` for a list
+    /// events pick nothing from.
+    pub fn picks_mut(&mut self, list: ChoiceList) -> Option<&mut BTreeSet<String>> {
+        match list {
+            ChoiceList::EventFormat => Some(&mut self.formats),
+            ChoiceList::EventProgram => Some(&mut self.programs),
+            ChoiceList::EventVenue => Some(&mut self.venues),
+            ChoiceList::Topic => Some(&mut self.topics),
+            ChoiceList::Audience => Some(&mut self.audience),
+            ChoiceList::Activity => None,
+        }
     }
 }
 
@@ -145,7 +192,6 @@ impl LoadStorePeered for EventAll {
               "zip",
               "state",
               "country",
-              "event_type",
               "ticketing_begins",
               "outcomes_label",
               "outcomes_link",
@@ -187,7 +233,14 @@ impl LoadStorePeered for EventAll {
               ?26,
               ?27,
               ?28,
-              ?29,
+              case
+                when ?29 is null then
+                  null
+                when substr(?29, 1, 1) == '{' and substr(?29, -1, 1) == '}' then
+                  SetSRID(GeomFromGeoJSON(?29), 4326)
+                else
+                  GeomFromEWKT(?29)
+              end,
               case
                 when ?30 is null then
                   null
@@ -196,19 +249,11 @@ impl LoadStorePeered for EventAll {
                 else
                   GeomFromEWKT(?30)
               end,
-              case
-                when ?31 is null then
-                  null
-                when substr(?31, 1, 1) == '{' and substr(?31, -1, 1) == '}' then
-                  SetSRID(GeomFromGeoJSON(?31), 4326)
-                else
-                  GeomFromEWKT(?31)
-              end,
+              ?31,
               ?32,
               ?33,
               ?34,
-              ?35,
-              ?36
+              ?35
             )"#,
             event_id,
             self.created,
@@ -234,7 +279,6 @@ impl LoadStorePeered for EventAll {
             self.zip,
             self.state,
             self.country,
-            self.event_type,
             self.ticketing_begins,
             self.outcomes_label,
             self.outcomes_link,
@@ -283,6 +327,12 @@ impl LoadStorePeered for EventAll {
         // Not stored: when a event changed is the activity log's to say. The
         // change is logged once, by whatever made it, rather than here, where
         // every peer saving its copy would log it again.
+
+        for list in Self::LISTS {
+            if let Some(slugs) = self.picks(list) {
+                crate::choice::assign(&mut tx, &event_id, list, slugs).await?;
+            }
+        }
 
         // "tags",
         sqlx::query!(r#"delete from event_tags where event_id = ?"#, event_id)
@@ -428,7 +478,7 @@ impl LoadStorePeered for EventAll {
                 page_creator_id, name, description, origin, presenter, url,
                 image, image_credit, how_to_join, part_of, location_type,
                 entirely_online, location_name, location_description, address,
-                city, zip, state, country, event_type as "event_type: EventType",
+                city, zip, state, country,
                 ticketing_begins,
                 outcomes_label, outcomes_link, circuit_id,
                 AsGeoJSON(regions) as "regions: Option<String>",
@@ -523,13 +573,11 @@ impl LoadStorePeered for EventAll {
             .collect::<Result<Vec<_>, anyhow::Error>>()?
             .into_boxed_slice();
 
-        // The column holds the `sqlx::Type` encoding, which is what
-        // `save_to_database` writes, so it is decoded the same way rather than
-        // through `FromStr` — `FromStr` is the inverse of `Display` and parses
-        // the human-facing labels the add-event form submits, which are a
-        // different vocabulary ("professional development", not
-        // "ProfessionalDevelopment").
-        let event_type = event_row.event_type;
+        let formats = ChoiceValue::of_target(ChoiceList::EventFormat, &event_id_str).await?;
+        let programs = ChoiceValue::of_target(ChoiceList::EventProgram, &event_id_str).await?;
+        let venues = ChoiceValue::of_target(ChoiceList::EventVenue, &event_id_str).await?;
+        let topics = ChoiceValue::of_target(ChoiceList::Topic, &event_id_str).await?;
+        let audience = ChoiceValue::of_target(ChoiceList::Audience, &event_id_str).await?;
 
         Ok(EventAll {
             event_id,
@@ -575,7 +623,11 @@ impl LoadStorePeered for EventAll {
             country: event_row.country,
             regions: event_row.regions.flatten(),
             point: event_row.point.flatten(),
-            event_type,
+            formats,
+            programs,
+            venues,
+            topics,
+            audience,
             ticketing_begins: event_row
                 .ticketing_begins
                 .map(|s| TimeString::try_from(s))

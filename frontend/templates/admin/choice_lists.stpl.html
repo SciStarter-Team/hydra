@@ -1,0 +1,143 @@
+<% let base = format!("/-admin/choice-lists/{}", self.list.path()); let event_type = crate::choice::ChoiceList::EVENT_TYPES.contains(&self.list); %>
+<div id="choice-list" class="space-y-6">
+    <nav aria-label="Choice lists" class="flex flex-wrap gap-2">
+        <% for list in crate::choice::ChoiceList::ALL { %>
+            <% if *list == self.list { %>
+                <span aria-current="page" class="px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700"><%= list.label() %></span>
+            <% } else { %>
+                <a href="/-admin/choice-lists/<%= list.path() %>" class="px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"><%= list.label() %></a>
+            <% } %>
+        <% } %>
+    </nav>
+
+    <div class="bg-white rounded-lg shadow border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900"><%= self.list.label() %></h3>
+            <p class="mt-1 text-sm text-gray-500">
+                The values <%= self.pickers() %> pick from, in the order forms offer them. Any number
+                can be picked. Renaming a value renames it everywhere it is picked; deleting one takes
+                it off everything that picks it.
+            </p>
+            <p class="mt-1 text-sm text-gray-500">
+                Until the switch from orrery, this list is copied from orrery&rsquo;s every hour. Each
+                value orrery has takes orrery&rsquo;s name and place, so changes made to those here
+                are undone; a value deleted here that orrery still has comes back, though not on what
+                picked it until each of those is next copied; and a value orrery deletes is deleted
+                here. A value added here and unknown to orrery is kept as it is.
+            </p>
+            <% if event_type { %>
+                <p class="mt-1 text-sm text-gray-500">
+                    Orrery keeps formats, programs and campaigns, and venues as one list of event types,
+                    saying of each which of the three it is. A value orrery makes another of the three
+                    moves here too, along with what picks it.
+                </p>
+            <% } %>
+        </div>
+
+        <div class="p-6 space-y-4">
+            <% if let Some(refusal) = &self.refusal { %>
+                <div role="alert" class="rounded-md bg-red-50 border border-red-200 p-4">
+                    <p class="text-sm text-red-700"><%= refusal %></p>
+                </div>
+            <% } %>
+
+            <form hx-post="<%= base %>" hx-target="#choice-list" hx-swap="outerHTML" class="flex flex-col sm:flex-row gap-3 sm:items-end">
+                <div class="flex-1">
+                    <label for="choice-value-name" class="block text-sm font-medium text-gray-700">New value</label>
+                    <input
+                        type="text"
+                        id="choice-value-name"
+                        name="name"
+                        required
+                        value="<%= self.name %>"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    >
+                    <p class="mt-1 text-xs text-gray-500">Added at the end of the list.</p>
+                </div>
+                <div>
+                    <button type="submit" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Add Value
+                    </button>
+                    <p class="mt-1 text-xs text-gray-500">&nbsp;</p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow border border-gray-200">
+        <div class="p-6">
+            <% if self.rows.is_empty() { %>
+                <div class="text-center py-12">
+                    <h3 class="text-sm font-medium text-gray-900">No values yet</h3>
+                    <p class="mt-1 text-sm text-gray-500">Add one above.</p>
+                </div>
+            <% } else { %>
+                <div class="overflow-hidden shadow ring-1 ring-black/5 rounded-lg">
+                    <div class="hidden lg:grid lg:grid-cols-6 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <div class="lg:col-span-3">Name</div>
+                        <div>Picked by</div>
+                        <div>Order</div>
+                        <div class="text-right">Actions</div>
+                    </div>
+                    <div class="divide-y divide-gray-200 bg-white">
+                        <% let last = self.rows.len() - 1; for (index, row) in self.rows.iter().enumerate() { let value = &row.value; %>
+                            <div class="flex flex-col lg:grid lg:grid-cols-6 gap-3 lg:gap-4 px-6 py-4 lg:items-center">
+                                <form hx-put="<%= base %>/<%= value.slug %>" hx-target="#choice-list" hx-swap="outerHTML" class="lg:col-span-3 flex flex-wrap sm:flex-nowrap gap-2 items-center">
+                                    <label class="sr-only" for="choice-value-<%= value.slug %>">Name of <%= value.name %></label>
+                                    <input
+                                        type="text"
+                                        id="choice-value-<%= value.slug %>"
+                                        name="name"
+                                        required
+                                        value="<%= value.name %>"
+                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                    >
+                                    <button type="submit" class="text-sm font-medium text-indigo-600 hover:text-indigo-900">
+                                        Save<span class="sr-only">, <%= value.name %></span>
+                                    </button>
+                                </form>
+                                <div>
+                                    <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Picked by</div>
+                                    <div class="text-sm text-gray-900"><%= row.uses %></div>
+                                </div>
+                                <div class="flex gap-3">
+                                    <% if index > 0 { %>
+                                        <button
+                                            hx-post="<%= base %>/<%= value.slug %>/move/up"
+                                            hx-target="#choice-list"
+                                            hx-swap="outerHTML"
+                                            class="text-sm font-medium text-gray-600 hover:text-gray-900"
+                                        >
+                                            Up<span class="sr-only">, <%= value.name %></span>
+                                        </button>
+                                    <% } %>
+                                    <% if index < last { %>
+                                        <button
+                                            hx-post="<%= base %>/<%= value.slug %>/move/down"
+                                            hx-target="#choice-list"
+                                            hx-swap="outerHTML"
+                                            class="text-sm font-medium text-gray-600 hover:text-gray-900"
+                                        >
+                                            Down<span class="sr-only">, <%= value.name %></span>
+                                        </button>
+                                    <% } %>
+                                </div>
+                                <div class="flex flex-wrap gap-3 lg:justify-end">
+                                    <button
+                                        hx-delete="<%= base %>/<%= value.slug %>"
+                                        hx-confirm="Delete &ldquo;<%= value.name %>&rdquo;?<% if row.uses == 1 { %> It comes off the one <%= self.picker() %> that picks it.<% } else if row.uses > 1 { %> It comes off the <%= row.uses %> <%= self.pickers() %> that pick it.<% } %>"
+                                        hx-target="#choice-list"
+                                        hx-swap="outerHTML"
+                                        class="text-sm font-medium text-red-600 hover:text-red-900"
+                                    >
+                                        Delete<span class="sr-only">, <%= value.name %></span>
+                                    </button>
+                                </div>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</div>

@@ -41,8 +41,12 @@
         <%+ self.field("presenter") %>
         <% } %>
         <%+ self.field("name") %>
-        <% if self.event_type.is_some() { %>
-        <%+ self.field("event_type") %>
+        <% if self.kind.is_event() { %>
+        <%+ self.field("formats") %>
+        <%+ self.field("programs") %>
+        <%+ self.field("venues") %>
+        <%+ self.field("topics") %>
+        <%+ self.field("audience") %>
         <% } %>
         <% if !self.url.is_empty() || self.can_edit { %>
         <%+ self.field("url") %>

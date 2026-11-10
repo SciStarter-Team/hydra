@@ -16,8 +16,8 @@
 use url::form_urlencoded;
 
 use super::{FinderQuery, MiscFilter, SearchKinds};
+use crate::choice::{ChoiceList, ChoiceLists, ChoiceValue};
 use crate::geocode::locate;
-use crate::project::choice_ids;
 
 /// A parameter orrery's finder reads, which a hydra link never carries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -112,7 +112,7 @@ impl OrreryLink {
     /// unless it is given as something other than `true`, as in orrery. A
     /// choice may be named by orrery's id or by its exact name, as older
     /// links name them; one naming nothing is dropped.
-    fn read(params: &[(OrreryParam, String)]) -> Self {
+    fn read(params: &[(OrreryParam, String)], lists: &ChoiceLists) -> Self {
         let first = |wanted: OrreryParam| {
             params
                 .iter()
@@ -134,7 +134,7 @@ impl OrreryLink {
                 .and_then(|value| value.trim().parse::<f64>().ok())
                 .filter(|value| value.is_finite() && *value != 0.0)
         };
-        let choices = |wanted: OrreryParam, choices: &[(i64, &'static str)]| {
+        let choices = |wanted: OrreryParam, list: ChoiceList| {
             let mut named: Vec<String> = Vec::new();
 
             for value in all(wanted) {
@@ -143,10 +143,10 @@ impl OrreryLink {
                     Err(_) => serde_json::Value::from(value),
                 };
 
-                if let Some(name) = choice_ids::named(choices, &value)
-                    && !named.iter().any(|held| held == name)
+                if let Some(found) = ChoiceValue::partner_named(lists.get(list), &value)
+                    && !named.iter().any(|held| *held == found.name)
                 {
-                    named.push(name.to_string());
+                    named.push(found.name.clone());
                 }
             }
 
@@ -164,9 +164,9 @@ impl OrreryLink {
                 .to_string(),
             latitude: coordinate(OrreryParam::Latitude),
             longitude: coordinate(OrreryParam::Longitude),
-            activity: choices(OrreryParam::Activity, choice_ids::ACTIVITIES),
-            topic: choices(OrreryParam::Topic, choice_ids::TOPICS),
-            audience: choices(OrreryParam::Audience, choice_ids::AUDIENCE),
+            activity: choices(OrreryParam::Activity, ChoiceList::Activity),
+            topic: choices(OrreryParam::Topic, ChoiceList::Topic),
+            audience: choices(OrreryParam::Audience, ChoiceList::Audience),
             filters: all(OrreryParam::Filters)
                 .filter_map(|value| value.trim().parse::<i64>().ok())
                 .filter_map(OrreryFilter::from_id)
@@ -279,9 +279,10 @@ impl<'a> SplitQuery<'a> {
         split
     }
 
-    /// The link's orrery parameters, if it carries any.
-    fn link(&self) -> Option<OrreryLink> {
-        (!self.orrery.is_empty()).then(|| OrreryLink::read(&self.orrery))
+    /// The link's orrery parameters, if it carries any, naming values of
+    /// `lists`.
+    fn link(&self, lists: &ChoiceLists) -> Option<OrreryLink> {
+        (!self.orrery.is_empty()).then(|| OrreryLink::read(&self.orrery, lists))
     }
 
     /// The finder URL asking what `link`, read from this query, asks, with
@@ -337,7 +338,18 @@ impl<'a> SplitQuery<'a> {
 /// orrery's parameters: the same search in hydra's.
 pub(crate) async fn redirect_target(query: &str) -> Option<String> {
     let split = SplitQuery::new(query);
-    let link = split.link()?;
+    if split.orrery.is_empty() {
+        return None;
+    }
+
+    let lists = match ChoiceLists::load().await {
+        Ok(lists) => lists,
+        Err(err) => {
+            tracing::error!("Reading the choice lists for an orrery finder link failed: {err}");
+            ChoiceLists::default()
+        }
+    };
+    let link = split.link(&lists)?;
 
     let place = match link.point() {
         Some(point) => Some(point),
@@ -359,8 +371,25 @@ mod tests {
     /// The URL `query` is sent on to, given that its location, if it names
     /// one without a point, is found at `place`.
     fn translated(query: &str, place: Option<(f64, f64)>) -> Option<String> {
+        let value = |list, id, name: &str| crate::choice::ChoiceValue {
+            list,
+            slug: crate::slug::slugify(name),
+            name: name.to_string(),
+            position: id,
+            orrery_id: Some(id),
+        };
+        let lists = ChoiceLists::of([
+            value(
+                ChoiceList::Audience,
+                111,
+                "Elementary school (6 - 10 years)",
+            ),
+            value(ChoiceList::Topic, 3, "Climate & Weather"),
+            value(ChoiceList::Activity, 28, "On a lunch break"),
+        ]);
+
         let split = SplitQuery::new(query);
-        let link = split.link()?;
+        let link = split.link(&lists)?;
         let place = link.point().or(place);
 
         Some(split.redirect(&link, place))

@@ -793,7 +793,7 @@ async fn analytics_export_events(
         origin: String,
         presenter: String,
         url: String,
-        event_type: String,
+        event_types: Option<String>,
         location_type: String,
         publish: Option<bool>,
     }
@@ -808,7 +808,8 @@ async fn analytics_export_events(
             ev.origin,
             ev.presenter,
             ev.url,
-            ev.event_type,
+            (SELECT group_concat(n.name, ', ' ORDER BY n.rank, n.position, n.name)
+             FROM event_type_names n WHERE n.target = ev.event_id) AS "event_types: String",
             ev.location_type,
             e.publish
         FROM events ev
@@ -835,7 +836,7 @@ async fn analytics_export_events(
             escape_csv_field(&event.origin),
             escape_csv_field(&event.presenter),
             escape_csv_field(&event.url),
-            escape_csv_field(&event.event_type),
+            escape_csv_field(event.event_types.as_deref().unwrap_or_default()),
             escape_csv_field(&event.location_type),
             published,
         ));

@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use ulid::Ulid;
 
+use crate::choice::{ChoiceList, ChoiceValue};
 use crate::project::{ProjectStatus, push_listing_rule};
 
 /// Base URL for SciStarter
@@ -393,21 +394,8 @@ async fn tool_get_project(args: Value) -> Result<String, Error> {
         return Err(anyhow::anyhow!("Project not found or not available"));
     };
 
-    // Get topics
-    let topics: Vec<String> = sqlx::query_scalar!(
-        "SELECT topic FROM project_topics WHERE project_id = ?",
-        project_id_str
-    )
-    .fetch_all(db())
-    .await?;
-
-    // Get activities
-    let activities: Vec<String> = sqlx::query_scalar!(
-        "SELECT activity FROM project_activities WHERE project_id = ?",
-        project_id_str
-    )
-    .fetch_all(db())
-    .await?;
+    let topics = ChoiceValue::names_of_target(ChoiceList::Topic, project_id_str).await?;
+    let activities = ChoiceValue::names_of_target(ChoiceList::Activity, project_id_str).await?;
 
     let result = json!({
         "project_id": row.project_id,
@@ -541,22 +529,23 @@ async fn tool_get_event(args: Value) -> Result<String, Error> {
     Ok(serde_json::to_string_pretty(&result)?)
 }
 
-async fn tool_list_topics() -> Result<String, Error> {
-    let topics: Vec<String> =
-        sqlx::query_scalar!("SELECT DISTINCT topic FROM project_topics ORDER BY topic")
-            .fetch_all(db())
-            .await?;
+/// The names of the values of the list, in list order.
+async fn list_names(list: ChoiceList) -> Result<String, Error> {
+    let names: Vec<String> = ChoiceValue::all(list)
+        .await?
+        .into_iter()
+        .map(|value| value.name)
+        .collect();
 
-    Ok(serde_json::to_string_pretty(&topics)?)
+    Ok(serde_json::to_string_pretty(&names)?)
+}
+
+async fn tool_list_topics() -> Result<String, Error> {
+    list_names(ChoiceList::Topic).await
 }
 
 async fn tool_list_activities() -> Result<String, Error> {
-    let activities: Vec<String> =
-        sqlx::query_scalar!("SELECT DISTINCT activity FROM project_activities ORDER BY activity")
-            .fetch_all(db())
-            .await?;
-
-    Ok(serde_json::to_string_pretty(&activities)?)
+    list_names(ChoiceList::Activity).await
 }
 
 /// Truncate a string to a maximum length, adding "..." if truncated

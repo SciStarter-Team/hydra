@@ -1,4 +1,5 @@
 use crate::{
+    choice::{ChoiceList, ChoiceValue},
     component::{Component, Head, NumberedPagination, StandardLayout},
     form::QsQuery,
     local_time::{TimeFormat, local_time},
@@ -211,9 +212,9 @@ impl FinderQuery {
     /// A search for projects alone, for a link into the finder: narrow it with
     /// the `with_*` methods and link to [`Self::url`].
     ///
-    /// Age groups, activities and the miscellaneous filters narrow projects
-    /// only, and the finder sets them aside when events are searched too, so
-    /// a link that names one of them has to search projects alone.
+    /// Activities and the miscellaneous filters narrow projects only, and the
+    /// finder sets them aside when events are searched too, so a link that
+    /// names one of them has to search projects alone.
     pub(crate) fn projects() -> Self {
         FinderQuery {
             kind: vec![PROJECT_KIND.to_string()],
@@ -311,16 +312,12 @@ impl FinderQuery {
     ///
     /// Names the same fields as [`Self::set_aside_project_filters`].
     pub(crate) fn narrows_projects_only(&self) -> bool {
-        !self.audience.is_empty()
-            || !self.activity.is_empty()
-            || !self.misc_filter.is_empty()
-            || self.show_completed.is_some()
+        !self.activity.is_empty() || !self.misc_filter.is_empty() || self.show_completed.is_some()
     }
 
     /// Drop what narrows projects alone. Names the same fields as
     /// [`Self::narrows_projects_only`].
     fn set_aside_project_filters(&mut self) {
-        self.audience.clear();
         self.activity.clear();
         self.misc_filter.clear();
         self.show_completed = None;
@@ -703,21 +700,41 @@ impl ResultPage {
     }
 }
 
-/// Load available filter options from the database
+/// The names of the topics, age groups and activities the finder offers:
+/// those something picks, in list order.
 pub(crate) async fn load_filter_options() -> Result<(Vec<String>, Vec<String>, Vec<String>), Error>
 {
-    let topics = sqlx::query_scalar!("SELECT DISTINCT topic FROM project_topics ORDER BY topic")
-        .fetch_all(db())
-        .await?;
-    let audiences =
-        sqlx::query_scalar!("SELECT DISTINCT audience FROM project_audiences ORDER BY audience")
-            .fetch_all(db())
-            .await?;
-    let activities =
-        sqlx::query_scalar!("SELECT DISTINCT activity FROM project_activities ORDER BY activity")
-            .fetch_all(db())
-            .await?;
-    Ok((topics, audiences, activities))
+    let names = |values: Vec<ChoiceValue>| values.into_iter().map(|value| value.name).collect();
+
+    Ok((
+        names(ChoiceValue::in_use(ChoiceList::Topic).await?),
+        names(ChoiceValue::in_use(ChoiceList::Audience).await?),
+        names(ChoiceValue::in_use(ChoiceList::Activity).await?),
+    ))
+}
+
+/// Narrow the results to those whose `id` column names a project or event
+/// that picks one of the values of the list named `names`.
+pub(crate) fn push_choice_filter(
+    qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    id: &str,
+    list: ChoiceList,
+    names: &[String],
+) {
+    if names.is_empty() {
+        return;
+    }
+
+    qb.push(format!(
+        " AND {id} IN (SELECT target FROM choice_names WHERE list = "
+    ));
+    qb.push_bind(list);
+    qb.push(" AND name IN (");
+    let mut sep = qb.separated(", ");
+    for name in names {
+        sep.push_bind(name.clone());
+    }
+    qb.push("))");
 }
 
 /// Apply project-specific filters to a QueryBuilder
@@ -745,36 +762,9 @@ fn apply_project_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &
     };
     push_listing_rule(qb, statuses);
 
-    if !query.topic.is_empty() {
-        qb.push(" AND p.project_id IN (SELECT project_id FROM project_topics WHERE topic IN (");
-        let mut sep = qb.separated(", ");
-        for t in &query.topic {
-            sep.push_bind(t);
-        }
-        qb.push("))");
-    }
-
-    if !query.audience.is_empty() {
-        qb.push(
-            " AND p.project_id IN (SELECT project_id FROM project_audiences WHERE audience IN (",
-        );
-        let mut sep = qb.separated(", ");
-        for a in &query.audience {
-            sep.push_bind(a);
-        }
-        qb.push("))");
-    }
-
-    if !query.activity.is_empty() {
-        qb.push(
-            " AND p.project_id IN (SELECT project_id FROM project_activities WHERE activity IN (",
-        );
-        let mut sep = qb.separated(", ");
-        for a in &query.activity {
-            sep.push_bind(a);
-        }
-        qb.push("))");
-    }
+    push_choice_filter(qb, "p.project_id", ChoiceList::Topic, &query.topic);
+    push_choice_filter(qb, "p.project_id", ChoiceList::Audience, &query.audience);
+    push_choice_filter(qb, "p.project_id", ChoiceList::Activity, &query.activity);
 
     for filter in MiscFilter::ALL {
         if !query.has_misc_filter(filter) {
@@ -929,14 +919,8 @@ fn apply_event_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &'a
         qb.push(")");
     }
 
-    if !query.topic.is_empty() {
-        qb.push(" AND ev.event_id IN (SELECT event_id FROM event_tags WHERE tag IN (");
-        let mut sep = qb.separated(", ");
-        for t in &query.topic {
-            sep.push_bind(t);
-        }
-        qb.push("))");
-    }
+    push_choice_filter(qb, "ev.event_id", ChoiceList::Topic, &query.topic);
+    push_choice_filter(qb, "ev.event_id", ChoiceList::Audience, &query.audience);
 }
 
 /// Convert a description stored in any supported format — Quill Delta JSON,
@@ -2364,9 +2348,9 @@ mod tests {
         assert_eq!(query.q.as_deref(), Some("sea #stars"));
     }
 
-    /// Age groups, activities and the miscellaneous filters narrow projects
-    /// alone, so a link naming one must not leave the search open to events,
-    /// where the finder would set it aside.
+    /// Activities and the miscellaneous filters narrow projects alone, so a
+    /// link naming one must not leave the search open to events, where the
+    /// finder would set it aside.
     #[tokio::test]
     async fn a_link_to_a_project_only_filter_keeps_it_in_force() {
         for filter in MiscFilter::ALL {
@@ -2412,7 +2396,6 @@ mod tests {
         assert!(!query.narrows_projects_only(), "{query:?}");
 
         for narrowed in [
-            FinderQuery::projects().with_audience("Adults"),
             FinderQuery::projects().with_activity("At night"),
             FinderQuery::projects().with_misc_filter(MiscFilter::HasApp),
             FinderQuery {
@@ -2426,6 +2409,7 @@ mod tests {
         assert!(
             !FinderQuery::default()
                 .with_topic("Birds")
+                .with_audience("Adults")
                 .with_text("owls")
                 .narrows_projects_only()
         );
@@ -2453,11 +2437,11 @@ mod tests {
 
         // Shared ground: every kind of result can be judged by these.
         assert_eq!(both.topic, vec!["Birds".to_string()]);
+        assert_eq!(both.audience, vec!["Kids".to_string()]);
         assert_eq!(both.lat, Some(LAT));
 
         // A project's filters would leave the events unvetted, and the dates
         // would leave the projects unvetted, so neither set is in play.
-        assert!(both.audience.is_empty());
         assert!(both.activity.is_empty());
         assert!(both.misc_filter.is_empty());
         assert!(both.show_completed.is_none());
@@ -2484,7 +2468,8 @@ mod tests {
         assert_eq!(events.start.as_deref(), Some("2026-10-01"));
         assert_eq!(events.end.as_deref(), Some("2026-10-31"));
         assert!(events.show_past.is_some());
-        assert!(events.audience.is_empty());
+        assert_eq!(events.audience, vec!["Kids".to_string()]);
+        assert!(events.activity.is_empty());
         assert!(events.show_completed.is_none());
     }
 
@@ -2495,7 +2480,7 @@ mod tests {
     fn marked_filters_are_in_force_in_a_search_of_both_kinds() {
         let both = every_filter().as_offered(SearchKinds::Both, SingleKindFilters::Marked);
 
-        assert_eq!(both.audience, vec!["Kids".to_string()]);
+        assert_eq!(both.activity, vec!["At home".to_string()]);
         assert_eq!(both.start.as_deref(), Some("2026-10-01"));
         assert!(both.show_completed.is_some());
         assert!(both.show_past.is_some());
@@ -2503,7 +2488,7 @@ mod tests {
         // A kind the search does not cover still has nothing to say about it.
         let events = every_filter().as_offered(SearchKinds::EventsOnly, SingleKindFilters::Marked);
 
-        assert!(events.audience.is_empty());
+        assert!(events.activity.is_empty());
         assert_eq!(events.end.as_deref(), Some("2026-10-31"));
     }
 
@@ -2527,10 +2512,10 @@ mod tests {
         assert!(
             query
                 .as_offered(SearchKinds::Both, SingleKindFilters::HeldBack)
-                .audience
+                .activity
                 .is_empty()
         );
-        assert!(query.to_query_string().contains("audience[]=Kids"));
+        assert!(query.to_query_string().contains("activity[]=At%20home"));
     }
 
     #[test]

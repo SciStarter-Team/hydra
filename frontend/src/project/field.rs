@@ -4,7 +4,12 @@ use anyhow::Error;
 use common::{insensitivestring::InsensitiveString, shared::db, timestring::TimeString};
 use ulid::Ulid;
 
-use crate::{contact::Contact, participant_file::ParticipantFile, peering::LoadStorePeered};
+use crate::{
+    choice::{ChoiceList, ChoiceValue},
+    contact::Contact,
+    participant_file::ParticipantFile,
+    peering::LoadStorePeered,
+};
 
 use super::{
     ProjectParticipationDegree, ProjectPromotionTime, ProjectRejectionReason, ProjectStatus,
@@ -17,24 +22,6 @@ pub const PARTICIPATION_TASKS_VOCABULARY: &[&str] = &[
     "Classification / Transcription",
     "Data collection",
     "Participated",
-];
-
-pub const ACTIVITIES_VOCABULARY: &[&str] = &[
-    "On a lunch break",
-    "At sports stadiums",
-    "At night",
-    "At a science center, zoo or aquarium",
-    "At school",
-    "On a walk, run",
-    "Exclusively online",
-    "At the beach",
-    "In snow or rain",
-    "At home",
-    "In the car",
-    "Emergency Response",
-    "On a hike",
-    "While fishing",
-    "In oceans, streams, rivers, lakes",
 ];
 
 pub const DATA_AGGREGATION_VOCABULARY: &[&str] = &["Raw", "Aggregated"];
@@ -127,38 +114,6 @@ pub const STAKEHOLDERS_VOCABULARY: &[&str] = &[
 /// partner API and the ALA import write it.
 pub const DIFFICULTY_VOCABULARY: &[&str] = &["Easy", "Medium", "Difficult"];
 
-pub const TOPICS_VOCABULARY: &[&str] = &[
-    "Agriculture",
-    "Animals",
-    "Astronomy & Space",
-    "Awards",
-    "Biology",
-    "Birds",
-    "Books & Literature",
-    "Chemistry",
-    "Climate & Weather",
-    "Computers & Technology",
-    "Crowd Funding",
-    "Disaster Response",
-    "Ecology & Environment",
-    "Education",
-    "Events",
-    "Food",
-    "Geography",
-    "Geology & Earth Science",
-    "Health & Medicine",
-    "History, Archeology & Culture",
-    "Insects & Pollinators",
-    "Nature & Outdoors",
-    "Ocean, Water, Marine & Terrestrial",
-    "Physics",
-    "Psychology",
-    "Science Policy",
-    "Social Science",
-    "Sound",
-    "Transportation",
-];
-
 pub const FIELDS_OF_SCIENCE_VOCABULARY: &[&str] =
     &["Astronomy", "Biology", "Chemistry", "Ecology", "Physics"];
 
@@ -171,17 +126,6 @@ pub const PRACTICES_VOCABULARY: &[&str] = &[
     "Developing and using models",
     "Planning and carrying out investigations",
     "Using mathematics and computational thinking",
-];
-
-pub const AUDIENCE_VOCABULARY: &[&str] = &[
-    "Adults",
-    "College",
-    "Elementary school (6 - 10 years)",
-    "Families",
-    "Graduate students",
-    "High school (14 - 17 years)",
-    "Middle school (11 - 13 years)",
-    "Seniors",
 ];
 
 pub const GEOGRAPHIC_SCOPE_VOCABULARY: &[&str] =
@@ -294,14 +238,17 @@ pub enum ProjectFieldValue {
     TwitterName(String),
     FacebookPage(String),
     InstagramPage(String),
-    Topics(Box<[String]>),
+    /// The slugs of the project's topics, from the list [`crate::choice`]
+    /// keeps.
+    Topics(std::collections::BTreeSet<String>),
     FieldsOfScience(Box<[String]>),
     Practices(Box<[String]>),
     PracticesHow(String),
     SearchTerms(String),
     Difficulty(String),
     Diy(bool),
-    Audience(Box<[String]>),
+    /// The slugs of the project's audiences, likewise.
+    Audience(std::collections::BTreeSet<String>),
     SignupUrl(String),
     PrefixHowToLoggedIn(String),
     PrefixHowToLoggedOut(String),
@@ -355,7 +302,8 @@ pub enum ProjectFieldValue {
     YearCompleted(Option<i32>),
     MonthCompleted(Option<i32>),
     ParticipationTasks(Box<[String]>),
-    Activities(Box<[String]>),
+    /// The slugs of the project's activities, likewise.
+    Activities(std::collections::BTreeSet<String>),
     SpecialSkills(String),
     DataResults(String),
     DataAggregation(Box<[String]>),
@@ -424,13 +372,13 @@ impl TryFrom<&ProjectField> for Vec<String> {
 
     fn try_from(project_field: &ProjectField) -> Result<Self, Self::Error> {
         match &project_field.field {
-            ProjectFieldValue::Topics(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::Topics(set) => Ok(set.iter().cloned().collect()),
             ProjectFieldValue::FieldsOfScience(arr) => Ok(arr.to_vec()),
             ProjectFieldValue::Practices(arr) => Ok(arr.to_vec()),
-            ProjectFieldValue::Audience(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::Audience(set) => Ok(set.iter().cloned().collect()),
             ProjectFieldValue::GeographicScope(arr) => Ok(arr.to_vec()),
             ProjectFieldValue::ParticipationTasks(arr) => Ok(arr.to_vec()),
-            ProjectFieldValue::Activities(arr) => Ok(arr.to_vec()),
+            ProjectFieldValue::Activities(set) => Ok(set.iter().cloned().collect()),
             ProjectFieldValue::DataAggregation(arr) => Ok(arr.to_vec()),
             ProjectFieldValue::DataConsent(arr) => Ok(arr.to_vec()),
             ProjectFieldValue::DataAccess(arr) => Ok(arr.to_vec()),
@@ -455,15 +403,21 @@ impl ProjectFieldValue {
         let boxed_items: Box<[String]> = items.into_boxed_slice();
 
         let field_value = match field_type {
-            ProjectFieldType::Topics => ProjectFieldValue::Topics(boxed_items),
+            ProjectFieldType::Topics => {
+                ProjectFieldValue::Topics(boxed_items.into_iter().collect())
+            }
             ProjectFieldType::FieldsOfScience => ProjectFieldValue::FieldsOfScience(boxed_items),
             ProjectFieldType::Practices => ProjectFieldValue::Practices(boxed_items),
-            ProjectFieldType::Audience => ProjectFieldValue::Audience(boxed_items),
+            ProjectFieldType::Audience => {
+                ProjectFieldValue::Audience(boxed_items.into_iter().collect())
+            }
             ProjectFieldType::GeographicScope => ProjectFieldValue::GeographicScope(boxed_items),
             ProjectFieldType::ParticipationTasks => {
                 ProjectFieldValue::ParticipationTasks(boxed_items)
             }
-            ProjectFieldType::Activities => ProjectFieldValue::Activities(boxed_items),
+            ProjectFieldType::Activities => {
+                ProjectFieldValue::Activities(boxed_items.into_iter().collect())
+            }
             ProjectFieldType::DataAggregation => ProjectFieldValue::DataAggregation(boxed_items),
             ProjectFieldType::DataConsent => ProjectFieldValue::DataConsent(boxed_items),
             ProjectFieldType::DataAccess => ProjectFieldValue::DataAccess(boxed_items),
@@ -4167,15 +4121,19 @@ impl LoadStorePeered for ProjectField {
             }
             // Array field types
             ProjectFieldValue::ParticipantFiles(files) => self.save_participant_files(files).await,
-            ProjectFieldValue::Topics(topics) => self.save_topics(topics).await,
+            ProjectFieldValue::Topics(slugs) => self.save_choices(ChoiceList::Topic, slugs).await,
             ProjectFieldValue::FieldsOfScience(fields) => self.save_fields_of_science(fields).await,
             ProjectFieldValue::Practices(practices) => self.save_practices(practices).await,
-            ProjectFieldValue::Audience(audience) => self.save_audience(audience).await,
+            ProjectFieldValue::Audience(slugs) => {
+                self.save_choices(ChoiceList::Audience, slugs).await
+            }
             ProjectFieldValue::GeographicScope(scope) => self.save_geographic_scope(scope).await,
             ProjectFieldValue::ParticipationTasks(tasks) => {
                 self.save_participation_tasks(tasks).await
             }
-            ProjectFieldValue::Activities(activities) => self.save_activities(activities).await,
+            ProjectFieldValue::Activities(slugs) => {
+                self.save_choices(ChoiceList::Activity, slugs).await
+            }
             ProjectFieldValue::DataAggregation(aggregation) => {
                 self.save_data_aggregation(aggregation).await
             }
@@ -4378,15 +4336,31 @@ impl LoadStorePeered for ProjectField {
             }
             // Array field types
             ProjectFieldType::ParticipantFiles => Self::read_participant_files(project_id).await,
-            ProjectFieldType::Topics => Self::read_topics(project_id).await,
+            ProjectFieldType::Topics => {
+                Self::read_choices(project_id, ChoiceList::Topic, ProjectFieldValue::Topics).await
+            }
             ProjectFieldType::FieldsOfScience => Self::read_fields_of_science(project_id).await,
             ProjectFieldType::Practices => Self::read_practices(project_id).await,
-            ProjectFieldType::Audience => Self::read_audience(project_id).await,
+            ProjectFieldType::Audience => {
+                Self::read_choices(
+                    project_id,
+                    ChoiceList::Audience,
+                    ProjectFieldValue::Audience,
+                )
+                .await
+            }
             ProjectFieldType::GeographicScope => Self::read_geographic_scope(project_id).await,
             ProjectFieldType::ParticipationTasks => {
                 Self::read_participation_tasks(project_id).await
             }
-            ProjectFieldType::Activities => Self::read_activities(project_id).await,
+            ProjectFieldType::Activities => {
+                Self::read_choices(
+                    project_id,
+                    ChoiceList::Activity,
+                    ProjectFieldValue::Activities,
+                )
+                .await
+            }
             ProjectFieldType::DataAggregation => Self::read_data_aggregation(project_id).await,
             ProjectFieldType::DataConsent => Self::read_data_consent(project_id).await,
             ProjectFieldType::DataAccess => Self::read_data_access(project_id).await,
@@ -4435,19 +4409,15 @@ impl ProjectField {
         })
     }
 
-    async fn read_topics(project_id: Ulid) -> Result<Self, Error> {
-        let project_id_str = project_id.to_string();
-        let rows = sqlx::query!(
-            "SELECT topic FROM project_topics WHERE project_id = ? ORDER BY topic",
-            project_id_str
-        )
-        .fetch_all(db())
-        .await?;
-
-        let topics: Vec<String> = rows.into_iter().map(|row| row.topic).collect();
+    async fn read_choices(
+        project_id: Ulid,
+        list: ChoiceList,
+        field: fn(std::collections::BTreeSet<String>) -> ProjectFieldValue,
+    ) -> Result<Self, Error> {
+        let slugs = ChoiceValue::of_target(list, &project_id.to_string()).await?;
         Ok(ProjectField {
             project_id,
-            field: ProjectFieldValue::Topics(topics.into_boxed_slice()),
+            field: field(slugs),
             source: None,
         })
     }
@@ -4486,23 +4456,6 @@ impl ProjectField {
         })
     }
 
-    async fn read_audience(project_id: Ulid) -> Result<Self, Error> {
-        let project_id_str = project_id.to_string();
-        let rows = sqlx::query!(
-            "SELECT audience FROM project_audiences WHERE project_id = ? ORDER BY audience",
-            project_id_str
-        )
-        .fetch_all(db())
-        .await?;
-
-        let audiences: Vec<String> = rows.into_iter().map(|row| row.audience).collect();
-        Ok(ProjectField {
-            project_id,
-            field: ProjectFieldValue::Audience(audiences.into_boxed_slice()),
-            source: None,
-        })
-    }
-
     async fn read_geographic_scope(project_id: Ulid) -> Result<Self, Error> {
         let project_id_str = project_id.to_string();
         let rows = sqlx::query!(
@@ -4533,23 +4486,6 @@ impl ProjectField {
         Ok(ProjectField {
             project_id,
             field: ProjectFieldValue::ParticipationTasks(tasks.into_boxed_slice()),
-            source: None,
-        })
-    }
-
-    async fn read_activities(project_id: Ulid) -> Result<Self, Error> {
-        let project_id_str = project_id.to_string();
-        let rows = sqlx::query!(
-            "SELECT activity FROM project_activities WHERE project_id = ? ORDER BY activity",
-            project_id_str
-        )
-        .fetch_all(db())
-        .await?;
-
-        let activities: Vec<String> = rows.into_iter().map(|row| row.activity).collect();
-        Ok(ProjectField {
-            project_id,
-            field: ProjectFieldValue::Activities(activities.into_boxed_slice()),
             source: None,
         })
     }
@@ -4724,27 +4660,15 @@ impl ProjectField {
         Ok(())
     }
 
-    async fn save_topics(&self, topics: &[String]) -> Result<(), Error> {
-        let project_id_str = self.project_id.to_string();
-
-        // Delete existing entries
-        sqlx::query!(
-            "DELETE FROM project_topics WHERE project_id = ?",
-            project_id_str
-        )
-        .execute(db())
-        .await?;
-
-        // Insert new entries
-        for topic in topics {
-            sqlx::query!(
-                "INSERT INTO project_topics (project_id, topic) VALUES (?, ?)",
-                project_id_str,
-                topic
-            )
-            .execute(db())
-            .await?;
-        }
+    async fn save_choices(
+        &self,
+        list: ChoiceList,
+        slugs: &std::collections::BTreeSet<String>,
+    ) -> Result<(), Error> {
+        let project_id = self.project_id.to_string();
+        let mut tx = common::transaction::Immediate::begin_with_retry(db(), None, None).await?;
+        crate::choice::assign(&mut tx, &project_id, list, slugs).await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -4796,30 +4720,6 @@ impl ProjectField {
         Ok(())
     }
 
-    async fn save_audience(&self, audience: &[String]) -> Result<(), Error> {
-        let project_id_str = self.project_id.to_string();
-
-        // Delete existing entries
-        sqlx::query!(
-            "DELETE FROM project_audiences WHERE project_id = ?",
-            project_id_str
-        )
-        .execute(db())
-        .await?;
-
-        // Insert new entries
-        for aud in audience {
-            sqlx::query!(
-                "INSERT INTO project_audiences (project_id, audience) VALUES (?, ?)",
-                project_id_str,
-                aud
-            )
-            .execute(db())
-            .await?;
-        }
-        Ok(())
-    }
-
     async fn save_geographic_scope(&self, scope: &[String]) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
 
@@ -4861,30 +4761,6 @@ impl ProjectField {
                 "INSERT INTO project_participation_tasks (project_id, participation_task) VALUES (?, ?)",
                 project_id_str,
                 task
-            )
-            .execute(db())
-            .await?;
-        }
-        Ok(())
-    }
-
-    async fn save_activities(&self, activities: &[String]) -> Result<(), Error> {
-        let project_id_str = self.project_id.to_string();
-
-        // Delete existing entries
-        sqlx::query!(
-            "DELETE FROM project_activities WHERE project_id = ?",
-            project_id_str
-        )
-        .execute(db())
-        .await?;
-
-        // Insert new entries
-        for activity in activities {
-            sqlx::query!(
-                "INSERT INTO project_activities (project_id, activity) VALUES (?, ?)",
-                project_id_str,
-                activity
             )
             .execute(db())
             .await?;

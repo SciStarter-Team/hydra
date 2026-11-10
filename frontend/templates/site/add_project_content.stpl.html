@@ -43,53 +43,25 @@
           </div>
         </details>
 
-        <details class="add-section">
-          <%+ SectionSummary::new(SectionIcon::Topics, "Topics") %>
-          <div class="add-section-body checkbox-grid" role="group" aria-label="Topics">
-            <% for topic in crate::project::field::TOPICS_VOCABULARY { %>
-            <label class="checkbox-option">
-              <input type="checkbox" name="topics[]" value="<%= topic %>" <% if self.values.topics.iter().any(|t| t.as_str() == *topic) { %>checked<% } %>>
-              <%= topic %>
-            </label>
-            <% } %>
-          </div>
-        </details>
+        <%+ self.topics %>
 
         <details class="add-section">
           <%+ SectionSummary::new(SectionIcon::Science, "Fields of science") %>
-          <div class="add-section-body checkbox-grid" role="group" aria-label="Fields of science">
-            <% for field in crate::project::field::FIELDS_OF_SCIENCE_VOCABULARY { %>
-            <label class="checkbox-option">
-              <input type="checkbox" name="fields_of_science[]" value="<%= field %>" <% if self.values.fields_of_science.iter().any(|t| t.as_str() == *field) { %>checked<% } %>>
-              <%= field %>
-            </label>
-            <% } %>
+          <div class="add-section-body" role="group" aria-label="Fields of science">
+            <div class="checkbox-grid">
+              <% for field in crate::project::field::FIELDS_OF_SCIENCE_VOCABULARY { %>
+              <label class="checkbox-option">
+                <input type="checkbox" name="fields_of_science[]" value="<%= field %>" <% if self.values.fields_of_science.iter().any(|t| t.as_str() == *field) { %>checked<% } %>>
+                <%= field %>
+              </label>
+              <% } %>
+            </div>
           </div>
         </details>
 
-        <details class="add-section">
-          <%+ SectionSummary::new(SectionIcon::Audience, "Audience") %>
-          <div class="add-section-body checkbox-grid" role="group" aria-label="Audience">
-            <% for aud in crate::project::field::AUDIENCE_VOCABULARY { %>
-            <label class="checkbox-option">
-              <input type="checkbox" name="audience[]" value="<%= aud %>" <% if self.values.audience.iter().any(|t| t.as_str() == *aud) { %>checked<% } %>>
-              <%= aud %>
-            </label>
-            <% } %>
-          </div>
-        </details>
+        <%+ self.audience %>
 
-        <details class="add-section">
-          <%+ SectionSummary::new(SectionIcon::Activities, "Activities") %>
-          <div class="add-section-body checkbox-grid" role="group" aria-label="Activities">
-            <% for activity in crate::project::field::ACTIVITIES_VOCABULARY { %>
-            <label class="checkbox-option">
-              <input type="checkbox" name="activities[]" value="<%= activity %>" <% if self.values.activities.iter().any(|t| t.as_str() == *activity) { %>checked<% } %>>
-              <%= activity %>
-            </label>
-            <% } %>
-          </div>
-        </details>
+        <%+ self.activities %>
 
         <details class="add-section">
           <%+ SectionSummary::new(SectionIcon::Contact, "Organizer contact") %>

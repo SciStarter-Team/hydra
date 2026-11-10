@@ -82,19 +82,15 @@
           </div>
         </details>
 
+        <%+ self.event_types %>
+
+        <%+ self.topics %>
+
+        <%+ self.audience %>
+
         <details class="add-section">
           <%+ SectionSummary::new(SectionIcon::Details, "More details") %>
           <div class="add-section-body">
-            <div class="pill-field">
-              <label class="pill-body">
-                <span class="pill-label">Event type</span>
-                <select id="event-type" name="event_type">
-                  <% for et in &self.event_types { %>
-                    <option value="<%= et %>" <% if self.values.event_type == *et { %>selected<% } %>><%= et %></option>
-                  <% } %>
-                </select>
-              </label>
-            </div>
             <%+ FloatingField::new(FieldKind::Text, "presenter", "Organizer / presenter", self.values.presenter.as_str()) %>
             <%+ FloatingField::new(FieldKind::TextArea { rows: 3 }, "how_to_join", "How to join / participate", self.values.how_to_join.as_str()) %>
             <%+ self.tags %>

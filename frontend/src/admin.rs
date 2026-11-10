@@ -5,6 +5,7 @@ pub mod analytics;
 pub mod archive;
 pub mod autocomplete;
 pub mod badges;
+pub mod choice_lists;
 pub mod communities;
 pub mod content;
 pub mod dashboard;
@@ -69,6 +70,7 @@ pub fn routes() -> impl Endpoint {
         .nest("/projects", projects::routes())
         // Events
         .nest("/events", events::routes())
+        .nest("/choice-lists", choice_lists::routes())
         // Analytics
         .nest("/analytics", analytics::routes())
         // Files & Links

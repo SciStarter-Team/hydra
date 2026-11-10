@@ -4,6 +4,9 @@
         hx-swap:inherited="outerHTML"
 >
     <label class="block text-xs font-semibold mb-1"><%= &self.label %></label>
+    <% if let Some(refusal) = &self.refusal { %>
+    <p role="alert" class="text-xs text-red-700 mb-1"><%= refusal %></p>
+    <% } %>
     <% match &self.input_kind { crate::component::detail_page_edit::FieldInputKind::Text => { %>
     <input type="text" name="value" value="<%= &self.current_value %>" class="input input-sm w-full">
     <% } crate::component::detail_page_edit::FieldInputKind::Url => { %>
@@ -42,15 +45,8 @@
       <option value="<%= val %>" <% if self.current_value == *val { %>selected<% } %>><%= label %></option>
       <% } %>
     </select>
-    <% } crate::component::detail_page_edit::FieldInputKind::MultiCheckbox(options) => { let selected: Vec<&str> = self.current_value.split(',').map(|s| s.trim()).collect(); %>
-    <div class="flex flex-col gap-1">
-      <% for (val, label) in options.iter() { %>
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" name="value[]" value="<%= val %>" <% if selected.contains(val) { %>checked<% } %> class="checkbox checkbox-sm">
-        <span class="text-sm"><%= label %></span>
-      </label>
-      <% } %>
-    </div>
+    <% } crate::component::detail_page_edit::FieldInputKind::MultiCheckbox(_) => { %>
+    <% if let Some(checkboxes) = self.checkboxes { %><%+ checkboxes %><% } %>
     <% } } %>
     <% if let Some(ref sup) = self.supplemental { %>
     <label class="block text-xs font-semibold mt-3 mb-1"><%= &sup.label %></label>

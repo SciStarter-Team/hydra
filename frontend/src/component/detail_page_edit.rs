@@ -14,10 +14,10 @@ use common::message::user::{UserByEmailRequest, UserByEmailResponse};
 use common::service::request;
 
 use crate::admin::autocomplete::resolve_user_names;
+use crate::choice::{ChoiceCheckboxes, ChoiceList, ChoiceValue, limited_heading};
 use crate::component::facebook_questions::{self, FacebookAnswers};
 use crate::component::floating_field::FormError;
 use crate::contact::{Contact, ContactRole};
-use crate::event::EventType;
 use crate::event::facebook::FacebookEvent;
 use crate::event::field::{EventField, EventFieldType, EventFieldValue};
 use crate::local_time::{TimeFormat, local_time};
@@ -26,7 +26,7 @@ use crate::page_change::record_edit;
 use crate::participant_file::ParticipantFile;
 use crate::peering::LoadStorePeered;
 use crate::project::field::{
-    AUDIENCE_VOCABULARY, DIFFICULTY_VOCABULARY, ProjectField, ProjectFieldType, ProjectFieldValue,
+    DIFFICULTY_VOCABULARY, ProjectField, ProjectFieldType, ProjectFieldValue,
 };
 use crate::project::field_source::FieldSource;
 
@@ -44,8 +44,12 @@ pub enum FieldInputKind {
     Url,
     Image,
     Boolean,
+    /// One of a vocabulary fixed in the code, as (stored value, human label).
     Select(&'static [(&'static str, &'static str)]),
-    MultiCheckbox(&'static [(&'static str, &'static str)]),
+
+    /// Any of the values of a list staff keep, read when the form is
+    /// rendered.
+    MultiCheckbox(ChoiceList),
 }
 
 #[derive(Debug, Clone)]
@@ -54,29 +58,60 @@ pub struct FieldMeta {
     pub input_kind: FieldInputKind,
 }
 
-/// Every event type, as (stored value, human label).
-///
-/// Built from [`EventType::ALL`] rather than written out, because a hand-kept
-/// copy drifted: it once offered "Festival", "Meeting" and "Workshop", none of
-/// which are variants, so choosing one wrote a string into `events.event_type`
-/// that no reader could decode — while most of the real types were unreachable.
-static EVENT_TYPE_OPTIONS: LazyLock<Vec<(&'static str, &'static str)>> = LazyLock::new(|| {
-    EventType::ALL
-        .iter()
-        .map(|event_type| (event_type.storage_name(), event_type.label()))
-        .collect()
-});
-
-/// The audiences a project may name, built from the vocabulary every other
-/// reader and writer of `project_audiences` uses, for the reason given at
-/// [`EVENT_TYPE_OPTIONS`].
-static AUDIENCE_OPTIONS: LazyLock<Vec<(&'static str, &'static str)>> =
-    LazyLock::new(|| vocabulary_options(AUDIENCE_VOCABULARY));
-
 /// The difficulties a project may have, from the same vocabulary as the
 /// admin's.
 static DIFFICULTY_OPTIONS: LazyLock<Vec<(&'static str, &'static str)>> =
     LazyLock::new(|| vocabulary_options(DIFFICULTY_VOCABULARY));
+
+/// The choice list a field of `kind` picks from, for a field that picks from
+/// one. A choice field's label, editor, value, save and display all follow
+/// from its list. Its value, as the editor reads and writes it, is the slugs of the
+/// values picked, joined by ", ".
+pub fn choice_field(field_type: &str, kind: DetailPageKind) -> Option<ChoiceList> {
+    match (field_type, kind) {
+        ("audiences", DetailPageKind::Project) => Some(ChoiceList::Audience),
+        ("formats", DetailPageKind::Event) => Some(ChoiceList::EventFormat),
+        ("programs", DetailPageKind::Event) => Some(ChoiceList::EventProgram),
+        ("venues", DetailPageKind::Event) => Some(ChoiceList::EventVenue),
+        ("topics", DetailPageKind::Event) => Some(ChoiceList::Topic),
+        ("audience", DetailPageKind::Event) => Some(ChoiceList::Audience),
+        _ => None,
+    }
+}
+
+/// The slugs of what `target` picks from `list`, as a choice field's value.
+pub async fn choice_field_value(list: ChoiceList, target: &str) -> Result<String, Error> {
+    Ok(ChoiceValue::of_target(list, target)
+        .await?
+        .into_iter()
+        .collect::<Vec<_>>()
+        .join(", "))
+}
+
+/// The most values a choice field of `kind` may pick from `list`, or `None`
+/// for any number.
+fn pick_limit(kind: DetailPageKind, list: ChoiceList) -> Option<usize> {
+    match kind {
+        DetailPageKind::Event => crate::event::pick_limit(list),
+        DetailPageKind::Project => None,
+    }
+}
+
+/// Why the values submitted for a field cannot be saved, or `None` when they
+/// can.
+fn refuse_values(field_type: &str, kind: DetailPageKind, values: &[String]) -> Option<String> {
+    let list = choice_field(field_type, kind)?;
+    let picked = values
+        .iter()
+        .filter(|value| !value.is_empty())
+        .collect::<HashSet<_>>()
+        .len();
+
+    match kind {
+        DetailPageKind::Event => crate::event::refuse_picks(list, picked),
+        DetailPageKind::Project => None,
+    }
+}
 
 /// Options whose values are their own labels.
 fn vocabulary_options(vocabulary: &[&'static str]) -> Vec<(&'static str, &'static str)> {
@@ -85,6 +120,13 @@ fn vocabulary_options(vocabulary: &[&'static str]) -> Vec<(&'static str, &'stati
 
 /// Map field_type string to its metadata. Returns None for unknown fields.
 pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
+    if let Some(list) = choice_field(field_type, kind) {
+        return Some(FieldMeta {
+            label: list.heading(),
+            input_kind: FieldInputKind::MultiCheckbox(list),
+        });
+    }
+
     match (field_type, kind) {
         // Common fields (both projects and events)
         ("name", _) => Some(FieldMeta {
@@ -213,10 +255,6 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
             label: "Tags",
             input_kind: FieldInputKind::Text,
         }),
-        ("audiences", DetailPageKind::Project) => Some(FieldMeta {
-            label: "Audiences",
-            input_kind: FieldInputKind::MultiCheckbox(&AUDIENCE_OPTIONS),
-        }),
 
         // Project additional fields
         ("status", DetailPageKind::Project) => Some(FieldMeta {
@@ -329,10 +367,6 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
         }),
 
         // Event-only fields
-        ("event_type", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Event Type",
-            input_kind: FieldInputKind::Select(&EVENT_TYPE_OPTIONS),
-        }),
 
         // Event additional fields
         ("status", DetailPageKind::Event) => Some(FieldMeta {
@@ -393,6 +427,10 @@ async fn read_field_value(
     field_type: &str,
     kind: DetailPageKind,
 ) -> Result<String, Error> {
+    if let Some(list) = choice_field(field_type, kind) {
+        return choice_field_value(list, target_id).await;
+    }
+
     match kind {
         DetailPageKind::Project => read_project_field(target_id, field_type).await,
         DetailPageKind::Event => read_event_field(target_id, field_type).await,
@@ -587,15 +625,6 @@ async fn read_project_field(id: &str, field_type: &str) -> Result<String, Error>
             .fetch_all(db())
             .await?;
             Ok(tags.join(", "))
-        }
-        "audiences" => {
-            let auds: Vec<String> = sqlx::query_scalar!(
-                "SELECT audience FROM project_audiences WHERE project_id = ? ORDER BY audience",
-                id
-            )
-            .fetch_all(db())
-            .await?;
-            Ok(auds.join(", "))
         }
         // Additional fields
         "status" => Ok(sqlx::query_scalar!(
@@ -851,12 +880,6 @@ async fn read_event_field(id: &str, field_type: &str) -> Result<String, Error> {
             .await?;
             Ok(if v { "true" } else { "false" }.to_string())
         }
-        "event_type" => Ok(sqlx::query_scalar!(
-            r#"SELECT event_type as "v: String" FROM events WHERE event_id = ?"#,
-            id
-        )
-        .fetch_one(db())
-        .await?),
         "status" => Ok(sqlx::query_scalar!(
             r#"SELECT status as "v: String" FROM events WHERE event_id = ?"#,
             id
@@ -927,15 +950,9 @@ async fn save_project_field(
                 .collect();
             ProjectFieldValue::Tags(tags)
         }
-        "audiences" => {
-            let auds: Box<[String]> = values
-                .iter()
-                .filter(|s| !s.is_empty())
-                .cloned()
-                .collect::<Vec<_>>()
-                .into_boxed_slice();
-            ProjectFieldValue::Audience(auds)
-        }
+        "audiences" => ProjectFieldValue::Audience(
+            ChoiceValue::known(ChoiceList::Audience, values.iter().cloned()).await?,
+        ),
         // Additional fields
         "status" => {
             let status = match value {
@@ -1018,36 +1035,38 @@ async fn save_event_field(
     values: &[String],
 ) -> Result<(), Error> {
     let value = values.first().map(|s| s.as_str()).unwrap_or("");
-    let field_value = match field_type {
-        "name" => EventFieldValue::Name(value.to_string()),
-        "presenter" => EventFieldValue::Presenter(value.to_string()),
-        "image" => EventFieldValue::Image(value.to_string()),
-        "image_credit" => EventFieldValue::ImageCredit(value.to_string()),
-        "url" => EventFieldValue::Url(value.to_string()),
-        "description" => EventFieldValue::Description(value.to_string()),
-        "how_to_join" => EventFieldValue::HowToJoin(value.to_string()),
-        "location_name" => EventFieldValue::LocationName(value.to_string()),
-        "location_description" => EventFieldValue::LocationDescription(value.to_string()),
-        "address" => EventFieldValue::Address(value.to_string()),
-        "city" => EventFieldValue::City(value.to_string()),
-        "state" => EventFieldValue::State(value.to_string()),
-        "zip" => EventFieldValue::Zip(value.to_string()),
-        "country" => EventFieldValue::Country(value.to_string()),
-        "entirely_online" => EventFieldValue::EntirelyOnline(value == "true"),
-        "event_type" => EventFieldValue::EventType(
-            EventType::from_storage_name(value)
-                .ok_or_else(|| anyhow::anyhow!("Invalid event type: {}", value))?,
-        ),
-        "status" => {
-            let status = match value {
-                "Active" => crate::event::EventStatus::Active,
-                "Cancelled" => crate::event::EventStatus::Cancelled,
-                "Expired" => crate::event::EventStatus::Expired,
-                _ => return Err(anyhow::anyhow!("Invalid event status: {}", value)),
-            };
-            EventFieldValue::Status(status)
+    let field_value = if let Some(list) = choice_field(field_type, DetailPageKind::Event) {
+        let slugs = ChoiceValue::known(list, values.iter().cloned()).await?;
+        EventFieldValue::choices(list, slugs)
+            .ok_or_else(|| anyhow::anyhow!("Events pick nothing from {list:?}"))?
+    } else {
+        match field_type {
+            "name" => EventFieldValue::Name(value.to_string()),
+            "presenter" => EventFieldValue::Presenter(value.to_string()),
+            "image" => EventFieldValue::Image(value.to_string()),
+            "image_credit" => EventFieldValue::ImageCredit(value.to_string()),
+            "url" => EventFieldValue::Url(value.to_string()),
+            "description" => EventFieldValue::Description(value.to_string()),
+            "how_to_join" => EventFieldValue::HowToJoin(value.to_string()),
+            "location_name" => EventFieldValue::LocationName(value.to_string()),
+            "location_description" => EventFieldValue::LocationDescription(value.to_string()),
+            "address" => EventFieldValue::Address(value.to_string()),
+            "city" => EventFieldValue::City(value.to_string()),
+            "state" => EventFieldValue::State(value.to_string()),
+            "zip" => EventFieldValue::Zip(value.to_string()),
+            "country" => EventFieldValue::Country(value.to_string()),
+            "entirely_online" => EventFieldValue::EntirelyOnline(value == "true"),
+            "status" => {
+                let status = match value {
+                    "Active" => crate::event::EventStatus::Active,
+                    "Cancelled" => crate::event::EventStatus::Cancelled,
+                    "Expired" => crate::event::EventStatus::Expired,
+                    _ => return Err(anyhow::anyhow!("Invalid event status: {}", value)),
+                };
+                EventFieldValue::Status(status)
+            }
+            _ => return Err(anyhow::anyhow!("Unknown event field: {}", field_type)),
         }
-        _ => return Err(anyhow::anyhow!("Unknown event field: {}", field_type)),
     };
 
     let field = EventField::new(event_id, field_value);
@@ -1076,8 +1095,57 @@ struct FieldEditForm {
     field_type: String,
     label: String,
     input_kind: FieldInputKind,
+
+    /// The boxes a `MultiCheckbox` offers, read from its list.
+    checkboxes: Option<ChoiceCheckboxes>,
+
     current_value: String,
     supplemental: Option<SupplementalField>,
+
+    /// Why the values last submitted were not saved.
+    refusal: Option<String>,
+}
+
+impl FieldEditForm {
+    /// The form for editing `field_type` of the `kind` of page `target_id`
+    /// is, holding `current_value`.
+    async fn new(
+        target_id: String,
+        field_type: String,
+        kind: DetailPageKind,
+        meta: FieldMeta,
+        current_value: String,
+        supplemental: Option<SupplementalField>,
+        refusal: Option<String>,
+    ) -> Result<Self, Error> {
+        let (label, checkboxes) = match meta.input_kind {
+            FieldInputKind::MultiCheckbox(list) => {
+                let limit = pick_limit(kind, list);
+                let picked = current_value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|slug| !slug.is_empty())
+                    .map(str::to_string)
+                    .collect();
+                (
+                    limited_heading(meta.label, limit),
+                    Some(ChoiceCheckboxes::load("value", list, picked, limit).await?),
+                )
+            }
+            _ => (meta.label.into(), None),
+        };
+
+        Ok(FieldEditForm {
+            target_id,
+            field_type,
+            label: label.into_owned(),
+            input_kind: meta.input_kind,
+            checkboxes,
+            current_value,
+            supplemental,
+            refusal,
+        })
+    }
 }
 
 #[derive(TemplateOnce, Clone)]
@@ -1104,15 +1172,16 @@ impl FieldDisplay {
     pub fn build(
         target_id: String,
         field_type: &str,
+        kind: DetailPageKind,
         label: String,
         can_edit: bool,
         content_html: String,
         empty: bool,
     ) -> Self {
         FieldDisplay {
-            wrapper_extra: field_wrapper_extra(field_type),
+            wrapper_extra: field_wrapper_extra(field_type, kind),
             inline_button: field_inline_button(field_type),
-            show_label: !field_self_labeled(field_type),
+            show_label: !field_self_labeled(field_type, kind),
             target_id,
             field_type: field_type.to_string(),
             label,
@@ -1127,35 +1196,38 @@ impl FieldDisplay {
 /// boxes / the online toggle), that sit in a box the page heads with their
 /// name, or that are icon-only links — for these the wrapper should not add a
 /// separate label.
-fn field_self_labeled(field_type: &str) -> bool {
-    matches!(
-        field_type,
-        "goal"
-            | "task"
-            | "description"
-            | "how_to_join"
-            | "video_url"
-            | "total_expense"
-            | "time_per_participation"
-            | "audiences"
-            | "participation_schedule"
-            | "training_materials"
-            | "classroom_materials"
-            | "entirely_online"
-            | "mobile_app_url"
-            | "mobile_app_url_ios"
-            | "mobile_app_url_android"
-            | "facebook_page"
-            | "twitter_name"
-            | "instagram_page"
-    )
+fn field_self_labeled(field_type: &str, kind: DetailPageKind) -> bool {
+    choice_field(field_type, kind).is_some()
+        || matches!(
+            field_type,
+            "goal"
+                | "task"
+                | "description"
+                | "how_to_join"
+                | "video_url"
+                | "total_expense"
+                | "time_per_participation"
+                | "participation_schedule"
+                | "training_materials"
+                | "classroom_materials"
+                | "entirely_online"
+                | "mobile_app_url"
+                | "mobile_app_url_ios"
+                | "mobile_app_url_android"
+                | "facebook_page"
+                | "twitter_name"
+                | "instagram_page"
+        )
 }
 
 /// Extra wrapper classes per field, matching the original full-page layout.
-fn field_wrapper_extra(field_type: &str) -> &'static str {
+fn field_wrapper_extra(field_type: &str, kind: DetailPageKind) -> &'static str {
+    if kind == DetailPageKind::Event && choice_field(field_type, kind).is_some() {
+        return "mb-2";
+    }
+
     match field_type {
         "city" | "state" | "zip" => "inline",
-        "event_type" => "inline-block mb-2",
         "url" | "tags" => "mb-4",
         "image" => "flex flex-col max-w-full md:w-[425px]",
         _ => "",
@@ -1216,7 +1288,11 @@ pub fn editable_field_list(kind: DetailPageKind) -> &'static [&'static str] {
         DetailPageKind::Event => &[
             "presenter",
             "name",
-            "event_type",
+            "formats",
+            "programs",
+            "venues",
+            "topics",
+            "audience",
             "url",
             "description",
             "entirely_online",
@@ -1256,6 +1332,7 @@ pub async fn render_fields(
             FieldDisplay::build(
                 target_id.to_string(),
                 field_type,
+                kind,
                 label,
                 can_edit,
                 content_html,
@@ -1361,14 +1438,19 @@ pub async fn get_edit_form(
         _ => None,
     };
 
-    let html = FieldEditForm {
-        target_id: id,
+    let html = FieldEditForm::new(
+        id,
         field_type,
-        label: meta.label.to_string(),
-        input_kind: meta.input_kind,
+        kind,
+        meta,
         current_value,
         supplemental,
-    }
+        None,
+    )
+    .await
+    .map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?
     .render_once()
     .map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -1415,6 +1497,29 @@ pub async fn save_field(
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
     })?;
 
+    // Refused, the form comes back as submitted, beside the reason.
+    if let Some(refusal) = refuse_values(&field_type, kind, &form.value) {
+        let html = FieldEditForm::new(
+            id,
+            field_type,
+            kind,
+            meta,
+            form.value.join(", "),
+            None,
+            Some(refusal),
+        )
+        .await
+        .map_err(|e| {
+            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?
+        .render_once()
+        .map_err(|e| {
+            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
+
+        return Ok(Html(html).into_response());
+    }
+
     let source = edit_source(is_staff);
 
     match kind {
@@ -1460,6 +1565,7 @@ pub async fn save_field(
     let html = FieldDisplay::build(
         id,
         &field_type,
+        kind,
         meta.label.to_string(),
         true,
         display_html,
@@ -1508,6 +1614,7 @@ pub async fn get_display(
     let html = FieldDisplay::build(
         id,
         &field_type,
+        kind,
         meta.label.to_string(),
         can_edit,
         display_html,
@@ -1589,6 +1696,57 @@ const SVG_FACEBOOK: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="
 const SVG_TWITTER: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action h-8"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zm297.1 84L257.3 234.6 379.4 396H283.8L209 298.1 123.3 396H75.8l111-126.9L69.7 116h98l67.7 89.5L313.6 116h47.5zM323.3 367.6L153.4 142.9H125.1L296.9 367.6h26.3z"/></svg>"##;
 const SVG_INSTAGRAM: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action h-8"><path d="M194.4 211.7a53.3 53.3 0 1 0 59.3 88.7 53.3 53.3 0 1 0 -59.3-88.7zm142.3-68.4c-5.2-5.2-11.5-9.3-18.4-12c-18.1-7.1-57.6-6.8-83.1-6.5c-4.1 0-7.9 .1-11.2 .1c-3.3 0-7.2 0-11.4-.1c-25.5-.3-64.8-.7-82.9 6.5c-6.9 2.7-13.1 6.8-18.4 12s-9.3 11.5-12 18.4c-7.1 18.1-6.7 57.7-6.5 83.2c0 4.1 .1 7.9 .1 11.1s0 7-.1 11.1c-.2 25.5-.6 65.1 6.5 83.2c2.7 6.9 6.8 13.1 12 18.4s11.5 9.3 18.4 12c18.1 7.1 57.6 6.8 83.1 6.5c4.1 0 7.9-.1 11.2-.1c3.3 0 7.2 0 11.4 .1c25.5 .3 64.8 .7 82.9-6.5c6.9-2.7 13.1-6.8 18.4-12s9.3-11.5 12-18.4c7.2-18 6.8-57.4 6.5-83c0-4.2-.1-8.1-.1-11.4s0-7.1 .1-11.4c.3-25.5 .7-64.9-6.5-83l0 0c-2.7-6.9-6.8-13.1-12-18.4zM448 96c0-35.3-28.7-64-64-64H64C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96zM357 389c-18.7 18.7-41.4 24.6-67 25.9c-26.4 1.5-105.6 1.5-132 0c-25.6-1.3-48.3-7.2-67-25.9s-24.6-41.4-25.8-67c-1.5-26.4-1.5-105.6 0-132c1.3-25.6 7.1-48.3 25.8-67s41.5-24.6 67-25.8c26.4-1.5 105.6-1.5 132 0c25.6 1.3 48.3 7.1 67 25.8s24.6 41.4 25.8 67c1.5 26.3 1.5 105.4 0 131.9c-1.3 25.6-7.1 48.3-25.8 67z"/></svg>"##;
 
+/// The values of `list`, in list order, that a choice field's value picks.
+async fn picked_values(list: ChoiceList, value: &str) -> Vec<ChoiceValue> {
+    let slugs: std::collections::BTreeSet<&str> = value
+        .split(',')
+        .map(str::trim)
+        .filter(|slug| !slug.is_empty())
+        .collect();
+
+    if slugs.is_empty() {
+        return Vec::new();
+    }
+
+    match ChoiceValue::all(list).await {
+        Ok(values) => values
+            .into_iter()
+            .filter(|value| slugs.contains(value.slug.as_str()))
+            .collect(),
+        Err(err) => {
+            tracing::error!("Reading the {list:?} values {slugs:?} failed: {err}");
+            Vec::new()
+        }
+    }
+}
+
+/// A row of pills, one per value `picked` from `list`, headed with the
+/// question the list answers. Picking nothing is a row reading "not set" for
+/// an editor, and nothing for anyone else.
+fn choice_row(list: ChoiceList, picked: &[ChoiceValue], can_edit: bool) -> String {
+    let pills = if !picked.is_empty() {
+        picked
+            .iter()
+            .map(|value| {
+                format!(
+                    r#"<span class="btn btn-xs btn-secondary">{}</span>"#,
+                    html_escape(&value.name)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else if can_edit {
+        not_set().to_string()
+    } else {
+        return String::new();
+    };
+
+    format!(
+        r#"<div class="flex flex-wrap items-baseline gap-1"><span class="text-xs font-semibold uppercase tracking-wide text-neutral-mid mr-1">{}</span>{pills}</div>"#,
+        html_escape(list.heading())
+    )
+}
+
 /// Render the inner content HTML for a field — everything inside the `#field-X`
 /// wrapper, excluding the wrapper div and edit button. This is the single source
 /// of truth for field display: both the full page (via `DetailPageContent::field`)
@@ -1603,6 +1761,14 @@ async fn format_display_value(
 ) -> String {
     let empty = value.is_empty();
     let esc = || html_escape(value);
+
+    // An event's formats, programs, venues, topics and audience are each a
+    // labelled row.
+    if kind == DetailPageKind::Event
+        && let Some(list) = choice_field(field_type, kind)
+    {
+        return choice_row(list, &picked_values(list, value).await, can_edit);
+    }
 
     match field_type {
         "image" => format_image_display(target_id, value, kind).await,
@@ -1625,15 +1791,6 @@ async fn format_display_value(
             r#"<h1 class="text-primary-dark text-xl font-semibold leading-tight">{}</h1>"#,
             esc()
         ),
-        "event_type" => {
-            if !empty {
-                format!(r#"<span class="btn btn-xs btn-secondary">{}</span>"#, esc())
-            } else if can_edit {
-                not_set().to_string()
-            } else {
-                String::new()
-            }
-        }
         "url" => {
             if empty {
                 not_set().to_string()
@@ -1778,12 +1935,13 @@ async fn format_display_value(
             if empty { not_set().to_string() } else { esc() },
         ),
         "audiences" => {
-            let content = if empty {
+            let values = picked_values(ChoiceList::Audience, value).await;
+            let content = if values.is_empty() {
                 not_set().to_string()
             } else {
-                value
-                    .split(", ")
-                    .map(html_escape)
+                values
+                    .iter()
+                    .map(|value| html_escape(&value.name))
                     .collect::<Vec<_>>()
                     .join(", ")
             };
@@ -3358,6 +3516,7 @@ mod howto_video_tests {
             field_type: "video_url".to_string(),
             label: "How-To Video".to_string(),
             input_kind: FieldInputKind::Url,
+            checkboxes: None,
             current_value: "https://example.org/ferns".to_string(),
             supplemental: Some(SupplementalField {
                 name: "video_label".to_string(),
@@ -3366,6 +3525,7 @@ mod howto_video_tests {
                 current_value: String::new(),
                 placeholder: howto_video_default_text("Fern Watch"),
             }),
+            refusal: None,
         }
         .render_once()
         .unwrap();
@@ -3383,5 +3543,250 @@ mod howto_video_tests {
 
         check!(form.video_label.as_deref() == Some("Fern basics"));
         check!(form.image_credit.is_none());
+    }
+}
+
+#[cfg(test)]
+mod choice_field_tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+    use assert2::check;
+
+    fn value(list: ChoiceList, slug: &str, name: &str) -> ChoiceValue {
+        ChoiceValue {
+            list,
+            slug: slug.to_string(),
+            name: name.to_string(),
+            position: 0,
+            orrery_id: None,
+        }
+    }
+
+    fn form(field_type: &str, list: ChoiceList, checkboxes: ChoiceCheckboxes) -> FieldEditForm {
+        FieldEditForm {
+            target_id: "01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string(),
+            field_type: field_type.to_string(),
+            label: list.label().to_string(),
+            input_kind: FieldInputKind::MultiCheckbox(list),
+            checkboxes: Some(checkboxes),
+            current_value: String::new(),
+            supplemental: None,
+            refusal: None,
+        }
+    }
+
+    fn picked(slugs: &[&str]) -> BTreeSet<String> {
+        slugs.iter().map(|slug| slug.to_string()).collect()
+    }
+
+    #[test]
+    fn a_choice_field_ticks_what_is_picked() {
+        let values = vec![
+            value(ChoiceList::EventFormat, "bioblitz", "BioBlitz"),
+            value(
+                ChoiceList::EventFormat,
+                "talk-science-cafe",
+                "talk/science cafe",
+            ),
+            value(ChoiceList::EventFormat, "webinar", "Webinar"),
+        ];
+        let checkboxes =
+            ChoiceCheckboxes::new("value", values, picked(&["bioblitz", "webinar"]), None);
+        let html = form("formats", ChoiceList::EventFormat, checkboxes)
+            .render_once()
+            .unwrap();
+
+        check!(html.contains(r#"value="bioblitz" checked"#));
+        check!(html.contains(r#"value="webinar" checked"#));
+        check!(html.contains(r#"value="talk-science-cafe">"#));
+        check!(html.contains("talk/science cafe"));
+        check!(!html.contains("disabled"));
+        check!(!html.contains("<legend>"));
+        check!(!html.contains(r#"role="alert""#));
+    }
+
+    #[test]
+    fn checkboxes_with_a_legend_are_a_fieldset() {
+        let values = vec![value(ChoiceList::EventVenue, "library", "library")];
+        let html = ChoiceCheckboxes::new("venues", values, picked(&[]), None)
+            .with_legend(ChoiceList::EventVenue.heading())
+            .render_once()
+            .unwrap();
+
+        check!(html.contains("<legend>Venue</legend>"));
+        check!(html.contains(r#"name="venues[]" value="library">"#));
+    }
+
+    #[test]
+    fn at_the_limit_the_boxes_left_are_disabled() {
+        let values = ["birds", "climate", "insects", "oceans"]
+            .iter()
+            .map(|slug| value(ChoiceList::Topic, slug, slug))
+            .collect();
+        let limit = pick_limit(DetailPageKind::Event, ChoiceList::Topic);
+        check!(limit == Some(3));
+
+        let checkboxes = ChoiceCheckboxes::new(
+            "value",
+            values,
+            picked(&["birds", "climate", "insects"]),
+            limit,
+        );
+        let html = form("topics", ChoiceList::Topic, checkboxes)
+            .render_once()
+            .unwrap();
+
+        check!(html.contains(r#"data-pick-limit="3""#));
+        check!(html.contains(r#"value="birds" checked"#));
+        check!(html.contains(r#"value="oceans" disabled"#));
+        check!(!html.contains("<legend>"));
+    }
+
+    #[test]
+    fn below_the_limit_no_box_is_disabled() {
+        let values = ["birds", "climate", "insects"]
+            .iter()
+            .map(|slug| value(ChoiceList::Topic, slug, slug))
+            .collect();
+        let checkboxes = ChoiceCheckboxes::new("value", values, picked(&["birds"]), Some(3));
+        let html = form("topics", ChoiceList::Topic, checkboxes)
+            .render_once()
+            .unwrap();
+
+        check!(html.contains(r#"data-pick-limit="3""#));
+        check!(!html.contains("disabled"));
+    }
+
+    #[test]
+    fn a_refused_choice_field_says_why() {
+        let values = vec![value(ChoiceList::Topic, "birds", "Birds")];
+        let checkboxes = ChoiceCheckboxes::new("value", values, picked(&["birds"]), Some(3));
+        let html = FieldEditForm {
+            refusal: refuse_values(
+                "topics",
+                DetailPageKind::Event,
+                &["a".into(), "b".into(), "c".into(), "d".into()],
+            ),
+            ..form("topics", ChoiceList::Topic, checkboxes)
+        }
+        .render_once()
+        .unwrap();
+
+        check!(html.contains(r#"role="alert""#));
+        check!(html.contains("Please pick no more than 3 topics."));
+        check!(html.contains(r#"value="birds" checked"#));
+    }
+
+    #[test]
+    fn a_choice_shows_one_row_under_the_question_its_list_answers() {
+        let picked = vec![
+            value(ChoiceList::EventFormat, "bioblitz", "BioBlitz"),
+            value(ChoiceList::EventFormat, "webinar", "Webinar"),
+        ];
+        let html = choice_row(ChoiceList::EventFormat, &picked, false);
+
+        check!(html.find(">Format</span>").unwrap() < html.find("BioBlitz").unwrap());
+        check!(html.find("BioBlitz").unwrap() < html.find("Webinar").unwrap());
+        check!(html.matches("<div ").count() == 1);
+
+        let picked = vec![value(ChoiceList::Topic, "birds", "Birds")];
+        check!(choice_row(ChoiceList::Topic, &picked, false).contains(">Topics</span>"));
+    }
+
+    #[test]
+    fn every_event_choice_field_is_its_own_row_in_the_order_asked() {
+        let fields: Vec<&str> = editable_field_list(DetailPageKind::Event)
+            .iter()
+            .copied()
+            .filter(|field| choice_field(field, DetailPageKind::Event).is_some())
+            .collect();
+        check!(fields == ["formats", "programs", "venues", "topics", "audience"]);
+        for field in fields {
+            check!(field_self_labeled(field, DetailPageKind::Event));
+            check!(field_wrapper_extra(field, DetailPageKind::Event) == "mb-2");
+        }
+    }
+
+    #[test]
+    fn the_topic_editor_says_how_many_may_be_picked() {
+        check!(
+            limited_heading(
+                "Topics",
+                pick_limit(DetailPageKind::Event, ChoiceList::Topic)
+            ) == "Topics (up to 3)"
+        );
+        check!(
+            limited_heading(
+                "Audience",
+                pick_limit(DetailPageKind::Event, ChoiceList::Audience)
+            ) == "Audience"
+        );
+        check!(
+            limited_heading(
+                "Topics",
+                pick_limit(DetailPageKind::Project, ChoiceList::Topic)
+            ) == "Topics"
+        );
+    }
+
+    #[test]
+    fn picking_nothing_shows_only_to_an_editor() {
+        check!(choice_row(ChoiceList::Audience, &[], false).is_empty());
+
+        let html = choice_row(ChoiceList::Audience, &[], true);
+        check!(html.contains(">Audience</span>"));
+        check!(html.contains(not_set()));
+    }
+
+    #[test]
+    fn every_choice_field_is_editable_and_picks_from_its_list() {
+        for (field, kind, list) in [
+            ("audiences", DetailPageKind::Project, ChoiceList::Audience),
+            ("formats", DetailPageKind::Event, ChoiceList::EventFormat),
+            ("programs", DetailPageKind::Event, ChoiceList::EventProgram),
+            ("venues", DetailPageKind::Event, ChoiceList::EventVenue),
+            ("topics", DetailPageKind::Event, ChoiceList::Topic),
+            ("audience", DetailPageKind::Event, ChoiceList::Audience),
+        ] {
+            check!(choice_field(field, kind) == Some(list));
+            check!(editable_field_list(kind).contains(&field));
+            check!(
+                field_meta(field, kind).map(|meta| (meta.label, meta.input_kind))
+                    == Some((list.heading(), FieldInputKind::MultiCheckbox(list)))
+            );
+        }
+        check!(choice_field("formats", DetailPageKind::Project).is_none());
+        check!(field_meta("formats", DetailPageKind::Project).is_none());
+    }
+
+    #[test]
+    fn an_event_may_have_only_so_many_topics() {
+        let topics = |n: usize| (0..n).map(|i| format!("topic-{i}")).collect::<Vec<_>>();
+
+        check!(
+            refuse_values(
+                "topics",
+                DetailPageKind::Event,
+                &topics(crate::event::TOPIC_LIMIT)
+            )
+            .is_none()
+        );
+        check!(
+            refuse_values(
+                "topics",
+                DetailPageKind::Event,
+                &topics(crate::event::TOPIC_LIMIT + 1)
+            )
+            .is_some()
+        );
+
+        // A box ticked twice, or an empty value, is not another topic.
+        let mut repeated = topics(crate::event::TOPIC_LIMIT);
+        repeated.push(repeated[0].clone());
+        repeated.push(String::new());
+        check!(refuse_values("topics", DetailPageKind::Event, &repeated).is_none());
+
+        check!(refuse_values("audience", DetailPageKind::Event, &topics(20)).is_none());
     }
 }

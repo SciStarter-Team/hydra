@@ -230,7 +230,7 @@ fn application_tables_survive_the_listing_filter() {
         "events",
         "geocode_cache",
         "misc",
-        "project_topics",
+        "choice_values",
         "projects",
         "site_settings",
         "users",

@@ -36,7 +36,9 @@ pub struct AdminEvent {
     pub is_ongoing: bool,
     pub next_instance: Option<TimeString>,
     pub location: String,
-    pub event_type: String,
+
+    /// The names of the event's types, in list order.
+    pub event_types: String,
 }
 
 #[derive(Debug, Clone)]
@@ -54,7 +56,6 @@ pub struct AdminEventFull {
     pub how_to_join: String,
     pub admin_notes: String,
     pub flagged: bool,
-    pub event_type: String,
     pub location_type: String,
     pub entirely_online: bool,
     pub location_name: String,
@@ -87,7 +88,6 @@ impl AdminEventFull {
             how_to_join: event.how_to_join,
             admin_notes: event.admin_notes,
             flagged: event.flagged,
-            event_type: event.event_type.to_string(),
             location_type: event.location_type,
             entirely_online: event.entirely_online,
             location_name: event.location_name,
@@ -122,7 +122,7 @@ async fn fetch_events_page(
         #[allow(dead_code)]
         created: String,
         location_name: String,
-        event_type: String,
+        event_types: Option<String>,
         entirely_online: bool,
         next_instance_begin: Option<String>,
         instance_count: i64,
@@ -133,7 +133,9 @@ async fn fetch_events_page(
 
     if let Some(search_term) = search.filter(|s| !s.trim().is_empty()) {
         query.push(
-            "SELECT e.event_id, e.name, e.created, e.location_name, e.event_type, e.entirely_online,
+            "SELECT e.event_id, e.name, e.created, e.location_name,
+                    (SELECT group_concat(n.name, ', ' ORDER BY n.rank, n.position, n.name) FROM event_type_names n WHERE n.target = e.event_id) as event_types,
+                    e.entirely_online,
                     MIN(CASE WHEN ei.begin > datetime('now') THEN ei.begin END) as next_instance_begin,
                     COUNT(ei.begin) as instance_count,
                     CASE WHEN EXISTS(SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.begin <= datetime('now') AND ei2.end > datetime('now')) THEN 1 ELSE 0 END as is_currently_ongoing
@@ -145,7 +147,9 @@ async fn fetch_events_page(
         query.push_bind(search_term);
     } else {
         query.push(
-            "SELECT e.event_id, e.name, e.created, e.location_name, e.event_type, e.entirely_online,
+            "SELECT e.event_id, e.name, e.created, e.location_name,
+                    (SELECT group_concat(n.name, ', ' ORDER BY n.rank, n.position, n.name) FROM event_type_names n WHERE n.target = e.event_id) as event_types,
+                    e.entirely_online,
                     MIN(CASE WHEN ei.begin > datetime('now') THEN ei.begin END) as next_instance_begin,
                     COUNT(ei.begin) as instance_count,
                     CASE WHEN EXISTS(SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.begin <= datetime('now') AND ei2.end > datetime('now')) THEN 1 ELSE 0 END as is_currently_ongoing
@@ -169,9 +173,7 @@ async fn fetch_events_page(
         }
     }
 
-    query.push(
-        " GROUP BY e.event_id, e.name, e.created, e.location_name, e.event_type, e.entirely_online",
-    );
+    query.push(" GROUP BY e.event_id, e.name, e.created, e.location_name, e.entirely_online");
     query.push(" ORDER BY e.created DESC LIMIT ");
     query.push_bind(per_page);
     query.push(" OFFSET ");
@@ -200,7 +202,7 @@ async fn fetch_events_page(
                 is_ongoing,
                 next_instance,
                 location,
-                event_type: row.event_type,
+                event_types: row.event_types.unwrap_or_default(),
             }
         })
         .collect();

@@ -31,8 +31,10 @@ use sailfish::TemplateOnce;
 use std::collections::HashMap;
 use ulid::Ulid;
 
+use crate::choice::ChoiceList;
 use crate::component::Component;
-use crate::event::{EventStatus, EventType};
+use crate::component::detail_page_edit::choice_field_value;
+use crate::event::EventStatus;
 use crate::lazy_cache::{LazyCached, get_cached};
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::analytics::{Device, Interaction};
@@ -411,7 +413,8 @@ pub struct DetailPageContent {
     // More Info accordion (project only)
     pub total_expense: String,
     pub time_per_participation: String,
-    pub audiences: Vec<String>,
+    /// The slugs of the project's audiences, as its choice field holds them.
+    pub audiences: String,
     pub participation_schedule: String,
     pub mobile_app_url: String,
     pub mobile_app_url_ios: String,
@@ -434,7 +437,6 @@ pub struct DetailPageContent {
     pub member_count: i64,
 
     // Event-specific
-    pub event_type: Option<String>,
     pub instances: Vec<EventInstanceDisplay>,
     pub ticketing_begins: Option<TimeString>,
     /// The umbrella event this one is part of (name + path), empty if none.
@@ -480,6 +482,7 @@ impl DetailPageContent {
                 super::detail_page_edit::FieldDisplay::build(
                     self.target_id.clone(),
                     field_type,
+                    self.kind,
                     String::new(),
                     self.can_edit,
                     String::new(),
@@ -805,16 +808,8 @@ impl DetailPage {
                 .await
                 .map_err(Error::from)
             },
-            // Audiences
-            async {
-                sqlx::query_scalar!(
-                    "SELECT audience FROM project_audiences WHERE project_id = ? ORDER BY audience",
-                    id_str3
-                )
-                .fetch_all(db())
-                .await
-                .map_err(Error::from)
-            },
+            // Audiences, as the editor's choice field holds them
+            choice_field_value(ChoiceList::Audience, &id_str3),
             // Participant files (additional resources): a list of name -> URL pairs.
             async {
                 sqlx::query!(
@@ -1018,7 +1013,7 @@ impl DetailPage {
                 row.total_expense.map(|v| v.to_string()).unwrap_or_default(),
             ),
             ("time_per_participation", row.time_per_participation.clone()),
-            ("audiences", audiences.join(", ")),
+            ("audiences", audiences.clone()),
             ("participation_schedule", row.participation_schedule.clone()),
             ("mobile_app_url_android", row.mobile_app_url_android.clone()),
             ("mobile_app_url_ios", row.mobile_app_url_ios.clone()),
@@ -1168,7 +1163,6 @@ impl DetailPage {
             tags,
             last_updated,
             member_count,
-            event_type: None,
             instances: Vec::new(),
             ticketing_begins: None,
             part_of_name: String::new(),
@@ -1212,7 +1206,6 @@ impl DetailPage {
                 state,
                 zip,
                 country,
-                event_type as "event_type: EventType",
                 ticketing_begins,
                 part_of,
                 AsGeoJSON(regions) as "region_geojson: Option<String>",
@@ -1377,10 +1370,9 @@ impl DetailPage {
         };
 
         // Render editable fields from the row we already loaded — no extra queries.
-        let field_values: HashMap<&'static str, String> = HashMap::from([
+        let mut field_values: HashMap<&'static str, String> = HashMap::from([
             ("presenter", row.presenter.clone()),
             ("name", row.name.clone()),
-            ("event_type", row.event_type.to_string()),
             ("url", row.url.clone()),
             ("description", row.description.clone()),
             (
@@ -1397,6 +1389,12 @@ impl DetailPage {
             ("how_to_join", row.how_to_join.clone()),
             ("tags", tags.join(", ")),
         ]);
+        for &field in super::detail_page_edit::editable_field_list(DetailPageKind::Event) {
+            if let Some(list) = super::detail_page_edit::choice_field(field, DetailPageKind::Event)
+            {
+                field_values.insert(field, choice_field_value(list, &id_str).await?);
+            }
+        }
         let editable_fields = super::detail_page_edit::render_fields(
             &id_str,
             DetailPageKind::Event,
@@ -1406,7 +1404,6 @@ impl DetailPage {
         .await;
 
         let status: DetailPageStatus = row.status.into();
-        let event_type_display = Some(row.event_type.to_string());
 
         let (description_html, description_delta) =
             content_to_html(&row.description).unwrap_or_else(|_| (row.description.clone(), None));
@@ -1478,7 +1475,7 @@ impl DetailPage {
             has_point: row.has_point,
             total_expense: String::new(),
             time_per_participation: String::new(),
-            audiences: Vec::new(),
+            audiences: String::new(),
             participation_schedule: String::new(),
             mobile_app_url: String::new(),
             mobile_app_url_ios: String::new(),
@@ -1493,7 +1490,6 @@ impl DetailPage {
             tags,
             last_updated: None,
             member_count: 0,
-            event_type: event_type_display,
             instances,
             ticketing_begins: row
                 .ticketing_begins

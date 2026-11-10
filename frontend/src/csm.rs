@@ -825,7 +825,8 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
     let lat = query.lat.unwrap_or(0.0);
     let lng = query.lng.unwrap_or(0.0);
 
-    let signature_type = "Acts of Science Connected";
+    // Signature events are the Acts of Science Connected ones.
+    let signature_type = crate::choice::ACTS_OF_SCIENCE_CONNECTED;
 
     // Build WHERE clause shared between count and results queries
     fn push_where_clause(
@@ -834,7 +835,7 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
         april_end: &str,
         online_only: bool,
         signature_only: bool,
-        signature_type: &str,
+        signature_type: (crate::choice::ChoiceList, &str),
         has_keywords: bool,
         keywords_like: &str,
         has_location: bool,
@@ -850,8 +851,15 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
             qb.push(" AND ev.entirely_online = 1");
         }
         if signature_only {
-            qb.push(" AND ev.event_type = ");
-            qb.push_bind(signature_type.to_string());
+            let (list, value) = signature_type;
+            qb.push(
+                " AND EXISTS (SELECT 1 FROM choice_assignments a \
+                 WHERE a.target = ev.event_id AND a.list = ",
+            );
+            qb.push_bind(list);
+            qb.push(" AND a.value = ");
+            qb.push_bind(value.to_string());
+            qb.push(")");
         }
         if has_keywords {
             qb.push(" AND lower(ev.name) LIKE ");
@@ -896,8 +904,15 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
     // Results query
     let mut results_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
         "SELECT e.slug, ev.name, MIN(ei.begin), MIN(ei.end), \
-         ev.entirely_online, ev.event_type, \
-         ev.address, ev.city, ev.state \
+         ev.entirely_online, \
+         EXISTS (SELECT 1 FROM choice_assignments a \
+                 WHERE a.target = ev.event_id AND a.list = ",
+    );
+    results_qb.push_bind(signature_type.0);
+    results_qb.push(" AND a.value = ");
+    results_qb.push_bind(signature_type.1.to_string());
+    results_qb.push(
+        "), ev.address, ev.city, ev.state \
          FROM events ev \
          JOIN entities e ON e.target = ev.event_id \
          JOIN event_instances ei ON ei.event_id = ev.event_id",
@@ -927,7 +942,7 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
             String,
             String,
             bool,
-            String,
+            bool,
             String,
             String,
             String,
@@ -943,7 +958,7 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
             begin: r.2,
             end: r.3,
             entirely_online: r.4,
-            signature: r.5 == "Acts of Science Connected",
+            signature: r.5,
             address: r.6,
             city: r.7,
             state: r.8,

@@ -58,6 +58,7 @@ use std::sync::LazyLock;
 use ulid::Ulid;
 use uuid::Uuid;
 
+use crate::choice::{ChoiceList, ChoiceValue};
 use crate::middleware::authorization::Authenticated;
 use common::message::user::BasicInfo;
 use poem::session::Session;
@@ -593,21 +594,8 @@ async fn search_and_save_project(
     .fetch_one(db())
     .await?;
 
-    // Load topics
-    let topics = sqlx::query_scalar!(
-        r#"SELECT topic FROM project_topics WHERE project_id = ?"#,
-        params.id
-    )
-    .fetch_all(db())
-    .await?;
-
-    // Load audiences
-    let audience = sqlx::query_scalar!(
-        r#"SELECT audience FROM project_audiences WHERE project_id = ?"#,
-        params.id
-    )
-    .fetch_all(db())
-    .await?;
+    let topics = ChoiceValue::names_of_target(ChoiceList::Topic, &params.id).await?;
+    let audience = ChoiceValue::names_of_target(ChoiceList::Audience, &params.id).await?;
 
     // Load tags
     let tags = sqlx::query_scalar!(

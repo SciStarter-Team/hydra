@@ -271,14 +271,12 @@ pub struct SearchParams {
 }
 
 impl SearchParams {
-    /// Whether the search is narrowed by something only projects have --
-    /// an activity, a topic or an audience -- and so lists no events.
+    /// Whether the search is narrowed by an activity, which events have
+    /// none of, and so lists no events (as orrery's exchange does).
     pub fn filters_projects_only(&self) -> bool {
         self.activity
             .as_deref()
             .is_some_and(|activity| !activity.is_empty())
-            || self.topic.as_deref().is_some_and(|topic| !topic.is_empty())
-            || !self.audience.is_empty()
     }
 }
 
