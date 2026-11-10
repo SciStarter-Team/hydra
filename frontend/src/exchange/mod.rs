@@ -1,6 +1,6 @@
 use anyhow::Error;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use ulid::Ulid;
 
 use crate::peering::LoadStorePeered;
@@ -536,5 +536,44 @@ impl TemplateExchange {
 
     pub fn user_is_authorized(&self) -> bool {
         self.user_is_authorized
+    }
+
+    /// Which of `ids`, projects or events, this exchange has hidden from
+    /// its visitors.
+    ///
+    /// Its staff are still shown what it hid, and this is how their
+    /// listings tell those apart. Nobody else is shown anything hidden, so
+    /// for them it is none without asking. Orrery's
+    /// `Exchange::hidden_among` is the same.
+    pub async fn hidden_among<'a>(
+        &self,
+        ids: impl IntoIterator<Item = &'a str>,
+    ) -> Result<HashSet<String>, Error> {
+        if !self.user_is_authorized {
+            return Ok(HashSet::new());
+        }
+
+        let ids: Vec<&str> = ids.into_iter().collect();
+        if ids.is_empty() {
+            return Ok(HashSet::new());
+        }
+
+        let mut query_builder = sqlx::QueryBuilder::new(
+            "SELECT project_id FROM exchange_hidden_projects WHERE exchange_id = ",
+        );
+        query_builder.push_bind(self.info.exchange_id.to_string());
+        query_builder.push(" AND project_id IN (");
+        let mut separated = query_builder.separated(", ");
+        for id in ids {
+            separated.push_bind(id);
+        }
+        query_builder.push(")");
+
+        Ok(query_builder
+            .build_query_scalar::<String>()
+            .fetch_all(db())
+            .await?
+            .into_iter()
+            .collect())
     }
 }

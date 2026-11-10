@@ -1,4 +1,7 @@
-<article class="u-mb-lg flex-grid__card">
+<article class="u-mb-lg flex-grid__card<% if self.project.hidden { %> exchange-hidden<% } %>">
+  <% if self.project.hidden { %>
+  <p class="exchange-hidden-label">Hidden from visitors</p>
+  <% } %>
   <figure class="section project-image overflow-hidden u-txt-c u-mb-sm">
     <a href="/exchange/<%= self.exchange.exchange_id() %>/<%= self.project.slug %>/project.html" class="project-frame project-frame-rect full-width">
       <img loading="lazy" src="<%= self.project.image %>" alt="project image" class="u-p-sm">

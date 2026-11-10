@@ -11,8 +11,12 @@
 //!   always once past events are asked for;
 //! - activities, topics and audiences belong to projects alone, so a search
 //!   narrowed by any of them lists no events;
-//! - soonest first, then the most recently ended, then those that never
-//!   gave their dates.
+//! - those still to come before those that are over; among each, an
+//!   exchange with a region lists first the events held in person in its
+//!   region, then the online events aimed at its region, then the events it
+//!   takes in for being global, so its own region's events are not crowded
+//!   out by events from anywhere; then soonest first, then the most
+//!   recently ended, then those that never gave their dates.
 
 use std::collections::HashMap;
 
@@ -30,10 +34,11 @@ use super::handlers::{
 use super::{ExchangeInfo, SearchParams, TemplateExchange};
 use crate::local_time::{TimeFormat, local_time, local_time_range};
 use crate::middleware::authorization::Authenticated;
-use crate::project::location::Where;
+use crate::project::location::{ANYWHERE, Where};
 
-/// How many events a page of an exchange's listing holds: one row of cards.
-pub const PAGE_SIZE: usize = 4;
+/// How many events a page of an exchange's listing holds: one row of cards,
+/// so the projects below stay in view.
+pub const PAGE_SIZE: usize = 2;
 
 /// One session of an event, as `event_instances` holds it.
 #[derive(Debug, Clone)]
@@ -81,9 +86,30 @@ pub struct EventSummary {
     pub other_sessions: usize,
 
     pub location: Where,
+
+    /// Whether the exchange hid it from its visitors, which only its staff,
+    /// who are still shown it, are told; filled in by
+    /// [`EventSummary::mark_hidden`].
+    pub hidden: bool,
 }
 
 impl EventSummary {
+    /// Fill in `hidden` for a page of results in one query.
+    async fn mark_hidden(
+        events: &mut [EventSummary],
+        exchange: &TemplateExchange,
+    ) -> Result<(), Error> {
+        let hidden = exchange
+            .hidden_among(events.iter().map(|event| event.event_id.as_str()))
+            .await?;
+
+        for event in events.iter_mut() {
+            event.hidden = hidden.contains(&event.event_id);
+        }
+
+        Ok(())
+    }
+
     /// Fill in `session` and `other_sessions` for a page of results in one
     /// query.
     async fn attach_sessions(events: &mut [EventSummary], now: &str) -> Result<(), Error> {
@@ -198,9 +224,38 @@ async fn find(
     query_builder.push(FROM);
     push_conditions(&mut query_builder, exchange, params, &scope);
 
-    // Soonest first; once past events are included, the most recently ended
-    // follow, and an event that never gave its dates comes last.
-    query_builder.push(r#" ORDER BY (SELECT MIN(i."begin") FROM event_instances i WHERE i.event_id = ev.event_id AND i."end" >= "#);
+    query_builder.push(
+        r#" ORDER BY
+           NOT EXISTS (SELECT 1 FROM event_instances i WHERE i.event_id = ev.event_id AND i."end" >= "#,
+    );
+    query_builder.push_bind(scope.now.clone());
+    query_builder.push("),");
+
+    if let Some(region_id) = exchange.settings.region_id {
+        query_builder.push(
+            r#"
+           CASE
+             WHEN ev.location_type = "#,
+        );
+        query_builder.push_bind(ANYWHERE);
+        query_builder.push(
+            r#"
+                  OR ev.event_id NOT IN (SELECT event_id FROM event_regions WHERE region_id = "#,
+        );
+        query_builder.push_bind(region_id);
+        query_builder.push(
+            r#")
+             THEN 2
+             WHEN ev.entirely_online THEN 1
+             ELSE 0
+           END,"#,
+        );
+    }
+
+    query_builder.push(
+        r#"
+           (SELECT MIN(i."begin") FROM event_instances i WHERE i.event_id = ev.event_id AND i."end" >= "#,
+    );
     query_builder.push_bind(scope.now.clone());
     query_builder.push(
         r#") ASC NULLS LAST,
@@ -256,6 +311,7 @@ async fn find(
                 image_credit,
                 session: None,
                 other_sessions: 0,
+                hidden: false,
                 location: if entirely_online {
                     Where::Online
                 } else {
@@ -314,8 +370,9 @@ impl<'a> EventResults<'a> {
         page: usize,
     ) -> Result<EventResults<'a>, Error> {
         let page = page.max(1);
-        let (events, total) =
+        let (mut events, total) =
             find(&exchange.info, params, exchange.user_is_authorized, page).await?;
+        EventSummary::mark_hidden(&mut events, exchange).await?;
 
         Ok(EventResults {
             exchange,

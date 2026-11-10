@@ -193,3 +193,7 @@ pages = ["@core"]
 [[map]]
 files = ["frontend/templates/concierge/turn.stpl.html"]
 pages = ["@core"]
+
+[[map]]
+files = ["frontend/static/js/local_time.js"]
+pages = ["/finder"]

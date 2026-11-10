@@ -534,9 +534,30 @@ pub struct ProjectSummary {
     /// Filled in by [`ProjectSummary::attach_locations`], which the search
     /// handlers call once per page of results.
     pub location: Where,
+
+    /// Whether the exchange hid it from its visitors, which only its staff,
+    /// who are still shown it, are told; filled in by
+    /// [`ProjectSummary::mark_hidden`].
+    pub hidden: bool,
 }
 
 impl ProjectSummary {
+    /// Fill in `hidden` for a page of results in one query.
+    async fn mark_hidden(
+        projects: &mut [ProjectSummary],
+        exchange: &TemplateExchange,
+    ) -> Result<(), Error> {
+        let hidden = exchange
+            .hidden_among(projects.iter().map(|project| project.project_id.as_str()))
+            .await?;
+
+        for project in projects.iter_mut() {
+            project.hidden = hidden.contains(&project.project_id);
+        }
+
+        Ok(())
+    }
+
     /// Fill in `location` for a page of results in one query.
     ///
     /// A card shows a project's location as text, never as a map, so this
@@ -1471,11 +1492,13 @@ pub async fn exchange_home(
                 goal,
                 task,
                 location: Where::default(),
+                hidden: false,
             },
         )
         .collect();
 
     ProjectSummary::attach_locations(&mut projects).await?;
+    ProjectSummary::mark_hidden(&mut projects, &exchange).await?;
 
     // Get total count
     let mut count_builder = sqlx::QueryBuilder::new("");
@@ -1590,11 +1613,13 @@ pub async fn exchange_results(
                 goal,
                 task,
                 location: Where::default(),
+                hidden: false,
             },
         )
         .collect();
 
     ProjectSummary::attach_locations(&mut projects).await?;
+    ProjectSummary::mark_hidden(&mut projects, &exchange).await?;
 
     // Build count query with same filters
     let mut count_builder = sqlx::QueryBuilder::new("");
