@@ -7,10 +7,12 @@
                 credited with the training and its badge, without doing the steps. For a partner
                 that runs the training with its group before enrolling them.
             </p>
-            <p class="mt-1 text-sm text-gray-500">
-                Grants marked <em>from orrery</em> are made and deleted in orrery&rsquo;s admin, and
-                copied here every hour.
-            </p>
+            <% if self.grants.iter().any(|grant| grant.orrery_owns) { %>
+                <p class="mt-1 text-sm text-gray-500">
+                    Grants marked <em>from orrery</em> are made and deleted in orrery&rsquo;s admin, and
+                    copied here every hour.
+                </p>
+            <% } %>
         </div>
 
         <div class="p-6 space-y-4">
@@ -101,7 +103,7 @@
                                     <div class="text-sm text-gray-500"><%= grant.created %></div>
                                 </div>
                                 <div class="flex flex-wrap gap-3 lg:justify-end">
-                                    <% if grant.from_orrery { %>
+                                    <% if grant.orrery_owns { %>
                                         <span class="text-sm text-gray-500">from orrery</span>
                                     <% } else { %>
                                         <button

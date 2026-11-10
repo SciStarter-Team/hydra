@@ -17,6 +17,42 @@
 /// reach outside hydra.
 pub const PRIMARY: bool = !is_false(option_env!("HYDRA_PRIMARY"));
 
+/// Who keeps the rows that a snapshot sync copies from orrery's admin into
+/// a table hydra's own admin also adds to: signup tag grants, Link Tokens,
+/// Zooniverse projects. Such a copy carries orrery's row id; a row made here
+/// carries none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CopyKeeper {
+    /// Until cutover. A copy is listed here but not changed or deleted here:
+    /// the next snapshot would undo it, and nothing hydra did with it would
+    /// reach orrery, which is the one serving the public.
+    Orrery,
+
+    /// After cutover. The syncs stop, and a copy is hydra's like any other
+    /// row.
+    Hydra,
+}
+
+impl CopyKeeper {
+    /// Who keeps the copies in this build.
+    pub const NOW: CopyKeeper = if PRIMARY {
+        CopyKeeper::Hydra
+    } else {
+        CopyKeeper::Orrery
+    };
+
+    /// Whether orrery keeps the copies, and so whether the snapshot syncs
+    /// that make them run.
+    pub const fn orrery_keeps_copies(self) -> bool {
+        matches!(self, CopyKeeper::Orrery)
+    }
+
+    /// Whether the row whose orrery id is `orrery_id` is a copy orrery keeps.
+    pub const fn orrery_owns(self, orrery_id: Option<i64>) -> bool {
+        self.orrery_keeps_copies() && orrery_id.is_some()
+    }
+}
+
 const fn is_false(value: Option<&str>) -> bool {
     let Some(value) = value else {
         return false;

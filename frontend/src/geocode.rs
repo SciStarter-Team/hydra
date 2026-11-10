@@ -103,6 +103,9 @@ pub async fn geocode_and_update_event_point(event_id: Ulid) -> Result<(), Error>
         )
         .execute(db())
         .await?;
+
+        // As for a project's derived point.
+        crate::region::refresh_event(&event_id_str).await?;
     }
 
     Ok(())

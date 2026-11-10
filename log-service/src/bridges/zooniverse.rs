@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
+use common::message::log::{ZOONIVERSE_PROJECTS_ANNOUNCED, ZooniverseReader};
 use common::message::user::{
     ZooniverseAccount, ZooniverseIdentityAnswer, ZooniverseIdentityQuestion, ZooniverseLink,
     ZooniverseListLinksRequest,
@@ -14,11 +15,12 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use ulid::Ulid;
 
-use log_service::database::{
-    Database, get_sync_last_id, set_sync_last_id, tables::ParticipationRow,
-};
+use log_service::database::{Database, tables::ParticipationRow};
 
 use super::{Link, Platform};
+
+pub mod access;
+pub mod admin;
 
 /// "Import" -- how the contribution reached us, which for a classification is
 /// a scheduled pull against the Panoptes API. Deliberately the same value as
@@ -228,6 +230,28 @@ async fn identify_accounts(client: &reqwest::Client) -> Result<()> {
 /// can invite its visitors to connect their Zooniverse accounts, and so that
 /// the finder can list the projects that would credit them.
 pub async fn handle_projects(_req: &async_nats::service::Request) -> Result<Vec<Ulid>> {
+    affiliated_projects().await
+}
+
+/// Tell every frontend instance which projects this bridge credits, after
+/// they may have changed, so that a project connected or disconnected is
+/// offered to visitors accordingly at once rather than when each instance's
+/// copy next goes stale. A failure is only logged: the copies catch up when
+/// they do.
+pub async fn announce_projects() {
+    let announced = match affiliated_projects().await {
+        Ok(projects) => common::service::send(ZOONIVERSE_PROJECTS_ANNOUNCED, projects).await,
+        Err(e) => Err(e),
+    };
+
+    if let Err(e) = announced {
+        eprintln!("Failed to announce the Zooniverse projects: {e}");
+    }
+}
+
+/// The SciStarter projects this bridge credits, as
+/// [`handle_projects`] answers and [`announce_projects`] announces them.
+async fn affiliated_projects() -> Result<Vec<Ulid>> {
     let entity_ids = sqlx::query_scalar!(
         r#"SELECT DISTINCT entity_id AS "entity_id!" FROM zooniverse_projects ORDER BY entity_id"#
     )
@@ -254,8 +278,10 @@ pub async fn handle_projects(_req: &async_nats::service::Request) -> Result<Vec<
 /// identified, each with its connection as the sweep reads it.
 pub async fn coverage() -> Result<Platform> {
     let projects = sqlx::query!(
-        r#"SELECT entity_id AS "entity_id!", MIN(credited_since) AS credited_since
-           FROM zooniverse_projects GROUP BY entity_id"#
+        r#"SELECT p.entity_id AS "entity_id!", MIN(g.credited_since) AS credited_since
+           FROM zooniverse_projects p
+           LEFT JOIN zooniverse_progress g ON g.zooniverse_id = p.zooniverse_id
+           GROUP BY p.entity_id"#
     )
     .fetch_all(common::shared::db())
     .await?
@@ -291,6 +317,54 @@ struct OAuthTokenResponse {
     access_token: String,
 }
 
+/// The Panoptes OAuth application `reader`'s account owns, as (client id,
+/// secret), or `None` if this build wasn't given one. A client-credentials
+/// token acts as the application's owner, which is what makes it read as
+/// this account.
+///
+/// The original account's application is required to build at all. The
+/// other's may be absent, in which case its projects are left unread and
+/// each sweep says so.
+fn application(reader: ZooniverseReader) -> Option<(&'static str, &'static str)> {
+    let (id, secret) = match reader {
+        ZooniverseReader::Legacy => (env!("ZOONIVERSE_ID"), env!("ZOONIVERSE_SECRET")),
+        ZooniverseReader::Scistarter => (
+            option_env!("ZOONIVERSE_SCISTARTER_ID")?,
+            option_env!("ZOONIVERSE_SCISTARTER_SECRET")?,
+        ),
+    };
+
+    (!id.is_empty() && !secret.is_empty()).then_some((id, secret))
+}
+
+/// Bearer tokens for each reader, asked for when the first project read as
+/// it comes up and kept for the rest of a sweep.
+///
+/// A refusal is kept too, so that a reader Panoptes won't authorize is asked
+/// about once a sweep rather than once per project; its projects sit the
+/// sweep out and the others are read regardless.
+#[derive(Default)]
+struct Tokens {
+    tokens: HashMap<ZooniverseReader, Option<String>>,
+}
+
+impl Tokens {
+    async fn get(&mut self, client: &reqwest::Client, reader: ZooniverseReader) -> Option<String> {
+        if !self.tokens.contains_key(&reader) {
+            let token = get_zooniverse_token(client, reader)
+                .await
+                .inspect_err(|e| {
+                    eprintln!("Failed to get Zooniverse OAuth token as {reader:?}: {e}")
+                })
+                .ok();
+
+            self.tokens.insert(reader, token);
+        }
+
+        self.tokens[&reader].clone()
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct ClassificationsResponse {
     classifications: Vec<Classification>,
@@ -310,9 +384,13 @@ struct ClassificationLinks {
     user: Option<String>,
 }
 
-async fn get_zooniverse_token(client: &reqwest::Client) -> Result<String> {
-    let zoo_id = env!("ZOONIVERSE_ID");
-    let zoo_secret = env!("ZOONIVERSE_SECRET");
+async fn get_zooniverse_token(
+    client: &reqwest::Client,
+    reader: ZooniverseReader,
+) -> Result<String> {
+    let Some((zoo_id, zoo_secret)) = application(reader) else {
+        anyhow::bail!("no Panoptes application is configured for {reader:?}");
+    };
 
     let resp: OAuthTokenResponse = client
         .post("https://panoptes.zooniverse.org/oauth/token")
@@ -330,100 +408,30 @@ async fn get_zooniverse_token(client: &reqwest::Client) -> Result<String> {
     Ok(resp.access_token)
 }
 
-/// Synchronize Zooniverse project mappings from orrery.
-///
-/// Project rows are append-only on the orrery side, so we track an `id`
-/// watermark and pull forward. The local copy of `last_classification_id`
-/// is owned by hydra after initial setup, so we only insert it for new
-/// projects and never overwrite an existing value.
-pub async fn zooniverse_sync_projects(
-    database: Arc<Database>,
-    cancellation_token: CancellationToken,
-) {
-    #[derive(Debug, Deserialize)]
-    struct ZooniverseProjectData {
-        id: i32,
-        zooniverse_id: i64,
-        entity_ulid: String,
+/// How many projects orrery sends at a time.
+const PROJECT_SYNC_PAGE_SIZE: usize = 500;
+
+/// Keep the projects copied from orrery's admin the same as orrery's set,
+/// while orrery keeps them; see [`admin::mirror_orrery`]. Once hydra does,
+/// its admin is where projects are kept, and there is nothing to copy.
+pub async fn zooniverse_sync_projects(cancellation_token: CancellationToken) {
+    if !common::primary::CopyKeeper::NOW.orrery_keeps_copies() {
+        return;
     }
+
+    let client = reqwest::Client::new();
 
     loop {
         if cancellation_token.is_cancelled() {
             return;
         }
 
-        let last_id = get_sync_last_id(&database, "zooniverse-project-sync-last-id")
-            .await
-            .unwrap_or(0);
-
-        let client = reqwest::Client::new();
-        let sync_token = env!("SYNC_TOKEN");
-
-        let projects: Vec<ZooniverseProjectData> = match client
-            .get("https://scistarter.org/staff/sync/zooniverse_projects")
-            .bearer_auth(sync_token)
-            .query(&[
-                ("since", "1900-01-01T00:00:00Z"),
-                ("last_id", &last_id.to_string()),
-            ])
-            .send()
-            .await
-        {
-            Ok(response) => match response.error_for_status() {
-                Ok(resp) => match resp.json().await {
-                    Ok(data) => data,
-                    Err(e) => {
-                        eprintln!("JSON parsing error for zooniverse projects: {}", e);
-                        sleep(Duration::from_secs(60)).await;
-                        continue;
-                    }
-                },
-                Err(e) => {
-                    eprintln!("HTTP error syncing zooniverse projects: {}", e);
-                    sleep(Duration::from_secs(60)).await;
-                    continue;
-                }
-            },
+        let sleep_duration = match sync_projects(&client).await {
+            Ok(()) => Duration::from_secs(60 * 60),
             Err(e) => {
-                eprintln!("Request error syncing zooniverse projects: {}", e);
-                sleep(Duration::from_secs(60)).await;
-                continue;
+                eprintln!("Error syncing zooniverse projects: {e}");
+                Duration::from_secs(60)
             }
-        };
-
-        let mut max_id = last_id;
-
-        for project in &projects {
-            if project.id > max_id {
-                max_id = project.id;
-            }
-            // A project new here starts from classification zero, not from
-            // wherever orrery's importer has reached: this importer is the
-            // one of record for the classifications it credits, and what
-            // orrery credited before this project arrived would otherwise be
-            // credited by neither. The connection floor keeps the walk from
-            // crediting anybody's back catalogue. INSERT OR IGNORE so a
-            // project already here keeps the watermark it has advanced.
-            sqlx::query!(
-                "INSERT OR IGNORE INTO zooniverse_projects (zooniverse_id, entity_id, last_classification_id) VALUES (?, ?, 0)",
-                project.zooniverse_id,
-                project.entity_ulid,
-            )
-            .execute(common::shared::db())
-            .await
-            .ok();
-        }
-
-        if max_id > last_id {
-            set_sync_last_id(&database, "zooniverse-project-sync-last-id", max_id)
-                .await
-                .ok();
-        }
-
-        let sleep_duration = if projects.len() >= 500 {
-            Duration::from_secs(60)
-        } else {
-            Duration::from_secs(60 * 60)
         };
 
         tokio::select! {
@@ -433,9 +441,52 @@ pub async fn zooniverse_sync_projects(
     }
 }
 
+/// Read the whole of orrery's set and mirror it. The set is read whole
+/// every pass, because a copy is deleted when its original is missing from
+/// it, and because a project's reader or SciStarter project can change after
+/// hydra has it, which a watermark on orrery's `id` would never see. Nothing
+/// is mirrored unless every page arrives.
+async fn sync_projects(client: &reqwest::Client) -> Result<()> {
+    let sync_token = env!("SYNC_TOKEN");
+    let mut snapshot: Vec<admin::OrreryProject> = Vec::new();
+    let mut last_id = 0;
+
+    loop {
+        let page: Vec<admin::OrreryProject> = client
+            .get("https://scistarter.org/staff/sync/zooniverse_projects")
+            .bearer_auth(sync_token)
+            .query(&[
+                ("since", "1900-01-01T00:00:00Z"),
+                ("last_id", &last_id.to_string()),
+            ])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        let page_len = page.len();
+
+        last_id = page
+            .iter()
+            .map(|project| project.id)
+            .fold(last_id, i64::max);
+        snapshot.extend(page);
+
+        if page_len < PROJECT_SYNC_PAGE_SIZE {
+            break;
+        }
+    }
+
+    admin::mirror_orrery(&snapshot).await?;
+    announce_projects().await;
+
+    Ok(())
+}
+
 /// Poll Zooniverse for new classifications and write participation rows.
 ///
-/// Pagination is `last_id`-only: each page advances the watermark, which we
+/// Each project is read as its [`ZooniverseReader`]. Pagination is `last_id`-only: each page advances the watermark, which we
 /// persist before fetching the next page. A crash caps re-imports at the
 /// in-flight page rather than the entire project history. Each classification
 /// is fanned out to every SciStarter user that claims the Zooniverse account.
@@ -454,7 +505,11 @@ pub async fn zooniverse_synchronize(
 
         let projects = match sqlx::query_as!(
             ProjectRow,
-            "SELECT zooniverse_id, entity_id, last_classification_id FROM zooniverse_projects"
+            r#"SELECT p.zooniverse_id, p.entity_id,
+                      COALESCE(g.last_classification_id, 0) AS "last_classification_id!",
+                      p.reader AS "reader: ZooniverseReader"
+               FROM zooniverse_projects p
+               LEFT JOIN zooniverse_progress g ON g.zooniverse_id = p.zooniverse_id"#
         )
         .fetch_all(common::shared::db())
         .await
@@ -475,19 +530,20 @@ pub async fn zooniverse_synchronize(
         }
 
         let client = reqwest::Client::new();
-        let token = match get_zooniverse_token(&client).await {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("Failed to get Zooniverse OAuth token: {}", e);
-                sleep(Duration::from_secs(60 * 5)).await;
-                continue;
-            }
-        };
+        let mut tokens = Tokens::default();
 
         for project in projects {
             if cancellation_token.is_cancelled() {
                 return;
             }
+
+            let Some(token) = tokens.get(&client, project.reader).await else {
+                eprintln!(
+                    "Skipping Zooniverse project {}: Panoptes would not authorize {:?}",
+                    project.zooniverse_id, project.reader
+                );
+                continue;
+            };
 
             sync_project(&database, &client, &token, project, &cancellation_token).await;
         }
@@ -503,6 +559,7 @@ struct ProjectRow {
     zooniverse_id: i64,
     entity_id: String,
     last_classification_id: i64,
+    reader: ZooniverseReader,
 }
 
 async fn sync_project(
@@ -516,6 +573,7 @@ async fn sync_project(
         zooniverse_id,
         entity_id,
         mut last_classification_id,
+        reader: _,
     } = project;
 
     loop {
@@ -684,9 +742,11 @@ async fn sync_project(
         // the in-flight page rather than the whole project history.
         if page_max_id > last_classification_id {
             if let Err(e) = sqlx::query!(
-                "UPDATE zooniverse_projects SET last_classification_id = ? \
-                 WHERE zooniverse_id = ? AND last_classification_id < ?",
-                page_max_id,
+                r#"INSERT INTO zooniverse_progress (zooniverse_id, last_classification_id)
+                   VALUES (?, ?)
+                   ON CONFLICT (zooniverse_id) DO UPDATE
+                     SET last_classification_id = excluded.last_classification_id
+                     WHERE last_classification_id < excluded.last_classification_id"#,
                 zooniverse_id,
                 page_max_id,
             )
@@ -776,6 +836,24 @@ mod tests {
                 .unwrap()
                 == at(arrived)
         );
+    }
+
+    #[test]
+    fn readers_are_spelled_as_orrery_spells_them() {
+        let readers: Vec<ZooniverseReader> =
+            serde_json::from_str(r#"["legacy", "scistarter"]"#).unwrap();
+
+        check!(readers == ZooniverseReader::ALL);
+        check!(ZooniverseReader::ALL.map(ZooniverseReader::as_str) == ["legacy", "scistarter"]);
+
+        // One orrery has and this build doesn't is refused rather than read
+        // as some other account.
+        check!(serde_json::from_str::<ZooniverseReader>(r#""someone-else""#).is_err());
+    }
+
+    #[test]
+    fn the_original_account_always_has_an_application() {
+        check!(application(ZooniverseReader::Legacy).is_some());
     }
 
     #[test]

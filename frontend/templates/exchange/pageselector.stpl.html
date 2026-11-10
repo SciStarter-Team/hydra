@@ -1,9 +1,9 @@
 <div class="el-pagination">
   <% let last_page = self.last_page(); %>
   <button
-      hx-get="/exchange/<%= self.exchange.exchange_id() %>/results?page=<%= self.page.saturating_sub(1) %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
-      hx-target="#search-results"
-      hx-indicator="#search-results"
+      hx-get="/exchange/<%= self.exchange.exchange_id() %>/<%= self.path %>?page=<%= self.page.saturating_sub(1) %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
+      hx-target="<%= self.target %>"
+      hx-indicator="<%= self.target %>"
       hx-swap="outerHTML"
       type="button"
     <% if self.page == 1 { %>disabled="disabled"<% } %>
@@ -11,9 +11,9 @@
   <ul class="el-pager">
     <% if self.page > 3 { %>
     <li
-        hx-get="/exchange/<%= self.exchange.exchange_id() %>/results?page=1&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
-        hx-target="#search-results"
-        hx-indicator="#search-results"
+        hx-get="/exchange/<%= self.exchange.exchange_id() %>/<%= self.path %>?page=1&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
+        hx-target="<%= self.target %>"
+        hx-indicator="<%= self.target %>"
         hx-swap="outerHTML"
         hx-trigger="click"
         class="number"
@@ -24,9 +24,9 @@
     <% } %>
     <% for pg in (self.page.saturating_sub(2).max(1))..self.page { %>
     <li
-        hx-get="/exchange/<%= self.exchange.exchange_id() %>/results?page=<%= pg %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
-        hx-target="#search-results"
-        hx-indicator="#search-results"
+        hx-get="/exchange/<%= self.exchange.exchange_id() %>/<%= self.path %>?page=<%= pg %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
+        hx-target="<%= self.target %>"
+        hx-indicator="<%= self.target %>"
         hx-swap="outerHTML"
         hx-trigger="click"
         class="number"
@@ -35,9 +35,9 @@
     <li class="number active" style="color: #000"><%= self.page %></li>
     <% for pg in (self.page + 1)..=((self.page + 2).min(last_page)) { %>
     <li
-        hx-get="/exchange/<%= self.exchange.exchange_id() %>/results?page=<%= pg %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
-        hx-target="#search-results"
-        hx-indicator="#search-results"
+        hx-get="/exchange/<%= self.exchange.exchange_id() %>/<%= self.path %>?page=<%= pg %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
+        hx-target="<%= self.target %>"
+        hx-indicator="<%= self.target %>"
         hx-swap="outerHTML"
         hx-trigger="click"
         class="number"
@@ -48,9 +48,9 @@
     <% } %>
     <% if self.page < last_page.saturating_sub(2) { %>
     <li
-        hx-get="/exchange/<%= self.exchange.exchange_id() %>/results?page=<%= last_page %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
-        hx-target="#search-results"
-        hx-indicator="#search-results"
+        hx-get="/exchange/<%= self.exchange.exchange_id() %>/<%= self.path %>?page=<%= last_page %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
+        hx-target="<%= self.target %>"
+        hx-indicator="<%= self.target %>"
         hx-swap="outerHTML"
         hx-trigger="click"
         class="number"
@@ -58,9 +58,9 @@
     <% } %>
   </ul>
   <button
-      hx-get="/exchange/<%= self.exchange.exchange_id() %>/results?page=<%= self.page + 1 %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
-      hx-target="#search-results"
-      hx-indicator="#search-results"
+      hx-get="/exchange/<%= self.exchange.exchange_id() %>/<%= self.path %>?page=<%= self.page + 1 %>&page_size=<%= self.page_size %>&<%= self.params.query_string() %>"
+      hx-target="<%= self.target %>"
+      hx-indicator="<%= self.target %>"
       hx-swap="outerHTML"
       type="button"
     <% if self.page == last_page { %>disabled="disabled"<% } %>

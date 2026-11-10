@@ -1,0 +1,42 @@
+<article class="u-mb-lg flex-grid__card">
+  <figure class="section project-image overflow-hidden u-txt-c u-mb-sm">
+    <a href="/exchange/<%= self.exchange.exchange_id() %>/<%= &self.event.slug %>/event.html" class="project-frame project-frame-rect full-width">
+      <img loading="lazy" src="<%= &self.event.image %>" alt="event image" class="u-p-sm">
+    </a>
+    <figcaption><% if !self.event.image_credit.is_empty() { %><span title="<%= &self.event.image_credit %>"><%= self.event.image_credit.chars().take(32).collect::<String>() %></span><% } %></figcaption>
+  </figure>
+  <h3 class="b-heading-5--lc"><a href="/exchange/<%= self.exchange.exchange_id() %>/<%= &self.event.slug %>/event.html"><%= &self.event.name %></a></h3>
+  <table class="table-finder">
+    <tbody>
+      <% if let Some(ref session) = self.event.session { %>
+      <tr>
+        <th scope="row">When</th>
+        <td>
+          <% if session.spans_days() { %>
+          <%- local_time_range(&session.begin, &session.end, TimeFormat::ShortDate) %>
+          <% } else { %>
+          <%- local_time(&session.begin, TimeFormat::DateTime) %>
+          <% } %>
+          <% if self.event.other_sessions > 0 { %><br><span class="b-small">and <%= self.event.other_sessions %> more <% if self.event.other_sessions == 1 { %>date<% } else { %>dates<% } %></span><% } %>
+        </td>
+      </tr>
+      <% } %>
+      <% let location = self.event.location.label(); %>
+      <% if !location.is_empty() { %>
+      <tr>
+        <th scope="row">Where</th>
+        <td>
+          <% if location.len() > 35 { %>
+          <details>
+            <summary><%= location.chars().take(30).collect::<String>() %>...</summary>
+            <%= location %>
+          </details>
+          <% } else { %>
+          <%= location %>
+          <% } %>
+        </td>
+      </tr>
+      <% } %>
+    </tbody>
+  </table>
+</article>

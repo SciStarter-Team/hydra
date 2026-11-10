@@ -1,0 +1,14 @@
+<section id="event-results" class="exchange-events indicator-fade-out">
+  <h2 class="b-heading-4 exchange-listing-heading"><% if self.params.past { %>Events<% } else { %>Upcoming events<% } %></h2>
+  <div class="top-pagination">
+    <p class="b-small u-mb pagination-counter"><%= (self.page - 1) * PAGE_SIZE + 1 %>-<%= (self.page * PAGE_SIZE).min(self.total) %> of <%= self.total %></p>
+    <% if self.total > PAGE_SIZE { %>
+    <%+ PageSelector { exchange: self.exchange, params: self.params, path: "events", target: "#event-results", page: self.page, page_size: PAGE_SIZE, total: self.total } %>
+    <% } %>
+  </div>
+  <div class="flex-grid">
+    <% for event in self.events.iter() { %>
+    <%+ EventCard { exchange: self.exchange, event } %>
+    <% } %>
+  </div>
+</section>

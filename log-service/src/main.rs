@@ -163,9 +163,8 @@ async fn main() -> Result<()> {
 
     // Spawn Zooniverse project sync task
     let zoo_projects_cancel_clone = zoo_projects_cancel.clone();
-    let zoo_projects_database = Arc::clone(&database);
     background_tasks.spawn(async move {
-        zooniverse_sync_projects(zoo_projects_database, zoo_projects_cancel_clone).await;
+        zooniverse_sync_projects(zoo_projects_cancel_clone).await;
         Ok::<(), anyhow::Error>(())
     });
 
@@ -397,6 +396,32 @@ async fn main() -> Result<()> {
         "projects",
         bridges::zooniverse::handle_projects
     ));
+    let zooniverse_admin_group = svc.group("log.zooniverse.admin");
+    toplevel.spawn(handler!(
+        zooniverse_admin_group,
+        "list",
+        bridges::zooniverse::admin::handle_list
+    ));
+    toplevel.spawn(handler!(
+        zooniverse_admin_group,
+        "add",
+        bridges::zooniverse::admin::handle_add
+    ));
+    toplevel.spawn(handler!(
+        zooniverse_admin_group,
+        "update",
+        bridges::zooniverse::admin::handle_update
+    ));
+    toplevel.spawn(handler!(
+        zooniverse_admin_group,
+        "delete",
+        bridges::zooniverse::admin::handle_delete
+    ));
+    toplevel.spawn(handler!(
+        zooniverse_admin_group,
+        "access",
+        bridges::zooniverse::access::handle_access
+    ));
 
     // Health endpoint
     let health_group = svc.group("log.health");
@@ -435,6 +460,7 @@ async fn main() -> Result<()> {
     println!("  - log.cache.user_emails_update");
     println!("  - log.health.check");
     println!("  - log.zooniverse.projects");
+    println!("  - log.zooniverse.admin.{{list,add,update,delete,access}}");
     println!("  - log.project_likes");
     println!("  - log.rating_set");
     println!("  - log.project_reviews");

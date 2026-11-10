@@ -6,9 +6,16 @@
     <title><%= self.exchange.info.name %> - Exchange</title>
     <link rel="stylesheet" href="https://early.webawesome.com/webawesome@3.0.0-beta.3/dist/styles/themes/default.css" />
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
+    <style>
+      /* The events section sits above the projects in the results pane,
+         each with its own heading and pager, as on orrery's exchange. */
+      .exchange-events { margin-bottom: 2rem; }
+      .exchange-listing-heading { margin-top: 0; }
+    </style>
     <script type="module" src="https://early.webawesome.com/webawesome@3.0.0-beta.3/dist/webawesome.loader.js"></script>
     <%+ crate::component::HtmxRuntime::default() %>
     <script src="/-static/js/clickthrough.js" defer></script>
+    <script src="/-static/js/local_time.js" defer></script>
     <script src="/-static/exchange/js/auth-fallback.js"></script>
   </head>
   <body hx-headers:inherited='{"X-CSRFToken": "<%= self.csrftoken %>"}' <% if !self.user.is_authenticated() { %>data-needs-auth<% } %>>
@@ -92,10 +99,14 @@
                 <input id="include-inactive" name="inactive" value="true" type="checkbox">
                 include inactive projects
               </label>
+              <label for="include-past">
+                <input id="include-past" name="past" value="true" type="checkbox">
+                include past events
+              </label>
               <% if self.exchange.info.settings.region_id.is_some() { %>
               <label for="include-global">
                 <input id="include-global" name="global" value="true" type="checkbox" <% if self.params.global { %>checked<% } %>>
-                include global projects
+                include global projects and events
               </label>
               <% } %>
             </div>
@@ -114,7 +125,7 @@
           </form>
         </div>
 
-        <%+ SearchResults {exchange: self.exchange, projects: self.projects, pagination: self.pagination, params: self.params, total: self.total} %>
+        <%+ SearchResults {exchange: self.exchange, projects: self.projects, pagination: self.pagination, params: self.params, total: self.total, events: self.events} %>
       </div>
     </div><!-- .o-wrapper -->
 

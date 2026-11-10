@@ -15,7 +15,7 @@ use sailfish::TemplateOnce;
 use std::sync::OnceLock;
 use ulid::Ulid;
 
-use crate::local_time::{TimeFormat, local_time};
+use crate::local_time::{TimeFormat, local_time, local_time_range};
 use crate::middleware::analytics::{Device, Interaction};
 use crate::middleware::authorization::Authenticated;
 use crate::page_change::last_changes;
@@ -92,14 +92,58 @@ async fn get_filter_options() -> Result<FilterOptions, Error> {
 
 // Helper functions
 
-/// Build base query with common WHERE clause (with or without FTS)
-/// Exclude the projects this exchange has hidden, unless the viewer runs it.
+/// Where an exchange's listing rules find what they read, for one kind of
+/// thing it lists, so that projects and events are narrowed by the same
+/// code. Orrery's exchange lists events by the same rules
+/// (`Exchange::find_events` in its src/common.rs).
 ///
-/// An exchange's staff are shown their own hidden projects so that moderation
+/// Every field is a fixed piece of SQL, never anything a visitor sent.
+pub(super) struct Catalogue {
+    /// The query's alias for the listed row, whose `exchange`, `origin`,
+    /// `name` and `location_type` the rules read.
+    row: &'static str,
+
+    /// The listed row's id column, qualified by `row`.
+    id: &'static str,
+
+    /// The table of its tags, and that table's column naming it.
+    tags: &'static str,
+    tags_owner: &'static str,
+
+    /// The cache of the regions it falls in, and that table's column naming
+    /// it; see [`crate::region`].
+    regions: &'static str,
+    regions_owner: &'static str,
+}
+
+pub(super) const PROJECTS: Catalogue = Catalogue {
+    row: "p",
+    id: "p.project_id",
+    tags: "project_tags",
+    tags_owner: "project_id",
+    regions: "project_regions",
+    regions_owner: "project_id",
+};
+
+pub(super) const EVENTS: Catalogue = Catalogue {
+    row: "ev",
+    id: "ev.event_id",
+    tags: "event_tags",
+    tags_owner: "event_id",
+    regions: "event_regions",
+    regions_owner: "event_id",
+};
+
+/// Exclude what this exchange has hidden, unless the viewer runs it.
+///
+/// An exchange's staff are shown what they have hidden so that moderation
 /// decisions stay visible to the people who made them; everybody else sees
-/// the exchange as it is meant to read.
-fn push_hidden_exclusion(
+/// the exchange as it is meant to read. A hidden event is held in
+/// `exchange_hidden_projects` beside the hidden projects, as orrery holds
+/// both in `core_exchangesquelch`; ids never collide, being ULIDs.
+pub(super) fn push_hidden_exclusion(
     query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    catalogue: &Catalogue,
     exchange_id: Ulid,
     scope: &SearchScope,
 ) {
@@ -107,13 +151,38 @@ fn push_hidden_exclusion(
         return;
     }
 
-    query_builder.push(
-        r#" AND p.project_id NOT IN (
+    query_builder.push(format!(
+        r#" AND {} NOT IN (
                 SELECT project_id FROM exchange_hidden_projects
                 WHERE exchange_id = "#,
-    );
+        catalogue.id
+    ));
     query_builder.push_bind(exchange_id.to_string());
     query_builder.push(")");
+}
+
+/// Keep what reaches any of these regions: several region tick-boxes read
+/// as "any of these".
+pub(super) fn push_named_regions(
+    query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    catalogue: &Catalogue,
+    regions: &[i64],
+) {
+    if regions.is_empty() {
+        return;
+    }
+
+    query_builder.push(format!(
+        " AND {} IN (SELECT {} FROM {} WHERE region_id IN (",
+        catalogue.id, catalogue.regions_owner, catalogue.regions
+    ));
+
+    let mut separated = query_builder.separated(", ");
+    for region_id in regions.iter() {
+        separated.push_bind(*region_id);
+    }
+
+    query_builder.push("))");
 }
 
 /// What a search is actually asking for, once its phrases have been read.
@@ -125,19 +194,22 @@ fn push_hidden_exclusion(
 ///
 /// `include_hidden` carries the viewer's standing, since an exchange's own
 /// staff are shown the projects they have hidden from everybody else.
-struct SearchScope {
-    regions: Vec<i64>,
-    phrases: Vec<String>,
+pub(super) struct SearchScope {
+    pub(super) regions: Vec<i64>,
+    pub(super) phrases: Vec<String>,
     include_hidden: bool,
 
     /// Stamped once per search so every query in it -- results and count
     /// alike -- draws the line between running and finished at the same
     /// instant.
-    now: String,
+    pub(super) now: String,
 }
 
 impl SearchScope {
-    async fn resolve(params: &SearchParams, include_hidden: bool) -> Result<Self, Error> {
+    pub(super) async fn resolve(
+        params: &SearchParams,
+        include_hidden: bool,
+    ) -> Result<Self, Error> {
         let named = crate::region::ids_for_names(&params.phrase).await?;
 
         let phrases = params
@@ -156,7 +228,7 @@ impl SearchScope {
         })
     }
 
-    fn has_text_search(&self) -> bool {
+    pub(super) fn has_text_search(&self) -> bool {
         !self.phrases.is_empty()
     }
 }
@@ -212,7 +284,7 @@ fn build_base_where_clause<'a>(
             "#,
         );
 
-        push_hidden_exclusion(query_builder, exchange_id, scope);
+        push_hidden_exclusion(query_builder, &PROJECTS, exchange_id, scope);
     } else {
         // No text search, use regular query
         if for_count {
@@ -241,7 +313,7 @@ fn build_base_where_clause<'a>(
             "#,
         );
 
-        push_hidden_exclusion(query_builder, exchange_id, scope);
+        push_hidden_exclusion(query_builder, &PROJECTS, exchange_id, scope);
     }
 }
 
@@ -251,40 +323,49 @@ fn build_base_where_clause<'a>(
 /// and therefore how hydra stores it.
 const GLOBAL_LOCATION_TYPE: &str = crate::project::location::ANYWHERE;
 
-/// Narrow a query to the projects this exchange is a view of.
+/// Narrow a query to the projects or events this exchange is a view of.
 ///
 /// This is orrery's `Exchange.refresh_project_list`, applied live rather
-/// than materialized nightly, and the two must move together:
+/// than materialized, and the two must move together:
 ///
 /// - An exchange is a view of the whole catalogue, unless it excludes
-///   SciStarter. Then it lists only the projects submitted through it, plus
-///   those carrying one of its include-tags or include-origins -- levers
-///   that do nothing otherwise, which is why SciStarter Australia's
-///   `australia` include-tag has never had any effect.
-/// - Excluded origins come off whatever that let in, its own projects too.
-/// - A search regex, if set, must match the project's name or its tags,
-///   the tags written the way orrery stores them: `||one||two||`.
-/// - A region keeps the projects that reach it plus, when `include_global`
-///   (the finder's "include global projects" box), the ones that can be
-///   done anywhere, which is how "available in Australia" is expressed.
-///   Orrery's `Exchange::find` narrows the same way. The region test reads
-///   the cached matches rather than measuring polygons per query, so it
-///   agrees with the region tick-boxes by construction.
-fn push_membership(
+///   SciStarter. Then it lists only what was submitted through it, plus
+///   what carries one of its include-tags or include-origins -- levers that
+///   do nothing otherwise, which is why SciStarter Australia's `australia`
+///   include-tag has never had any effect.
+/// - Excluded origins come off whatever that let in, its own too.
+/// - A search regex, if set, must match the name or the tags, the tags
+///   written the way orrery stores them: `||one||two||`.
+/// - A region keeps what reaches it plus, when `include_global` (the
+///   finder's "include global projects and events" box), what can be done
+///   anywhere, which is how "available in Australia" is expressed. Orrery's
+///   `Exchange::find` and `Exchange::find_events` narrow the same way. The
+///   region test reads the cached matches rather than measuring polygons per
+///   query, so it agrees with the region tick-boxes by construction.
+pub(super) fn push_membership(
     query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
+    catalogue: &Catalogue,
     exchange: &ExchangeInfo,
     include_global: bool,
 ) {
     let settings = &exchange.settings;
+    let Catalogue {
+        row,
+        id,
+        tags,
+        tags_owner,
+        regions,
+        regions_owner,
+    } = catalogue;
 
     if settings.exclude_scistarter {
-        query_builder.push(" AND (p.exchange = ");
+        query_builder.push(format!(" AND ({row}.exchange = "));
         query_builder.push_bind(exchange.exchange_id.to_string());
 
         if !settings.include_tags.is_empty() {
-            query_builder.push(
-                " OR p.project_id IN (SELECT project_id FROM project_tags WHERE upper(tag) IN (",
-            );
+            query_builder.push(format!(
+                " OR {id} IN (SELECT {tags_owner} FROM {tags} WHERE upper(tag) IN ("
+            ));
             let mut separated = query_builder.separated(", ");
             for tag in settings.include_tags.iter() {
                 separated.push("upper(");
@@ -295,7 +376,7 @@ fn push_membership(
         }
 
         if !settings.include_origins.is_empty() {
-            query_builder.push(" OR p.origin IN (");
+            query_builder.push(format!(" OR {row}.origin IN ("));
             let mut separated = query_builder.separated(", ");
             for origin in settings.include_origins.iter() {
                 separated.push_bind(origin.clone());
@@ -307,7 +388,7 @@ fn push_membership(
     }
 
     if !settings.excluded_origins.is_empty() {
-        query_builder.push(" AND p.origin NOT IN (");
+        query_builder.push(format!(" AND {row}.origin NOT IN ("));
 
         let mut separated = query_builder.separated(", ");
         for origin in settings.excluded_origins.iter() {
@@ -320,24 +401,24 @@ fn push_membership(
     if !settings.search.is_empty() {
         let pattern = search_pattern(&settings.search);
 
-        query_builder.push(" AND (p.name REGEXP ");
+        query_builder.push(format!(" AND ({row}.name REGEXP "));
         query_builder.push_bind(pattern.clone());
-        query_builder.push(
-            " OR (SELECT '||' || group_concat(tag, '||') || '||' FROM project_tags t \
-             WHERE t.project_id = p.project_id) REGEXP ",
-        );
+        query_builder.push(format!(
+            " OR (SELECT '||' || group_concat(tag, '||') || '||' FROM {tags} t \
+             WHERE t.{tags_owner} = {id}) REGEXP "
+        ));
         query_builder.push_bind(pattern);
         query_builder.push(")");
     }
 
     if let Some(region_id) = settings.region_id {
-        query_builder.push(
-            " AND (p.project_id IN (SELECT project_id FROM project_regions WHERE region_id = ",
-        );
+        query_builder.push(format!(
+            " AND ({id} IN (SELECT {regions_owner} FROM {regions} WHERE region_id = "
+        ));
         query_builder.push_bind(region_id);
         query_builder.push(")");
         if include_global {
-            query_builder.push(" OR p.location_type = ");
+            query_builder.push(format!(" OR {row}.location_type = "));
             query_builder.push_bind(GLOBAL_LOCATION_TYPE);
         }
         query_builder.push(")");
@@ -386,22 +467,9 @@ fn apply_search_filters<'a>(
     params: &'a SearchParams,
     scope: &'a SearchScope,
 ) {
-    push_membership(query_builder, exchange, params.global);
+    push_membership(query_builder, &PROJECTS, exchange, params.global);
     push_listing_filter(query_builder, params, &scope.now);
-
-    // Several regions read as "any of these", the way several tick-boxes do.
-    if !scope.regions.is_empty() {
-        query_builder.push(
-            " AND p.project_id IN (SELECT project_id FROM project_regions WHERE region_id IN (",
-        );
-
-        let mut separated = query_builder.separated(", ");
-        for region_id in scope.regions.iter() {
-            separated.push_bind(*region_id);
-        }
-
-        query_builder.push("))");
-    }
+    push_named_regions(query_builder, &PROJECTS, &scope.regions);
 
     // Add activity filter
     if let Some(ref activity) = params.activity {
@@ -438,7 +506,7 @@ fn apply_search_filters<'a>(
 }
 
 /// Create a TemplateExchange with proper authorization checking
-async fn create_template_exchange(
+pub(super) async fn create_template_exchange(
     exchange_info: ExchangeInfo,
     auth: &Authenticated,
 ) -> Result<TemplateExchange, Error> {
@@ -640,6 +708,17 @@ impl SearchParams {
             parts.push("inactive=true".to_string());
         }
 
+        // Carried so that another page of results keeps the boxes as they
+        // were ticked; without `global`, page two of a regional search
+        // would lose its global projects.
+        if self.global {
+            parts.push("global=true".to_string());
+        }
+
+        if self.past {
+            parts.push("past=true".to_string());
+        }
+
         parts.join("&")
     }
 }
@@ -660,14 +739,23 @@ struct ProjectCard<'a> {
     project: &'a ProjectSummary,
 }
 
+/// A pager, for the projects or for the events above them: each has its
+/// own, fetching its own pages into its own part of the results pane.
 #[derive(TemplateOnce)]
 #[template(path = "exchange/pageselector.stpl.html")]
-struct PageSelector<'a> {
-    exchange: &'a TemplateExchange,
-    params: &'a SearchParams,
-    page: usize,
-    page_size: usize,
-    total: usize,
+pub(super) struct PageSelector<'a> {
+    pub(super) exchange: &'a TemplateExchange,
+    pub(super) params: &'a SearchParams,
+
+    /// The exchange's address for another page: `results` or `events`.
+    pub(super) path: &'a str,
+
+    /// The element another page replaces.
+    pub(super) target: &'a str,
+
+    pub(super) page: usize,
+    pub(super) page_size: usize,
+    pub(super) total: usize,
 }
 
 impl<'a> PageSelector<'a> {
@@ -684,6 +772,10 @@ struct SearchResults<'a> {
     pagination: &'a Pagination,
     params: &'a SearchParams,
     total: usize,
+
+    /// The first page of the events the same search finds, rendered, or
+    /// empty when it finds none; see [`super::events::first_events`].
+    events: &'a str,
 }
 
 #[derive(TemplateOnce)]
@@ -700,6 +792,9 @@ struct ExchangeIndex<'a> {
     pagination: &'a Pagination,
     params: &'a SearchParams,
     total: usize,
+
+    /// As [`SearchResults::events`].
+    events: &'a str,
 }
 
 #[derive(TemplateOnce)]
@@ -734,8 +829,8 @@ pub struct ExchangeEventDetail {
     /// Rendered, sanitized HTML.
     pub how_to_join: String,
     pub event_type: String,
-    /// When it happens, earliest first: each a begin and an end.
-    pub instances: Vec<(String, String)>,
+    /// When it happens, earliest first.
+    pub instances: Vec<super::events::Session>,
     /// The venue, when the event names one.
     pub location_name: String,
     pub location: Where,
@@ -752,6 +847,13 @@ struct ExchangeEventPage {
     user: TemplateUser,
     event: ExchangeEventDetail,
     csrftoken: String,
+
+    /// The squelch form, rendered, for the exchange's own people only.
+    squelch: Option<String>,
+
+    /// When the page was made, which tells the sessions that are over from
+    /// the rest.
+    now: String,
 }
 
 impl ExchangeEventPage {
@@ -785,7 +887,10 @@ async fn load_exchange_event_detail(id: Ulid, slug: &str) -> Result<ExchangeEven
     .fetch_all(db())
     .await?
     .into_iter()
-    .map(|row| (row.begin, row.end))
+    .map(|row| super::events::Session {
+        begin: row.begin,
+        end: row.end,
+    })
     .collect();
 
     let tags = sqlx::query_scalar!(
@@ -885,6 +990,7 @@ pub async fn exchange_event(
     .await?;
 
     let event = load_exchange_event_detail(event_id, &slug).await?;
+    let squelch = squelch_control(&exchange, event_id, &slug).await?;
 
     let csrftoken = session
         .get::<String>("csrf-token")
@@ -896,6 +1002,8 @@ pub async fn exchange_event(
             user: TemplateUser::from(auth),
             event,
             csrftoken,
+            squelch,
+            now: TimeString::now().to_string(),
         }
         .render_once()?,
     )
@@ -1381,6 +1489,7 @@ pub async fn exchange_home(
 
     let total = total_count as usize;
     let pagination = Pagination { page, page_size };
+    let events = super::events::first_events(&exchange, &params).await?;
 
     let template = ExchangeIndex {
         exchange: &exchange,
@@ -1394,6 +1503,7 @@ pub async fn exchange_home(
         pagination: &pagination,
         params: &params,
         total,
+        events: &events,
     };
 
     Ok(Html(template.render_once()?).into_response())
@@ -1504,12 +1614,18 @@ pub async fn exchange_results(
 
     let pagination = Pagination { page, page_size };
 
+    // The projects' pager replaces the whole results pane, events and all,
+    // so every page of projects brings the first page of events with it, as
+    // orrery's does.
+    let events = super::events::first_events(&exchange, &params).await?;
+
     let template = SearchResults {
         exchange: &exchange,
         projects: &projects,
         pagination: &pagination,
         params: &params,
         total,
+        events: &events,
     };
 
     Ok(Html(template.render_once()?).into_response())
@@ -1985,10 +2101,10 @@ pub async fn exchange_engagement(
     )
     .await?;
 
-    // Get project details for top projects
-    let top_views = fetch_project_details(&response.top_views).await?;
-    let top_saves = fetch_project_details(&response.top_saves).await?;
-    let top_referrals = fetch_project_details(&response.top_referrals).await?;
+    // Names and images for the projects and events in the top lists.
+    let top_views = fetch_top_details(&response.top_views).await?;
+    let top_saves = fetch_top_details(&response.top_saves).await?;
+    let top_referrals = fetch_top_details(&response.top_referrals).await?;
 
     type TopList = Vec<(String, String, String, i32)>;
 
@@ -2012,12 +2128,18 @@ pub async fn exchange_engagement(
     }
 
     impl EngagementContent {
-        /// The top-ten lists, each with its tab id and label.
-        fn top_lists(&self) -> [(&'static str, &'static str, &TopList); 3] {
+        /// The top-ten lists, each with its tab id, its label, and what it
+        /// ranks: only projects can be saved.
+        fn top_lists(&self) -> [(&'static str, &'static str, &'static str, &TopList); 3] {
             [
-                ("views", "Views", &self.top_views),
-                ("saves", "Saves", &self.top_saves),
-                ("referrals", "Referrals", &self.top_referrals),
+                ("views", "Views", "Projects and Events", &self.top_views),
+                ("saves", "Saves", "Projects", &self.top_saves),
+                (
+                    "referrals",
+                    "Referrals",
+                    "Projects and Events",
+                    &self.top_referrals,
+                ),
             ]
         }
     }
@@ -2086,22 +2208,25 @@ async fn listed_project_ids(exchange: &ExchangeInfo) -> Result<Vec<String>, Erro
         .await?)
 }
 
-async fn fetch_project_details(
-    project_counts: &[common::message::log::ProjectCount],
+/// The name, goal and image of each project or event in a top-ten list,
+/// with its count. An event states no goal, so its goal is empty, as on
+/// orrery's data page.
+async fn fetch_top_details(
+    counts: &[common::message::log::ProjectCount],
 ) -> Result<Vec<(String, String, String, i32)>, Error> {
     use sqlx::Row;
 
     let mut results = Vec::new();
 
-    for pc in project_counts {
-        // Query project details from database
+    for pc in counts {
         // The goal, as orrery's top lists show it, not the description, which
         // is long rich text.
         let row = sqlx::query(
             r#"
-            SELECT name, goal, image
-            FROM projects
-            WHERE project_id = ?
+            SELECT name, goal, image FROM projects WHERE project_id = ?1
+            UNION ALL
+            SELECT name, '' AS goal, image FROM events WHERE event_id = ?1
+            LIMIT 1
             "#,
         )
         .bind(&pc.project_id)
@@ -2111,7 +2236,7 @@ async fn fetch_project_details(
         if let Some(row) = row {
             let name: String = row
                 .try_get("name")
-                .unwrap_or_else(|_| "Unknown Project".to_string());
+                .unwrap_or_else(|_| "Unknown".to_string());
             let goal: String = row.try_get("goal").unwrap_or_default();
             let image: String = row.try_get("image").unwrap_or_default();
 
@@ -2412,8 +2537,10 @@ pub async fn create_predefined_search(
         audience: audiences,
         inactive: false,
         // A prompted search is ticked within the finder form, whose own
-        // "include global projects" box decides this.
+        // "include global projects and events" and "include past events"
+        // boxes decide these.
         global: false,
+        past: false,
         page: 1,
         page_size: 20,
     };
@@ -2841,23 +2968,8 @@ pub async fn exchange_project(
         .get::<String>("csrf-token")
         .unwrap_or_else(|| "".to_string());
 
-    let squelch = if exchange.user_is_authorized {
-        let hidden = Exchange::load(exchange_info.exchange_id)
-            .await?
-            .hidden_projects
-            .remove(&Ulid::from_string(&project_id)?);
-
-        Some(
-            SquelchButton {
-                exchange: exchange_info.path_id,
-                project: project_slug,
-                hidden,
-            }
-            .render_once()?,
-        )
-    } else {
-        None
-    };
+    let squelch =
+        squelch_control(&exchange, Ulid::from_string(&project_id)?, &project_slug).await?;
 
     let user = TemplateUser::from(auth);
 
@@ -2958,8 +3070,8 @@ pub async fn vote_project(
     Ok(Html("Voted").into_response())
 }
 
-/// The moderation form an exchange's own people see on its project pages:
-/// take the project out of the exchange's listings with a note, or put it
+/// The moderation form an exchange's own people see on its project and event
+/// pages: take one out of the exchange's listings with a note, or put it
 /// back. Orrery calls this squelching.
 #[derive(TemplateOnce)]
 #[template(path = "exchange/squelchbutton.stpl.html")]
@@ -2975,6 +3087,32 @@ struct SquelchForm {
     elevate: bool,
     #[serde(default)]
     note: String,
+}
+
+/// The squelch form for a project's or event's page, rendered, for the
+/// exchange's own people only.
+async fn squelch_control(
+    exchange: &TemplateExchange,
+    id: Ulid,
+    slug: &str,
+) -> Result<Option<String>, Error> {
+    if !exchange.user_is_authorized {
+        return Ok(None);
+    }
+
+    let hidden = Exchange::load(exchange.info.exchange_id)
+        .await?
+        .hidden_projects
+        .remove(&id);
+
+    Ok(Some(
+        SquelchButton {
+            exchange: exchange.info.path_id,
+            project: slug.to_string(),
+            hidden,
+        }
+        .render_once()?,
+    ))
 }
 
 /// The project a slug names, if any.
@@ -2996,7 +3134,26 @@ async fn project_by_slug(slug: &str) -> Result<Option<Ulid>, Error> {
         .map_err(Error::from)
 }
 
-/// Take a project out of an exchange's listings.
+/// The project or event a slug names, if any: the two things an exchange
+/// lists, and so the two it can squelch.
+async fn listed_by_slug(slug: &str) -> Result<Option<Ulid>, Error> {
+    let row = sqlx::query_scalar!(
+        r#"
+        SELECT ent.target AS "target!"
+        FROM entities ent
+        WHERE ent.slug = ? AND ent.kind IN ('Project', 'Event')
+        "#,
+        slug
+    )
+    .fetch_optional(db())
+    .await?;
+
+    row.map(|target| Ulid::from_string(&target))
+        .transpose()
+        .map_err(Error::from)
+}
+
+/// Take a project or event out of an exchange's listings.
 ///
 /// Squelching one already squelched keeps the note it has, as orrery does.
 #[handler]
@@ -3012,10 +3169,10 @@ pub async fn squelch_project(
         return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
-    let Some(project_id) = project_by_slug(&project_slug).await? else {
+    let Some(project_id) = listed_by_slug(&project_slug).await? else {
         return Ok(error_response(
             poem::http::StatusCode::NOT_FOUND,
-            "Project not found",
+            "Not found",
         ));
     };
 
@@ -3043,7 +3200,7 @@ pub async fn squelch_project(
     .into_response())
 }
 
-/// Put a squelched project back into an exchange's listings.
+/// Put a squelched project or event back into an exchange's listings.
 #[handler]
 pub async fn unsquelch_project(
     Path((path_id, project_slug)): Path<(i64, String)>,
@@ -3056,10 +3213,10 @@ pub async fn unsquelch_project(
         return Ok(error_response(poem::http::StatusCode::FORBIDDEN, ""));
     }
 
-    let Some(project_id) = project_by_slug(&project_slug).await? else {
+    let Some(project_id) = listed_by_slug(&project_slug).await? else {
         return Ok(error_response(
             poem::http::StatusCode::NOT_FOUND,
-            "Project not found",
+            "Not found",
         ));
     };
 
@@ -3277,11 +3434,17 @@ mod tests {
             .with_regexp();
         let pool = SqlitePool::connect_with(options).await.unwrap();
 
+        // Events have the same columns under their own names, so that the
+        // rules can be shown to treat the two alike.
         for statement in [
             "CREATE TABLE projects (project_id TEXT, name TEXT, exchange TEXT, origin TEXT,
                 location_type TEXT)",
             "CREATE TABLE project_tags (project_id TEXT, tag TEXT)",
             "CREATE TABLE project_regions (project_id TEXT, region_id INTEGER)",
+            "CREATE TABLE events (event_id TEXT, name TEXT, exchange TEXT, origin TEXT,
+                location_type TEXT)",
+            "CREATE TABLE event_tags (event_id TEXT, tag TEXT)",
+            "CREATE TABLE event_regions (event_id TEXT, region_id INTEGER)",
         ] {
             sqlx::query(statement).execute(&pool).await.unwrap();
         }
@@ -3298,22 +3461,33 @@ mod tests {
         ];
 
         for (name, exchange, origin, tags) in projects {
-            sqlx::query("INSERT INTO projects VALUES (?, ?, ?, ?, '')")
-                .bind(name)
-                .bind(name)
-                .bind(exchange)
-                .bind(origin)
-                .execute(&pool)
-                .await
-                .unwrap();
-
-            for tag in tags {
-                sqlx::query("INSERT INTO project_tags VALUES (?, ?)")
+            for (insert_row, insert_tag) in [
+                (
+                    "INSERT INTO projects VALUES (?, ?, ?, ?, '')",
+                    "INSERT INTO project_tags VALUES (?, ?)",
+                ),
+                (
+                    "INSERT INTO events VALUES (?, ?, ?, ?, '')",
+                    "INSERT INTO event_tags VALUES (?, ?)",
+                ),
+            ] {
+                sqlx::query(insert_row)
                     .bind(name)
-                    .bind(tag)
+                    .bind(name)
+                    .bind(exchange)
+                    .bind(origin)
                     .execute(&pool)
                     .await
                     .unwrap();
+
+                for tag in tags.iter() {
+                    sqlx::query(insert_tag)
+                        .bind(name)
+                        .bind(tag)
+                        .execute(&pool)
+                        .await
+                        .unwrap();
+                }
             }
         }
 
@@ -3333,6 +3507,18 @@ mod tests {
         settings: ExchangeSettings,
         include_global: bool,
     ) -> Vec<String> {
+        catalogue_members(pool, &PROJECTS, "projects", settings, include_global).await
+    }
+
+    /// The names of the rows of `table`, listed as `catalogue`, that an
+    /// exchange with `settings` is made up of.
+    async fn catalogue_members(
+        pool: &SqlitePool,
+        catalogue: &Catalogue,
+        table: &str,
+        settings: ExchangeSettings,
+        include_global: bool,
+    ) -> Vec<String> {
         let exchange = ExchangeInfo {
             exchange_id: Ulid::from_string(EXCHANGE).unwrap(),
             path_id: 1,
@@ -3343,9 +3529,11 @@ mod tests {
             settings,
         };
 
-        let mut query_builder = sqlx::QueryBuilder::new("SELECT p.name FROM projects p WHERE 1");
-        push_membership(&mut query_builder, &exchange, include_global);
-        query_builder.push(" ORDER BY p.name");
+        let row = catalogue.row;
+        let mut query_builder =
+            sqlx::QueryBuilder::new(format!("SELECT {row}.name FROM {table} {row} WHERE 1"));
+        push_membership(&mut query_builder, catalogue, &exchange, include_global);
+        query_builder.push(format!(" ORDER BY {row}.name"));
 
         query_builder
             .build_query_scalar::<String>()
@@ -3440,6 +3628,88 @@ mod tests {
         };
 
         assert_eq!(members(&pool, settings).await, ["fish"]);
+    }
+
+    #[tokio::test]
+    async fn events_are_members_by_the_rules_projects_are() {
+        let pool = membership_catalogue().await;
+
+        const REGION: i64 = 7;
+        for (name, location_type, in_region) in [
+            ("global-elsewhere", GLOBAL_LOCATION_TYPE, false),
+            ("global-here", GLOBAL_LOCATION_TYPE, true),
+            ("local", "At a specific address", true),
+        ] {
+            for (insert_row, insert_region) in [
+                (
+                    "INSERT INTO projects VALUES (?, ?, NULL, 'scistarter', ?)",
+                    "INSERT INTO project_regions VALUES (?, ?)",
+                ),
+                (
+                    "INSERT INTO events VALUES (?, ?, NULL, 'scistarter', ?)",
+                    "INSERT INTO event_regions VALUES (?, ?)",
+                ),
+            ] {
+                sqlx::query(insert_row)
+                    .bind(name)
+                    .bind(name)
+                    .bind(location_type)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+
+                if in_region {
+                    sqlx::query(insert_region)
+                        .bind(name)
+                        .bind(REGION)
+                        .execute(&pool)
+                        .await
+                        .unwrap();
+                }
+            }
+        }
+
+        let cases = [
+            ExchangeSettings::default(),
+            ExchangeSettings {
+                exclude_scistarter: true,
+                include_tags: vec!["nz".into()],
+                include_origins: vec!["CitSci.org".into()],
+                ..Default::default()
+            },
+            ExchangeSettings {
+                exclude_scistarter: true,
+                excluded_origins: vec!["CitSci.org".into()],
+                ..Default::default()
+            },
+            ExchangeSettings {
+                search: r"BIRD|\|\|ocean\|\|".into(),
+                ..Default::default()
+            },
+            ExchangeSettings {
+                region_id: Some(REGION),
+                ..Default::default()
+            },
+        ];
+
+        for settings in cases {
+            for include_global in [true, false] {
+                let projects = catalogue_members(
+                    &pool,
+                    &PROJECTS,
+                    "projects",
+                    settings.clone(),
+                    include_global,
+                )
+                .await;
+                let events =
+                    catalogue_members(&pool, &EVENTS, "events", settings.clone(), include_global)
+                        .await;
+
+                assert!(!projects.is_empty(), "{settings:?} lists nothing at all");
+                assert_eq!(events, projects, "{settings:?}, global {include_global}");
+            }
+        }
     }
 
     #[test]

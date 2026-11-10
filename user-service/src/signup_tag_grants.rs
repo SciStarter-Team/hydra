@@ -1,8 +1,10 @@
 //! Signup tags whose cohort is credited with a training outright -- see
 //! [`SignupTagBadge`] for why such a thing exists.
 //!
-//! Staff keep the grants in orrery's admin, and the signup-tag-grant sync
-//! copies them here; staff may also make grants of their own in hydra's admin.
+//! Until cutover, staff keep the grants in orrery's admin, and the
+//! signup-tag-grant sync copies them here; staff may also make grants of their
+//! own in hydra's admin. After cutover, every grant is kept here (see
+//! [`CopyKeeper`]).
 //! A grant is consulted at the two places a signup-context tag reaches an
 //! account: `create_account`, for every signup lane, and `apply_tag` under
 //! `TagSource::Signup`, for every login lane.
@@ -17,6 +19,7 @@ use common::{
         SignupTagGrant, SignupTagGrantAdd, SignupTagGrantAdded, SignupTagGrantDelete,
         normalize_tag,
     },
+    primary::CopyKeeper,
     redirect::is_local_next,
     service::decode_structured_message,
     shared::db,
@@ -82,10 +85,10 @@ pub async fn credit<S: AsRef<str>>(user_id: &str, tags: &[S]) -> Result<(), Erro
 }
 
 pub async fn list(_req: &Request) -> Result<Vec<SignupTagGrant>, Error> {
-    list_grants(db()).await
+    list_grants(db(), CopyKeeper::NOW).await
 }
 
-async fn list_grants(pool: &SqlitePool) -> Result<Vec<SignupTagGrant>, Error> {
+async fn list_grants(pool: &SqlitePool, keeper: CopyKeeper) -> Result<Vec<SignupTagGrant>, Error> {
     let rows = sqlx::query!(
         r#"SELECT "id", "tag", "badge", "next_path", "created", "orrery_id"
            FROM "signup_tag_grants"
@@ -103,7 +106,7 @@ async fn list_grants(pool: &SqlitePool) -> Result<Vec<SignupTagGrant>, Error> {
                 badge: SignupTagBadge::parse(&row.badge)?,
                 next_path: row.next_path,
                 created: row.created,
-                from_orrery: row.orrery_id.is_some(),
+                orrery_owns: keeper.orrery_owns(row.orrery_id),
             })
         })
         .collect())
@@ -185,21 +188,25 @@ async fn add_grant(
         badge,
         next_path: next_path.to_string(),
         created,
-        from_orrery: false,
+        orrery_owns: false,
     }))
 }
 
 pub async fn delete(req: &Request) -> Result<(), Error> {
     let delete: SignupTagGrantDelete = decode_structured_message(req.message.clone())?;
-    delete_grant(db(), delete.id).await
+    delete_grant(db(), delete.id, CopyKeeper::NOW).await
 }
 
-/// Delete a grant made here. A copy of orrery's is left alone: the next sync
-/// would only bring it back.
-async fn delete_grant(pool: &SqlitePool, id: i64) -> Result<(), Error> {
+/// Delete a grant, unless it is a copy orrery keeps: the next sync would only
+/// bring that back.
+async fn delete_grant(pool: &SqlitePool, id: i64, keeper: CopyKeeper) -> Result<(), Error> {
+    let orrery_keeps_copies = keeper.orrery_keeps_copies();
+
     sqlx::query!(
-        r#"DELETE FROM "signup_tag_grants" WHERE "id" = ? AND "orrery_id" IS NULL"#,
+        r#"DELETE FROM "signup_tag_grants"
+           WHERE "id" = ? AND ("orrery_id" IS NULL OR NOT ?)"#,
         id,
+        orrery_keeps_copies,
     )
     .execute(pool)
     .await?;
@@ -333,11 +340,11 @@ mod tests {
     }
 
     async fn tags(pool: &SqlitePool) -> Vec<(String, bool)> {
-        list_grants(pool)
+        list_grants(pool, CopyKeeper::Orrery)
             .await
             .unwrap()
             .into_iter()
-            .map(|g| (g.tag, g.from_orrery))
+            .map(|g| (g.tag, g.orrery_owns))
             .collect()
     }
 
@@ -465,12 +472,31 @@ mod tests {
                     .unwrap()
         );
 
-        for grant in list_grants(&pool).await.unwrap() {
-            delete_grant(&pool, grant.id).await.unwrap();
+        for grant in list_grants(&pool, CopyKeeper::Orrery).await.unwrap() {
+            delete_grant(&pool, grant.id, CopyKeeper::Orrery)
+                .await
+                .unwrap();
         }
 
         check!(tags(&pool).await == vec![("azla".to_string(), true)]);
         check!(made_here.tag == "call");
+    }
+
+    #[tokio::test]
+    async fn once_hydra_keeps_the_copies_they_are_deleted_like_any_grant() {
+        let pool = fixture().await;
+        mirror(&pool, &[orrery(1, "azla")]).await.unwrap();
+
+        let listed = list_grants(&pool, CopyKeeper::Hydra).await.unwrap();
+        check!(listed.iter().all(|grant| !grant.orrery_owns));
+
+        for grant in listed {
+            delete_grant(&pool, grant.id, CopyKeeper::Hydra)
+                .await
+                .unwrap();
+        }
+
+        check!(tags(&pool).await.is_empty());
     }
 
     #[tokio::test]
@@ -489,7 +515,7 @@ mod tests {
         );
         check!(grant.next_path == "/l/library-network-signup");
 
-        let listed = list_grants(&pool).await.unwrap();
+        let listed = list_grants(&pool, CopyKeeper::Orrery).await.unwrap();
         check!(listed[0].next_path == "/l/library-network-signup");
     }
 
@@ -528,7 +554,7 @@ mod tests {
 
         mirror(&pool, &[call, azla]).await.unwrap();
 
-        let paths: Vec<(String, String)> = list_grants(&pool)
+        let paths: Vec<(String, String)> = list_grants(&pool, CopyKeeper::Orrery)
             .await
             .unwrap()
             .into_iter()

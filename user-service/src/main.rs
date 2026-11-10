@@ -3110,6 +3110,11 @@ async fn ambassador_connections_synchronize() {
 /// with no dates to page on, and a token deleted on orrery is deleted here
 /// when it is missing from the set. The tokens keep orrery's strings.
 async fn link_tokens_synchronize() {
+    // Once hydra keeps the copies, there is no orrery to copy Link Tokens from.
+    if !common::primary::CopyKeeper::NOW.orrery_keeps_copies() {
+        return;
+    }
+
     loop {
         let client = reqwest::Client::new();
         let fetched = match client
@@ -3143,6 +3148,11 @@ async fn link_tokens_synchronize() {
 /// on, and a grant deleted on orrery is deleted here when it is missing from
 /// the set.
 async fn signup_tag_grants_synchronize() {
+    // Once hydra keeps the copies, there is no orrery to copy signup tag grants from.
+    if !common::primary::CopyKeeper::NOW.orrery_keeps_copies() {
+        return;
+    }
+
     loop {
         let client = reqwest::Client::new();
         let fetched = match client

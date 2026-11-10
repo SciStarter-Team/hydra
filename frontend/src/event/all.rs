@@ -406,6 +406,14 @@ impl LoadStorePeered for EventAll {
             }
         }
 
+        // After the point is settled, derived or not, since both it and the
+        // area decide which regions the event is in. A failure leaves the
+        // cache stale until the next rebuild rather than failing a save
+        // that has already been committed.
+        if let Err(e) = crate::region::refresh_event(&self.event_id.to_string()).await {
+            eprintln!("Region refresh for event {} failed: {e}", self.event_id);
+        }
+
         Ok(())
     }
 

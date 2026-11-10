@@ -929,3 +929,201 @@ pub struct AnnualEngagementResponse {
     /// Records submitted to affiliate projects.
     pub contributions: i64,
 }
+
+// ============================================================================
+// Zooniverse bridge projects
+// ============================================================================
+
+/// One of the Zooniverse accounts SciStarter reads classifications as, and
+/// which one a project is read as. Mirrors orrery's
+/// `ZooniverseProject.Reader`, and is spelled as it is.
+///
+/// Panoptes only hands a project's classifications to an account the
+/// project team has made a collaborator, and each team granted that to
+/// whichever account it was given, so each project is read as that one.
+/// Teams are never asked to move from one to the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "database", derive(sqlx::Type))]
+#[cfg_attr(feature = "database", sqlx(rename_all = "lowercase"))]
+pub enum ZooniverseReader {
+    /// The account the bridge has used from the start, which is Daniel
+    /// Arbuckle's own. Every project connected before SciStarter had an
+    /// account of its own is read as this one.
+    Legacy,
+
+    /// SciStarter's own account (login `scistarter`), which new projects are
+    /// connected to.
+    Scistarter,
+}
+
+impl ZooniverseReader {
+    pub const ALL: [ZooniverseReader; 2] = [ZooniverseReader::Legacy, ZooniverseReader::Scistarter];
+
+    /// The reader a project is connected with unless a check finds its team
+    /// made the other account a collaborator: SciStarter's, since that is
+    /// the login project leaders are given.
+    pub const DEFAULT: ZooniverseReader = ZooniverseReader::Scistarter;
+
+    /// The stored and serialized spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ZooniverseReader::Legacy => "legacy",
+            ZooniverseReader::Scistarter => "scistarter",
+        }
+    }
+
+    /// How staff are shown the account.
+    pub fn label(self) -> &'static str {
+        match self {
+            ZooniverseReader::Legacy => {
+                "Daniel Arbuckle's account (projects connected before 2026-11)"
+            }
+            ZooniverseReader::Scistarter => "SciStarter's account",
+        }
+    }
+}
+
+/// One Zooniverse project the bridge credits, as `log.zooniverse.admin.list`
+/// lists it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZooniverseProject {
+    /// The project's Panoptes id, which is what identifies it: the bridge's
+    /// progress through its classifications belongs to it.
+    pub zooniverse_id: i64,
+
+    /// The SciStarter project its classifications are credited to.
+    pub entity_id: Ulid,
+
+    pub reader: ZooniverseReader,
+
+    /// Kept in orrery's admin and copied here, so that a change made here
+    /// would last only until the next copy. False once hydra is the primary,
+    /// when every project is kept here.
+    pub orrery_owns: bool,
+
+    /// The last classification the bridge has read, or 0 if it has read
+    /// none. A project whose number stops moving while people classify on
+    /// it is usually read as an account its team didn't make a
+    /// collaborator.
+    pub last_classification_id: i64,
+}
+
+/// Ask `log.zooniverse.admin.add` to connect a Zooniverse project.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZooniverseProjectAdd {
+    pub entity_id: Ulid,
+    pub zooniverse_id: i64,
+    pub reader: ZooniverseReader,
+}
+
+/// The answer to `log.zooniverse.admin.add`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ZooniverseProjectAdded {
+    Added(ZooniverseProject),
+
+    /// The Panoptes project is connected already, as this.
+    AlreadyConnected(ZooniverseProject),
+
+    /// A Panoptes id is a positive number.
+    InvalidProjectId,
+
+    /// Panoptes didn't confirm that the reader asked for can read the
+    /// project, as this says: a project connected that way would stall
+    /// without a word, so it is refused.
+    NotGranted(ZooniverseAccess),
+}
+
+/// Ask `log.zooniverse.admin.update` to change what a connected project is
+/// credited to or read as.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZooniverseProjectUpdate {
+    pub zooniverse_id: i64,
+    pub entity_id: Ulid,
+    pub reader: ZooniverseReader,
+}
+
+/// The answer to `log.zooniverse.admin.update`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ZooniverseProjectUpdated {
+    Updated(ZooniverseProject),
+
+    /// No project with that Panoptes id is connected.
+    NotFound,
+
+    /// The project is kept in orrery's admin; see
+    /// [`ZooniverseProject::orrery_owns`].
+    OrreryOwns(ZooniverseProject),
+
+    /// The project was to be read as an account that can't read it; see
+    /// [`ZooniverseProjectAdded::NotGranted`].
+    NotGranted(ZooniverseAccess),
+}
+
+/// Ask `log.zooniverse.admin.delete` to disconnect a project. One orrery owns
+/// is left alone. The bridge keeps its progress through the project's
+/// classifications, so connecting it again carries on from there.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZooniverseProjectDelete {
+    pub zooniverse_id: i64,
+}
+
+/// Ask `log.zooniverse.admin.access` what Panoptes says about reading a
+/// project as each reader. Answered with one [`ZooniverseAccess`] per reader,
+/// in [`ZooniverseReader::ALL`] order.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZooniverseAccessRequest {
+    pub zooniverse_id: i64,
+}
+
+/// The project roles Panoptes reads a project's classifications out to.
+pub const ZOONIVERSE_COLLABORATOR_ROLES: [&str; 2] = ["owner", "collaborator"];
+
+/// What Panoptes says about reading one project as one reader. Mirrors
+/// orrery's `bridge.platforms.ZooniverseAccess`.
+///
+/// Lacking access isn't an error on Panoptes -- the classifications come
+/// back as empty pages -- so this asks about the account's roles on the
+/// project directly.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ZooniverseAccess {
+    pub reader: ZooniverseReader,
+
+    /// The account the reader's application acts as, which is the one a
+    /// project team has to make a collaborator.
+    pub account: Option<crate::message::user::ZooniverseAccount>,
+
+    /// The account's roles on the project, in order.
+    pub roles: Vec<String>,
+
+    /// Whether a page of the project's classifications came back with any
+    /// on it. Only asked for when the roles grant access; a project nobody
+    /// has classified on yet reads as empty even then.
+    pub readable: bool,
+
+    /// Why Panoptes couldn't be asked all of it.
+    pub trouble: Option<String>,
+}
+
+impl ZooniverseAccess {
+    /// Whether the account's roles let it read the project's
+    /// classifications.
+    pub fn granted(&self) -> bool {
+        self.roles
+            .iter()
+            .any(|role| ZOONIVERSE_COLLABORATOR_ROLES.contains(&role.as_str()))
+    }
+
+    /// Whether Panoptes answered every question and the answer is that the
+    /// project can be read: what connecting a project as this reader, or
+    /// moving it to this one, requires.
+    pub fn connectable(&self) -> bool {
+        self.trouble.is_none() && self.granted()
+    }
+}
+
+/// Where log-service announces the projects its Zooniverse bridge credits,
+/// as the same `Vec<Ulid>` that `log.zooniverse.projects` answers with,
+/// whenever they may have changed. Every frontend instance listens, so a
+/// newly connected project is offered to visitors at once.
+pub const ZOONIVERSE_PROJECTS_ANNOUNCED: &str = "log.zooniverse.announce.projects";

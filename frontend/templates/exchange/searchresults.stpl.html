@@ -1,7 +1,15 @@
 <div class="el-col el-col-24 el-col-sm-16 indicator-fade-out" id="search-results" style="padding-left: 15px; padding-right: 15px;">
+  <%- self.events %>
+  <% if !self.events.is_empty() { %>
+  <h2 class="b-heading-4 exchange-listing-heading">Projects</h2>
+  <% } %>
   <div class="top-pagination">
+    <% if self.total == 0 { %>
+    <p class="b-small u-mb pagination-counter">No matching projects</p>
+    <% } else { %>
     <p class="b-small u-mb pagination-counter"><%= (self.pagination.page - 1) * self.pagination.page_size + 1 %>-<%= (self.pagination.page * self.pagination.page_size).min(self.total) %> of <%= self.total %></p>
-    <%+ PageSelector { exchange: &self.exchange, params: &self.params, page: self.pagination.page, page_size: self.pagination.page_size, total: self.total} %>
+    <% } %>
+    <%+ PageSelector { exchange: &self.exchange, params: &self.params, path: "results", target: "#search-results", page: self.pagination.page, page_size: self.pagination.page_size, total: self.total} %>
   </div>
   <div class="flex-grid">
     <% for project in self.projects.iter() { %>
@@ -9,7 +17,7 @@
     <% } %>
   </div>
   <div class="u-txt-c">
-    <%+ PageSelector { exchange: &self.exchange, params: &self.params, page: self.pagination.page, page_size: self.pagination.page_size, total: self.total} %>
+    <%+ PageSelector { exchange: &self.exchange, params: &self.params, path: "results", target: "#search-results", page: self.pagination.page, page_size: self.pagination.page_size, total: self.total} %>
   </div>
 </div>
 

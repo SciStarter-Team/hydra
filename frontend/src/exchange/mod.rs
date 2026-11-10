@@ -7,6 +7,7 @@ use crate::peering::LoadStorePeered;
 use common::{shared::db, transaction::Immediate};
 
 pub mod access;
+pub mod events;
 pub mod handlers;
 pub mod orrery;
 pub mod routes;
@@ -258,10 +259,27 @@ pub struct SearchParams {
     /// [`ExchangeInfo::initial_search`].
     #[serde(default)]
     pub global: bool,
+    /// The finder's "include past events" box. Without it an exchange lists
+    /// only events with a session still to come or under way, as orrery's
+    /// exchange does.
+    #[serde(default)]
+    pub past: bool,
     #[serde(default = "default_page")]
     pub page: usize,
     #[serde(default = "default_page_size")]
     pub page_size: usize,
+}
+
+impl SearchParams {
+    /// Whether the search is narrowed by something only projects have --
+    /// an activity, a topic or an audience -- and so lists no events.
+    pub fn filters_projects_only(&self) -> bool {
+        self.activity
+            .as_deref()
+            .is_some_and(|activity| !activity.is_empty())
+            || self.topic.as_deref().is_some_and(|topic| !topic.is_empty())
+            || !self.audience.is_empty()
+    }
 }
 
 fn default_page() -> usize {

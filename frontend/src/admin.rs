@@ -32,6 +32,7 @@ pub mod types;
 pub mod users;
 pub mod webinars;
 pub mod wiki;
+pub mod zooniverse_projects;
 
 // Re-exports for templates and other modules that reference crate::admin::*
 pub use analytics::{AnalyticsRecentActivityTable, TopPerformersBox};
@@ -102,6 +103,9 @@ pub fn routes() -> impl Endpoint {
         // Signup tags that credit their cohort with a training (shown under
         // Engine Room in the sidebar)
         .nest("/signup-tag-grants", signup_tag_grants::routes())
+        // The Zooniverse projects the participation bridge credits (shown
+        // under Engine Room in the sidebar)
+        .nest("/zooniverse-projects", zooniverse_projects::routes())
         // Archive
         .nest("/archive", archive::routes())
         // Page Builder

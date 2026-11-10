@@ -1,0 +1,114 @@
+<div class="space-y-6">
+    <div class="bg-white rounded-lg shadow border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Zooniverse Projects</h3>
+            <p class="mt-1 text-sm text-gray-500">
+                The Zooniverse projects whose classifications are credited to SciStarter projects.
+                A project connected here offers its visitors the Zooniverse username box, and is
+                listed by the finder&rsquo;s Zooniverse affiliate filter.
+            </p>
+            <p class="mt-1 text-sm text-gray-500">
+                Each project is read as the Zooniverse account its team made a collaborator.
+                Project leaders are given SciStarter&rsquo;s account; projects connected before
+                November 2026 are read as Daniel Arbuckle&rsquo;s. Panoptes gives an account that
+                isn&rsquo;t a collaborator empty pages rather than an error, so a project is only
+                connected once Panoptes confirms that its account can read it.
+            </p>
+            <% if self.any_from_orrery { %>
+                <p class="mt-1 text-sm text-gray-500">
+                    Projects marked <em>from orrery</em> are connected and changed in orrery&rsquo;s
+                    admin, and copied here every hour.
+                </p>
+            <% } %>
+        </div>
+
+        <div class="p-6 space-y-4">
+            <% if let Some(added) = &self.added { %>
+                <div class="rounded-md bg-green-50 border border-green-200 p-4">
+                    <p class="text-sm font-medium text-green-800">
+                        Panoptes project <%= added.project.zooniverse_id %> is now credited to
+                        <%= added.name.as_deref().unwrap_or("its SciStarter project") %>, read as
+                        <%= added.project.reader.label() %>.
+                    </p>
+                </div>
+            <% } %>
+
+            <% if let Some(refusal) = self.refusal { %>
+                <div role="alert" class="rounded-md bg-red-50 border border-red-200 p-4 space-y-2">
+                    <p class="text-sm text-red-700"><%= refusal.message %></p>
+                    <% if let Some(access) = refusal.access { %>
+                        <%+ access %>
+                    <% } %>
+                </div>
+            <% } %>
+
+            <form id="zooniverse-project-add" method="post" action="/-admin/zooniverse-projects/create" class="space-y-4">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-start">
+                    <%+ self.form.project %>
+                    <div>
+                        <label for="zooniverse-project-id" class="block text-sm font-medium text-gray-700">Panoptes project id</label>
+                        <input
+                            type="text"
+                            inputmode="numeric"
+                            id="zooniverse-project-id"
+                            name="zooniverse_id"
+                            required
+                            value="<%= self.form.zooniverse_id %>"
+                            placeholder="e.g. 30240"
+                            class="mt-1 block w-full px-3 py-2 rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        >
+                        <p class="mt-1 text-xs text-gray-500">The number Zooniverse shows for the project in its lab.</p>
+                    </div>
+                    <div>
+                        <label for="zooniverse-project-reader" class="block text-sm font-medium text-gray-700">Read as</label>
+                        <%+ crate::admin::zooniverse_projects::ReaderSelect { id: "zooniverse-project-reader", selected: self.form.reader } %>
+                        <p class="mt-1 text-xs text-gray-500">Change it only if Check access finds the team made the other account a collaborator.</p>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <button type="submit" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Connect project
+                    </button>
+                    <button
+                        type="button"
+                        hx-get="/-admin/zooniverse-projects/access"
+                        hx-include="#zooniverse-project-id"
+                        hx-target="#zooniverse-project-add-access"
+                        hx-swap="innerHTML"
+                        class="inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                        Check access
+                    </button>
+                    <span class="text-xs text-gray-500">Both ask Panoptes, which can take half a minute.</span>
+                </div>
+                <div id="zooniverse-project-add-access"></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow border border-gray-200">
+        <div class="p-6">
+            <% if self.rows.is_empty() { %>
+                <div class="text-center py-12">
+                    <h3 class="text-sm font-medium text-gray-900">No projects connected yet</h3>
+                    <p class="mt-1 text-sm text-gray-500">Connect a Zooniverse project above to credit its classifications.</p>
+                </div>
+            <% } else { %>
+                <div class="overflow-hidden shadow ring-1 ring-black/5 rounded-lg">
+                    <div class="hidden lg:grid lg:grid-cols-5 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <div>SciStarter project</div>
+                        <div>Panoptes project</div>
+                        <div>Read as</div>
+                        <div>Last classification read</div>
+                        <div class="text-right">Actions</div>
+                    </div>
+                    <div class="divide-y divide-gray-200 bg-white">
+                        <% for row in self.rows { %>
+                            <%+ row %>
+                        <% } %>
+                    </div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</div>

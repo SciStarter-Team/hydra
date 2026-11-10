@@ -3,6 +3,8 @@
 //!
 //! A token is a ULID string, as on orrery, and orrery's tokens are copied here
 //! with their strings unchanged, so a token issued by either works here.
+//! Until cutover, a copy is orrery's: affiliates report through orrery, so
+//! only deleting it there disconnects anything (see [`CopyKeeper`]).
 
 use anyhow::Error;
 use async_nats::service::Request;
@@ -11,6 +13,7 @@ use common::{
         DEFAULT_LINK_TOKEN_LABEL, LINK_TOKEN_LABEL_LENGTH, LinkToken, LinkTokenAdd, LinkTokenAdded,
         LinkTokenDelete,
     },
+    primary::CopyKeeper,
     service::decode_structured_message,
     shared::db,
     timestring::TimeString,
@@ -22,15 +25,19 @@ use ulid::Ulid;
 
 pub async fn ensure_by_user(req: &Request) -> Result<Vec<LinkToken>, Error> {
     let user_id: Ulid = flexbuffers::from_slice::<String>(&req.message.payload)?.parse()?;
-    ensure(db(), user_id).await
+    ensure(db(), user_id, CopyKeeper::NOW).await
 }
 
 /// The account's tokens, oldest first. An account with none is given one here,
 /// so that the dashboard always has a token to copy; it is made when first
 /// needed because most accounts never open the dashboard.
-async fn ensure(pool: &SqlitePool, user_id: Ulid) -> Result<Vec<LinkToken>, Error> {
+async fn ensure(
+    pool: &SqlitePool,
+    user_id: Ulid,
+    keeper: CopyKeeper,
+) -> Result<Vec<LinkToken>, Error> {
     let user_id_str = user_id.to_string();
-    let tokens = list(pool, &user_id_str).await?;
+    let tokens = list(pool, &user_id_str, keeper).await?;
 
     if !tokens.is_empty() {
         return Ok(tokens);
@@ -40,12 +47,16 @@ async fn ensure(pool: &SqlitePool, user_id: Ulid) -> Result<Vec<LinkToken>, Erro
     // can have it.
     add_token(pool, user_id, "").await?;
 
-    list(pool, &user_id_str).await
+    list(pool, &user_id_str, keeper).await
 }
 
-async fn list(pool: &SqlitePool, user_id: &str) -> Result<Vec<LinkToken>, Error> {
+async fn list(
+    pool: &SqlitePool,
+    user_id: &str,
+    keeper: CopyKeeper,
+) -> Result<Vec<LinkToken>, Error> {
     let rows = sqlx::query!(
-        r#"SELECT "token", "label", "created"
+        r#"SELECT "token", "label", "created", "orrery_id"
         FROM "link_tokens"
         WHERE "user_id" = ?
         ORDER BY "created", "token""#,
@@ -60,6 +71,7 @@ async fn list(pool: &SqlitePool, user_id: &str) -> Result<Vec<LinkToken>, Error>
             token: row.token,
             label: row.label,
             created: row.created,
+            orrery_owns: keeper.orrery_owns(row.orrery_id),
         })
         .collect())
 }
@@ -119,19 +131,34 @@ async fn add_token(pool: &SqlitePool, user_id: Ulid, label: &str) -> Result<Link
         token,
         label: label.to_string(),
         created,
+        orrery_owns: false,
     }))
 }
 
 pub async fn delete(req: &Request) -> Result<(), Error> {
     let delete: LinkTokenDelete = decode_structured_message(req.message.clone())?;
+    delete_token(db(), &delete, CopyKeeper::NOW).await
+}
+
+/// Delete one of `delete.user_id`'s tokens, unless it is a copy orrery keeps:
+/// the next sync would bring that back, and affiliates reporting through
+/// orrery could go on using it meanwhile.
+async fn delete_token(
+    pool: &SqlitePool,
+    delete: &LinkTokenDelete,
+    keeper: CopyKeeper,
+) -> Result<(), Error> {
     let user_id_str = delete.user_id.to_string();
+    let orrery_keeps_copies = keeper.orrery_keeps_copies();
 
     sqlx::query!(
-        r#"DELETE FROM "link_tokens" WHERE "token" = ? AND "user_id" = ?"#,
+        r#"DELETE FROM "link_tokens"
+           WHERE "token" = ? AND "user_id" = ? AND ("orrery_id" IS NULL OR NOT ?)"#,
         delete.token,
         user_id_str,
+        orrery_keeps_copies,
     )
-    .execute(db())
+    .execute(pool)
     .await?;
 
     Ok(())
@@ -265,7 +292,7 @@ mod tests {
     }
 
     async fn labels(pool: &SqlitePool, user_id: &str) -> Vec<String> {
-        list(pool, user_id)
+        list(pool, user_id, CopyKeeper::Orrery)
             .await
             .unwrap()
             .into_iter()
@@ -277,8 +304,8 @@ mod tests {
     async fn an_account_with_no_token_is_given_one_and_keeps_it() {
         let pool = fixture().await;
 
-        let first = ensure(&pool, ada()).await.unwrap();
-        let second = ensure(&pool, ada()).await.unwrap();
+        let first = ensure(&pool, ada(), CopyKeeper::Orrery).await.unwrap();
+        let second = ensure(&pool, ada(), CopyKeeper::Orrery).await.unwrap();
 
         check!(first.len() == 1);
         check!(first[0].label == "default");
@@ -292,7 +319,7 @@ mod tests {
 
         add_token(&pool, ada(), "Stall Catchers").await.unwrap();
 
-        let tokens = ensure(&pool, ada()).await.unwrap();
+        let tokens = ensure(&pool, ada(), CopyKeeper::Orrery).await.unwrap();
 
         check!(tokens.len() == 1);
         check!(tokens[0].label == "Stall Catchers");
@@ -361,7 +388,7 @@ mod tests {
             .await
             .unwrap();
 
-        let copied = list(&pool, ADA).await.unwrap();
+        let copied = list(&pool, ADA, CopyKeeper::Orrery).await.unwrap();
         check!(copied.len() == 1);
         check!(copied[0].token == token);
         check!(copied[0].label == "default");
@@ -391,7 +418,7 @@ mod tests {
         .await
         .unwrap();
 
-        let tokens: Vec<String> = list(&pool, ADA)
+        let tokens: Vec<String> = list(&pool, ADA, CopyKeeper::Orrery)
             .await
             .unwrap()
             .into_iter()
@@ -427,6 +454,52 @@ mod tests {
         .await
         .unwrap();
         check!(labels(&pool, stranger).await == ["default"]);
+    }
+
+    #[tokio::test]
+    async fn a_copy_is_deleted_here_only_once_hydra_keeps_the_copies() {
+        let pool = fixture().await;
+        let copied = "01HQ3Z8Y6V2N4J5K7M8P9R0S1A";
+        let LinkTokenAdded::Added(native) = add_token(&pool, ada(), "here").await.unwrap() else {
+            panic!("not added");
+        };
+        mirror(&pool, &[orrery(1, ADA, "default", copied)])
+            .await
+            .unwrap();
+
+        let owned: Vec<(String, bool)> = list(&pool, ADA, CopyKeeper::Orrery)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|t| (t.token, t.orrery_owns))
+            .collect();
+        check!(owned.contains(&(copied.to_string(), true)));
+        check!(owned.contains(&(native.token.clone(), false)));
+
+        let delete = |token: &str| LinkTokenDelete {
+            user_id: ada(),
+            token: token.to_string(),
+        };
+
+        delete_token(&pool, &delete(copied), CopyKeeper::Orrery)
+            .await
+            .unwrap();
+        delete_token(&pool, &delete(&native.token), CopyKeeper::Orrery)
+            .await
+            .unwrap();
+        check!(labels(&pool, ADA).await == ["default"]);
+
+        check!(
+            list(&pool, ADA, CopyKeeper::Hydra)
+                .await
+                .unwrap()
+                .iter()
+                .all(|t| !t.orrery_owns)
+        );
+        delete_token(&pool, &delete(copied), CopyKeeper::Hydra)
+            .await
+            .unwrap();
+        check!(labels(&pool, ADA).await.is_empty());
     }
 
     #[tokio::test]

@@ -4,7 +4,8 @@
 //! An iNaturalist project says so itself, in `projects.is_inaturalist`.
 //! Membership of the Zooniverse affiliate program is known only to
 //! log-service, whose bridge sweeps those projects for classifications, so
-//! the frontend asks it and caches the answer.
+//! the frontend asks it and caches the answer, and log-service announces the
+//! answer again whenever a project is connected or disconnected.
 
 use std::collections::HashSet;
 use std::time::Duration;
@@ -15,12 +16,22 @@ use common::message::user::{ZooniverseAccount, ZooniverseIdentityAnswer};
 use common::service::request;
 use ulid::Ulid;
 
-use crate::lazy_cache::{LazyCached, get_cached, push_cached_value};
+use crate::lazy_cache::{Announced, LazyCached, get_cached, push_cached_value};
 
 /// The projects log-service's Zooniverse bridge credits, as a JSON array of
 /// project ids, cached on each frontend instance.
 #[derive(Clone)]
-struct ZooniverseAffiliates;
+pub struct ZooniverseAffiliates;
+
+impl Announced for ZooniverseAffiliates {
+    const SUBJECT: &'static str = common::message::log::ZOONIVERSE_PROJECTS_ANNOUNCED;
+
+    type Value = Vec<Ulid>;
+
+    fn cache_value(projects: Vec<Ulid>) -> Result<String, Error> {
+        Ok(serde_json::to_string(&projects)?)
+    }
+}
 
 impl LazyCached for ZooniverseAffiliates {
     fn cache_key(&self) -> String {
@@ -32,8 +43,7 @@ impl LazyCached for ZooniverseAffiliates {
     }
 
     async fn fetch_fresh(&self) -> Result<String, Error> {
-        let projects: Vec<Ulid> = request("log.zooniverse.projects", ()).await?;
-        Ok(serde_json::to_string(&projects)?)
+        Self::cache_value(request("log.zooniverse.projects", ()).await?)
     }
 }
 

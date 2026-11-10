@@ -1,9 +1,9 @@
 //! Admin management of signup tag grants (Engine Room): the signup tags whose
 //! cohort is credited with a training outright, badge and all.
 //!
-//! The grants are user-service's. Most are copied from orrery's admin, which
-//! owns them while both systems are in use, so those are listed here but not
-//! deleted here; a grant made here can be.
+//! The grants are user-service's. Until cutover most are copied from orrery's
+//! admin, which keeps them, so those are listed here but not deleted here; a
+//! grant made here can be, and after cutover every grant can.
 
 use std::sync::Arc;
 
@@ -232,14 +232,14 @@ mod tests {
     use super::*;
     use assert2::check;
 
-    fn grant(id: i64, tag: &str, from_orrery: bool) -> SignupTagGrant {
+    fn grant(id: i64, tag: &str, orrery_owns: bool) -> SignupTagGrant {
         SignupTagGrant {
             id,
             tag: tag.to_string(),
             badge: SignupTagBadge::Foundations,
             next_path: String::new(),
             created: "2026-10-30T23:46:00Z".to_string(),
-            from_orrery,
+            orrery_owns,
         }
     }
 

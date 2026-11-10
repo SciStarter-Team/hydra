@@ -468,7 +468,9 @@ async fn apply(snapshot: &Path, dry_run: bool) -> Result<()> {
     for (project, since) in &survey.credited_since {
         let since = since.to_string();
         sqlx::query!(
-            r#"UPDATE zooniverse_projects SET credited_since = ? WHERE entity_id = ?"#,
+            r#"INSERT INTO zooniverse_progress (zooniverse_id, credited_since)
+               SELECT zooniverse_id, ?1 FROM zooniverse_projects WHERE entity_id = ?2
+               ON CONFLICT (zooniverse_id) DO UPDATE SET credited_since = excluded.credited_since"#,
             since,
             project
         )

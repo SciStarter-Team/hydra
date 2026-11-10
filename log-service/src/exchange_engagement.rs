@@ -37,7 +37,8 @@ pub async fn engagement_stats(
     // (`get_data_engagement` in orrery's src/module/exchange.rs), whose events
     // are carried into this table, and the two must agree:
     //
-    // - views: views of the exchange's home page and its project pages;
+    // - views: views of the exchange's home page and its project and event
+    //   pages;
     // - visits: distinct interactions among those views;
     // - visitors: distinct devices;
     // - saves, and referrals (following a project or event out to its site);
@@ -46,7 +47,7 @@ pub async fn engagement_stats(
     //
     // Visits and visitors count only events carrying the analytics ids, which
     // orrery's earliest events lack; `tracked_since` says from when they run.
-    const PAGE_VIEW: &str = "action = 'view' AND page IN ('home', 'project')";
+    const PAGE_VIEW: &str = "action = 'view' AND page IN ('home', 'project', 'event')";
 
     let exchange_visits = execute_count_query(
         &ctx,
@@ -125,7 +126,7 @@ pub async fn engagement_stats(
     let top = |action: &str| {
         format!(
             "SELECT page_id, COUNT(*) as count FROM exchange_events_realtime \
-             WHERE {exchange} AND page = 'project' AND action = '{action}' \
+             WHERE {exchange} AND page IN ('project', 'event') AND action = '{action}' \
              AND page_id IS NOT NULL {year_filter} \
              GROUP BY page_id ORDER BY count DESC LIMIT 10"
         )

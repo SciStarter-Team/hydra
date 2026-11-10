@@ -1,9 +1,12 @@
 use std::time::Duration;
 
 use anyhow::Error;
-use common::shared::db;
+use common::service::decode_structured_message;
+use common::shared::{db, nats};
 use common::timestring::TimeString;
+use futures::StreamExt;
 use jiff::Timestamp;
+use serde::de::DeserializeOwned;
 
 /// A trait for values that can be lazily cached in SQLite.
 ///
@@ -88,6 +91,54 @@ pub(crate) fn push_cached_value<T: LazyCached>(
     qb.push("(SELECT value FROM lazy_cache WHERE cache_key = ");
     qb.push_bind(source.cache_key());
     qb.push(")");
+}
+
+/// A cached value whose source also announces it, to every instance at
+/// once, whenever it may have changed. The announcement replaces what is
+/// cached as it arrives, so a change is seen without waiting for the cached
+/// value to go stale; `max_age` still bounds how long a missed announcement
+/// is missed for.
+pub trait Announced: LazyCached {
+    /// The NATS subject the source announces on.
+    const SUBJECT: &'static str;
+
+    /// What the source announces, which is also what it answers when asked.
+    type Value: DeserializeOwned;
+
+    /// The cached form of `value`. `fetch_fresh` stores the source's answer
+    /// in the same form.
+    fn cache_value(value: Self::Value) -> Result<String, Error>;
+}
+
+/// Cache each value `source`'s source announces, for as long as the instance
+/// runs. Every instance listens, since every instance has a cache of its own.
+pub async fn follow<T: Announced>(source: T) {
+    let key = source.cache_key();
+
+    loop {
+        match nats().subscribe(T::SUBJECT).await {
+            Ok(mut announcements) => {
+                while let Some(message) = announcements.next().await {
+                    let stored = match decode_structured_message::<T::Value>(message) {
+                        Ok(value) => match T::cache_value(value) {
+                            Ok(value) => store_cached(&key, &value).await,
+                            Err(e) => Err(e),
+                        },
+                        Err(e) => Err(e),
+                    };
+
+                    if let Err(e) = stored {
+                        tracing::warn!(key, "lazy cache announcement not stored: {e}");
+                    }
+                }
+
+                tracing::warn!(key, "lazy cache announcements ended; listening again");
+            }
+            Err(e) => tracing::warn!(key, "can't listen for lazy cache announcements: {e}"),
+        }
+
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
 }
 
 async fn refresh_cache<T: LazyCached>(source: &T) -> Result<(), Error> {

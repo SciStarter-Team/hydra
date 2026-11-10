@@ -1,0 +1,5 @@
+<select id="<%= self.id %>" name="reader" class="mt-1 block w-full px-3 py-2 rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+    <% for reader in common::message::log::ZooniverseReader::ALL.into_iter().rev() { %>
+        <option value="<%= reader.as_str() %>"<% if reader == self.selected { %> selected<% } %>><%= reader.label() %></option>
+    <% } %>
+</select>

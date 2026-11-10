@@ -1,0 +1,21 @@
+<div class="rounded-md border border-gray-200 bg-white divide-y divide-gray-200">
+    <% for access in &self.accesses { %>
+        <div class="px-4 py-3 text-sm">
+            <div class="font-medium text-gray-900">
+                <%= access.reader.label() %>
+                <% if let Some(account) = crate::admin::zooniverse_projects::access_account(access) { %>
+                    <span class="font-normal text-gray-500">(<%= account %>)</span>
+                <% } %>
+            </div>
+            <% if access.account.is_some() { %>
+                <div class="text-gray-600">
+                    Roles on Panoptes project <%= self.zooniverse_id %>:
+                    <% if access.roles.is_empty() { %>none<% } else { %><%= access.roles.join(", ") %><% } %>
+                </div>
+            <% } %>
+            <div class="<% if access.connectable() { %>text-green-700<% } else { %>text-gray-700<% } %>">
+                <%= crate::admin::zooniverse_projects::access_summary(access) %><% if access.connectable() { %>; connect it read as this account<% } %>
+            </div>
+        </div>
+    <% } %>
+</div>

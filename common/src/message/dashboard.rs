@@ -1111,6 +1111,11 @@ pub struct LinkToken {
     pub token: String,
     pub label: String,
     pub created: String,
+
+    /// Copied from orrery, which keeps it until cutover: affiliates report
+    /// to orrery until then, so deleting it here would disconnect nothing,
+    /// and it is deleted there. See `common::primary::CopyKeeper`.
+    pub orrery_owns: bool,
 }
 
 /// Sent via `user.link_tokens.add`. The handler mints a new token for
@@ -1135,7 +1140,7 @@ pub enum LinkTokenAdded {
 }
 
 /// Sent via `user.link_tokens.delete`. Deletes the token only if it belongs
-/// to `user_id`.
+/// to `user_id`, and isn't one orrery keeps.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkTokenDelete {
     pub user_id: Ulid,

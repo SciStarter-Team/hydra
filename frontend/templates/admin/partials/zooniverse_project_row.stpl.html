@@ -1,0 +1,67 @@
+<div data-zooniverse-project id="zooniverse-project-<%= self.project.zooniverse_id %>" class="px-6 py-4 space-y-3">
+    <div class="flex flex-col lg:grid lg:grid-cols-5 gap-3 lg:gap-4 lg:items-center">
+        <div>
+            <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">SciStarter project</div>
+            <% if let Some(name) = &self.name { %>
+                <a href="/-admin/projects/<%= self.project.entity_id|disp %>" class="text-sm text-indigo-600 hover:text-indigo-900"><%= name %></a>
+            <% } else { %>
+                <span class="text-sm text-gray-500">Unknown here (<%= self.project.entity_id|disp %>)</span>
+            <% } %>
+        </div>
+        <div>
+            <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Panoptes project</div>
+            <div class="text-sm text-gray-900 font-mono"><%= self.project.zooniverse_id %></div>
+        </div>
+        <div>
+            <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Read as</div>
+            <div class="text-sm text-gray-900"><%= self.project.reader.label() %></div>
+        </div>
+        <div>
+            <div class="lg:hidden text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Last classification read</div>
+            <div class="text-sm text-gray-500 font-mono"><% if self.project.last_classification_id == 0 { %>none yet<% } else { %><%= self.project.last_classification_id %><% } %></div>
+        </div>
+        <div class="flex flex-wrap gap-3 lg:justify-end">
+            <button
+                type="button"
+                hx-get="/-admin/zooniverse-projects/access?zooniverse_id=<%= self.project.zooniverse_id %>"
+                hx-target="#zooniverse-project-access-<%= self.project.zooniverse_id %>"
+                hx-swap="innerHTML"
+                class="text-sm font-medium text-indigo-600 hover:text-indigo-900"
+            >
+                Check access
+            </button>
+            <% if self.project.orrery_owns { %>
+                <span class="text-sm text-gray-500">from orrery</span>
+            <% } else { %>
+                <button
+                    type="button"
+                    hx-get="/-admin/zooniverse-projects/<%= self.project.zooniverse_id %>/edit"
+                    hx-target="closest [data-zooniverse-project]"
+                    hx-swap="outerHTML"
+                    class="text-sm font-medium text-indigo-600 hover:text-indigo-900"
+                >
+                    Edit
+                </button>
+                <button
+                    type="button"
+                    hx-delete="/-admin/zooniverse-projects/<%= self.project.zooniverse_id %>"
+                    hx-confirm="Stop crediting this project's classifications? The bridge remembers how far it read, so connecting the project again carries on from there."
+                    hx-target="closest [data-zooniverse-project]"
+                    hx-swap="outerHTML"
+                    class="text-sm font-medium text-red-600 hover:text-red-900"
+                >
+                    Disconnect
+                </button>
+            <% } %>
+        </div>
+    </div>
+    <% if let Some(refusal) = self.refusal { %>
+        <div role="alert" class="rounded-md bg-red-50 border border-red-200 p-3 space-y-2">
+            <p class="text-sm text-red-700"><%= refusal.message %></p>
+            <% if let Some(access) = refusal.access { %>
+                <%+ access %>
+            <% } %>
+        </div>
+    <% } %>
+    <div id="zooniverse-project-access-<%= self.project.zooniverse_id %>"></div>
+</div>

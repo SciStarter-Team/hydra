@@ -720,6 +720,9 @@ impl EventField {
         )
         .execute(db())
         .await?;
+
+        crate::region::refresh_event(&event_id_str).await?;
+
         Ok(())
     }
 
@@ -737,6 +740,9 @@ impl EventField {
         )
         .execute(db())
         .await?;
+
+        crate::region::refresh_event(&event_id_str).await?;
+
         Ok(())
     }
 

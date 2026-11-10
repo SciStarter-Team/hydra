@@ -1,7 +1,8 @@
 //! The dashboard's Link Tokens, which the account holder gives an affiliate
 //! project so that it can report their contributions. Listed and deleted here,
 //! and further ones added; the tokens themselves are user-service's, which
-//! gives every account its first.
+//! gives every account its first. Until cutover, a token copied from orrery
+//! is deleted on orrery, where affiliates report.
 
 use anyhow::{Error, anyhow};
 use common::message::dashboard::{
@@ -128,7 +129,30 @@ mod tests {
             token: token.to_string(),
             label: label.to_string(),
             created: "2024-02-20T15:04:05Z".to_string(),
+            orrery_owns: false,
         }
+    }
+
+    #[test]
+    fn a_token_orrery_keeps_is_deleted_there_rather_than_here() {
+        let html = LinkTokensSection {
+            tokens: vec![
+                LinkToken {
+                    orrery_owns: true,
+                    ..token("default", "01HQ3Z8Y6V2N4J5K7M8P9R0S1T")
+                },
+                token("Stall Catchers", "01HQ3Z8Y6V2N4J5K7M8P9R0S2V"),
+            ],
+            label: String::new(),
+            refusal: None,
+        }
+        .render_once()
+        .unwrap();
+
+        check!(html.contains(r#"name="token" value="01HQ3Z8Y6V2N4J5K7M8P9R0S2V""#));
+        check!(!html.contains(r#"name="token" value="01HQ3Z8Y6V2N4J5K7M8P9R0S1T""#));
+        check!(html.contains("dashboard on scistarter.org"));
+        check!(html.contains(r#"data-copies="link-token-01HQ3Z8Y6V2N4J5K7M8P9R0S1T""#));
     }
 
     #[test]

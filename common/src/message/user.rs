@@ -374,12 +374,8 @@ pub fn normalize_tag(tag: &str) -> String {
 /// that mark the account being created as one whose owner needs protection
 /// — a cohort signing up through a partner that enrolls minors. Kept in
 /// step with orrery's `PROTECTED_SIGNUP_TAGS`.
-pub const PROTECTED_SIGNUP_TAGS: [&str; 4] = [
-    "laplstudent",
-    "girlscout",
-    "port-charlotte",
-    "dca-ca-gov",
-];
+pub const PROTECTED_SIGNUP_TAGS: [&str; 4] =
+    ["laplstudent", "girlscout", "port-charlotte", "dca-ca-gov"];
 
 /// Whether an account signing up under `tags` must be protected.
 ///
@@ -461,9 +457,9 @@ pub struct SignupTagGrant {
 
     pub created: String,
 
-    /// Copied from orrery, which owns it: deleting it here would only last
-    /// until the next sync, so it is changed there.
-    pub from_orrery: bool,
+    /// Copied from orrery's admin, which keeps it until cutover, so it is
+    /// deleted there; see `common::primary::CopyKeeper`.
+    pub orrery_owns: bool,
 }
 
 /// Sent via `user.signup_tag_grants.add`. `tag` and `next_path` are as staff

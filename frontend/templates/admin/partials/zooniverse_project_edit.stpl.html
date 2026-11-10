@@ -1,0 +1,43 @@
+<div data-zooniverse-project id="zooniverse-project-<%= self.project.zooniverse_id %>" class="px-6 py-4 space-y-3 bg-gray-50">
+    <form
+        hx-put="/-admin/zooniverse-projects/<%= self.project.zooniverse_id %>"
+        hx-target="closest [data-zooniverse-project]"
+        hx-swap="outerHTML"
+        class="space-y-3"
+    >
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-start">
+            <%+ self.selector %>
+            <div>
+                <div class="block text-sm font-medium text-gray-700">Panoptes project</div>
+                <div class="mt-1 py-2 text-sm text-gray-900 font-mono"><%= self.project.zooniverse_id %></div>
+            </div>
+            <div>
+                <label for="zooniverse-project-reader-<%= self.project.zooniverse_id %>" class="block text-sm font-medium text-gray-700">Read as</label>
+                <%+ crate::admin::zooniverse_projects::ReaderSelect { id: &format!("zooniverse-project-reader-{}", self.project.zooniverse_id), selected: self.reader } %>
+                <p class="mt-1 text-xs text-gray-500">A new account has to be confirmed by Panoptes, and carries on from the last classification read.</p>
+            </div>
+        </div>
+        <% if let Some(refusal) = self.refusal { %>
+            <div role="alert" class="rounded-md bg-red-50 border border-red-200 p-3 space-y-2">
+                <p class="text-sm text-red-700"><%= refusal.message %></p>
+                <% if let Some(access) = refusal.access { %>
+                    <%+ access %>
+                <% } %>
+            </div>
+        <% } %>
+        <div class="flex flex-wrap gap-3">
+            <button type="submit" class="inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
+                Save
+            </button>
+            <button
+                type="button"
+                hx-get="/-admin/zooniverse-projects/<%= self.project.zooniverse_id %>"
+                hx-target="closest [data-zooniverse-project]"
+                hx-swap="outerHTML"
+                class="inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            >
+                Cancel
+            </button>
+        </div>
+    </form>
+</div>

@@ -720,6 +720,9 @@ async fn main() -> Result<(), Error> {
         tokio::spawn(training::content::TrainingOverrides::peering_task());
     let _archive_entry_updates = tokio::spawn(admin::archive::ArchiveEntry::peering_task());
     let _file_metadata_updates = tokio::spawn(upload::storage::FileMetadata::peering_task());
+    let _zooniverse_affiliate_announcements = tokio::spawn(lazy_cache::follow(
+        project::linked_platform::ZooniverseAffiliates,
+    ));
 
     // Loads the translation catalog into memory and starts the writer that
     // records newly displayed phrases. Awaited rather than spawned so the
@@ -2732,12 +2735,12 @@ mod sync {
             // built under is recorded alongside the bookmarks, and a
             // mismatch is as good a reason to rebuild as a moved boundary.
             let built_under: Option<String> = misc::get("region-match-rule").await.ok().flatten();
-            let rule = crate::region::MIN_OVERLAP.to_string();
+            let rule = crate::region::rule();
 
             if built_under.as_deref() != Some(rule.as_str()) {
                 tracing::info!(
                     "Region matching rule is now {rule} (cache built under {built_under:?}); \
-                     rebuilding project matches"
+                     rebuilding project and event matches"
                 );
 
                 match crate::region::rebuild_all().await {
@@ -2816,7 +2819,7 @@ mod sync {
             }
 
             if moved > 0 {
-                tracing::info!("{} region(s) changed; rebuilding project matches", moved);
+                tracing::info!("{} region(s) changed; rebuilding project and event matches", moved);
 
                 if let Err(e) = crate::region::rebuild_all().await {
                     eprintln!("Region match rebuild failed: {}", e);

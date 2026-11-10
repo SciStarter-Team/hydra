@@ -1,5 +1,6 @@
 use poem::{Endpoint, EndpointExt, Route};
 
+use super::events::exchange_events;
 use super::handlers::*;
 use crate::middleware::session_cookie::EnablePartitionedCookies;
 
@@ -9,6 +10,7 @@ pub fn routes() -> impl Endpoint {
         .at("/:exchange/", poem::get(exchange_home))
         .at("/:exchange/index.html", poem::get(exchange_home))
         .at("/:exchange/results", poem::get(exchange_results))
+        .at("/:exchange/events", poem::get(exchange_events))
         .at("/:exchange/projects.csv", poem::get(exchange_csv))
         .at("/:exchange/org.html", poem::get(exchange_admin))
         .at("/:exchange/data.html", poem::get(exchange_data))
