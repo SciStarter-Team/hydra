@@ -16,25 +16,40 @@ pub mod tracking;
 // Re-export routes function for convenience
 pub use routes::routes;
 
-/// The exchange a project or event is being submitted through, given the
-/// `?exchange=` its add form was opened with: the exchange's ULID, as a
-/// submission's `exchange` holds it.
-///
-/// Anything that names no exchange -- blank, not a number, or a number no
-/// exchange has -- submits it through none, as orrery does.
-pub async fn submitted_through(path_id: &str) -> Result<Option<String>, Error> {
-    let Ok(path_id) = path_id.trim().parse::<i64>() else {
-        return Ok(None);
-    };
+/// The exchange a project or event is being submitted through, which will
+/// review it.
+#[derive(Debug, Clone)]
+pub struct SubmissionExchange {
+    /// The exchange's ULID, as a submission's `exchange` holds it.
+    pub exchange_id: String,
+    /// The number its add links carry as `?exchange=`.
+    pub path_id: i64,
+    pub name: String,
+}
 
-    let exchange_id = sqlx::query_scalar!(
-        "SELECT exchange_id FROM exchanges WHERE path_id = ?",
-        path_id
-    )
-    .fetch_optional(db())
-    .await?;
+impl SubmissionExchange {
+    /// The exchange an add form's `?exchange=` names.
+    ///
+    /// Anything that names no exchange -- blank, not a number, or a number
+    /// no exchange has -- submits through none, as orrery does.
+    pub async fn find(path_id: &str) -> Result<Option<Self>, Error> {
+        let Ok(path_id) = path_id.trim().parse::<i64>() else {
+            return Ok(None);
+        };
 
-    Ok(exchange_id)
+        let found = sqlx::query!(
+            "SELECT exchange_id, name FROM exchanges WHERE path_id = ?",
+            path_id
+        )
+        .fetch_optional(db())
+        .await?;
+
+        Ok(found.map(|row| SubmissionExchange {
+            exchange_id: row.exchange_id,
+            path_id,
+            name: row.name,
+        }))
+    }
 }
 
 /// Lightweight exchange info for page rendering (no nested collections)

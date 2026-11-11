@@ -1,54 +1,69 @@
-<% use crate::component::detail_page::{PlatformAccountOutcome, PlatformAccountVisitor}; %>
+<% use crate::component::detail_page::{PlatformAccountForm, PlatformAccountOutcome, PlatformAccountStep, VisitLinkInclude}; %>
 <% use crate::project::linked_platform::PlatformCopy; %>
 <% let label = self.platform.label(); %>
-<div id="platform-account" class="mb-3">
-  <% let connected = match &self.visitor { PlatformAccountVisitor::SignedIn(username) if !username.is_empty() && !self.outcome.refused() => Some(username.as_str()), _ => None }; %>
-  <% if let Some(username) = connected { %>
-  <p class="mb-3" role="status">Linked to <%= label %> account <strong><%= username %></strong>.</p>
-  <details class="mb-3">
-    <summary class="cursor-pointer text-primary-action underline text-sm w-fit">Change</summary>
-    <form class="mt-2" hx-post="/-detail/<%= &self.target_id %>/platform-account" hx-target="#platform-account" hx-swap="outerHTML">
-      <label for="platform-username" class="block text-sm font-semibold mb-1"><%= label %> username</label>
-      <div class="flex gap-2 max-w-md">
-        <input id="platform-username" name="username" type="text" value="<%= username %>" autocomplete="off" spellcheck="false" class="flex-1 min-w-0 border border-linework rounded-sm px-3 py-2 text-sm bg-white">
-        <button type="submit" class="btn btn-primary btn-thin">Save</button>
-      </div>
-    </form>
-  </details>
-  <% } else { %>
-  <% let signed_in = matches!(self.visitor, PlatformAccountVisitor::SignedIn(_)); %>
-  <h4 class="font-semibold text-primary-dark mt-4 mb-2"><% if signed_in { %>Two<% } else { %>Three<% } %> Easy Steps!</h4>
-  <ol class="list-decimal pl-6 mb-3 space-y-2">
-    <% if let PlatformAccountVisitor::SignedOut(auth) = &self.visitor { %>
-    <li>
-      <p class="mb-2">Sign in to SciStarter or create a free SciStarter account.</p>
-      <%+ auth.clone() %>
+<% let contribution = self.platform.contribution(); %>
+<% let endpoint = format!("/-detail/{}/platform-account", self.target_id); %>
+<div id="platform-account" class="mb-6">
+  <% match self.step() { PlatformAccountStep::Connected { username } => { %>
+  <h3 class="text-lg font-semibold text-primary-dark mb-2"><span class="text-green-700 mr-1" aria-hidden="true">&#10003;</span> You&rsquo;re connected and ready!</h3>
+  <p class="mb-2"<% if self.outcome == PlatformAccountOutcome::Saved { %> role="status"<% } %>><%= label %> account: <strong><%= username %></strong>
+    <span aria-hidden="true">&middot;</span>
+    <button type="button" class="text-primary-action underline py-3 -my-3 md:py-0 md:my-0" hx-get="<%= &endpoint %>?change=true" hx-target="#platform-account" hx-swap="outerHTML">Change<span class="sr-only"> <%= label %> username</span></button></p>
+  <p class="text-sm text-neutral-mid mb-3">New <%= contribution %>s appear on your <a class="text-primary-action underline" href="/dashboard">Dashboard</a> within 24 hours.</p>
+  <% if !self.project_url.is_empty() { %>
+  <% let start = format!("Start {}", self.project_name.trim()); %>
+  <%+ VisitLinkInclude { url: &self.project_url, label: &start, class: "font-bold! whitespace-normal! text-center justify-center w-full min-h-11 md:w-auto md:min-h-0" } %>
+  <% } %>
+  <% } step => { %>
+  <h3 class="text-lg font-semibold text-primary-dark mb-2">Connect Your <%= label %> Account</h3>
+  <%/* On the platform's own page, "X is hosted on X" would read oddly */%>
+  <p class="mb-2"><% if self.project_name.trim() != label { %><%= self.project_name.trim() %> is hosted on <%= label %>.<br><% } %>Connect once to track contributions on SciStarter.</p>
+  <ol class="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2 my-4 text-sm">
+    <% if let PlatformAccountStep::SignedOut { sign_in_url } = &step { %>
+    <li class="flex items-center gap-2 min-h-11 md:min-h-0">
+      <span class="inline-flex items-center justify-center shrink-0 size-7 rounded-full bg-line-blue text-primary-dark font-bold" aria-hidden="true">1</span>
+      <span><a class="text-primary-action underline" href="<%= sign_in_url %>">Sign in or create a SciStarter account</a></span>
+    </li>
+    <% } else { %>
+    <li class="flex items-center gap-2 min-h-11 md:min-h-0">
+      <span class="inline-flex items-center justify-center shrink-0 size-7 rounded-full bg-green-100 text-green-700 font-bold" aria-hidden="true">&#10003;</span>
+      <span>Signed in to SciStarter<span class="sr-only"> (done)</span></span>
     </li>
     <% } %>
-    <li><p><a class="text-primary-action underline" href="<%= self.platform.sign_in_url() %>" target="_blank" rel="noopener">Sign up or sign in to <%= label %></a><% if self.has_app_links { %> (or use the app links below)<% } %> and copy your username.<% if let Some(hint) = self.platform.username_hint() { %> <%= hint %><% } %></p></li>
-    <li><p>Return here and paste your <%= label %> username below<% if self.platform.username_case_sensitive() { %> (case-sensitive)<% } %>.</p></li>
+    <li class="flex items-center gap-2 min-h-11 md:min-h-0">
+      <span class="inline-flex items-center justify-center shrink-0 size-7 rounded-full bg-line-blue text-primary-dark font-bold" aria-hidden="true">2</span>
+      <span><a class="text-primary-action underline" href="<%= self.platform.sign_in_url() %>" target="_blank" rel="noopener">Sign in or create <%= self.platform.article() %> <%= label %> account</a></span>
+    </li>
+    <li class="flex items-center gap-2 min-h-11 md:min-h-0">
+      <span class="inline-flex items-center justify-center shrink-0 size-7 rounded-full bg-line-blue text-primary-dark font-bold" aria-hidden="true">3</span>
+      <span>Enter your <%= label %> username</span>
+    </li>
   </ol>
-  <form hx-post="/-detail/<%= &self.target_id %>/platform-account" hx-target="#platform-account" hx-swap="outerHTML">
-    <label for="platform-username" class="block text-sm font-semibold mb-1"><%= label %> username</label>
-    <div class="flex gap-2 max-w-md">
-      <% if signed_in { %>
-      <input id="platform-username" name="username" type="text" autocomplete="off" spellcheck="false" class="flex-1 min-w-0 border border-linework rounded-sm px-3 py-2 text-sm bg-white">
-      <button type="submit" class="btn btn-primary btn-thin">Save</button>
-      <% } else { %>
-      <input id="platform-username" name="username" type="text" disabled aria-describedby="platform-username-note" class="flex-1 min-w-0 border border-linework rounded-sm px-3 py-2 text-sm bg-gray-100! cursor-not-allowed">
-      <button type="submit" class="btn btn-primary btn-thin opacity-50 cursor-not-allowed" disabled>Save</button>
-      <% } %>
+  <% match step { PlatformAccountStep::Naming { value, keep } => { %>
+  <form hx-post="<%= &endpoint %>" hx-target="#platform-account" hx-swap="outerHTML">
+    <label for="platform-username" class="sr-only">Enter your <%= label %> username</label>
+    <div class="flex flex-col md:flex-row gap-3 max-w-xl mb-2">
+      <input id="platform-username" name="username" type="text" value="<%= value %>" placeholder="Enter your <%= label %> username" autocomplete="off" spellcheck="false" data-saved="<%= keep.unwrap_or_default() %>"
+             class="flex-1 min-w-0 w-full min-h-11 md:min-h-0 border border-linework rounded-sm px-3 py-2 text-sm bg-white"
+             hx-on:input="var v = this.value.trim(); this.form.querySelector('[type=submit]').disabled = !v || v === this.dataset.saved;">
+      <button type="submit" class="btn btn-primary btn-thin inline-flex! items-center justify-center font-bold! w-full min-h-11 md:w-auto md:min-h-0 disabled:opacity-50 disabled:cursor-not-allowed"<% if PlatformAccountForm::submits_nothing(value, keep) { %> disabled<% } %>>Connect My Account</button>
     </div>
-    <% if !signed_in { %>
-    <p id="platform-username-note" class="text-sm text-gray-600 mt-1">Sign in or create your SciStarter account (step 1) first.</p>
+    <% if self.outcome == PlatformAccountOutcome::Blank { %>
+    <p class="text-sm text-red-700 mb-1" role="alert">Please enter your <%= label %> username.</p>
+    <% } %>
+    <% if let PlatformAccountOutcome::Unknown(typed) = &self.outcome { %>
+    <p class="text-sm text-red-700 mb-1" role="alert"><%= label %> has no account named <strong><%= typed %></strong>.</p>
+    <% } %>
+    <% if let Some(hint) = self.platform.username_hint() { %>
+    <p class="text-sm text-neutral-mid mb-1"><%= hint %></p>
+    <% } %>
+    <p class="text-sm text-neutral-mid mb-1">Just once. Only <%= contribution %>s <%= self.platform.contributed() %> after connecting can be credited.</p>
+    <% if let Some(saved) = keep { %>
+    <p class="text-sm mb-1"><button type="button" class="text-primary-action underline py-3 -my-3 md:py-0 md:my-0" hx-get="<%= &endpoint %>" hx-target="#platform-account" hx-swap="outerHTML">Keep <%= saved %></button></p>
     <% } %>
   </form>
-  <% if self.outcome == PlatformAccountOutcome::Blank { %>
-  <p class="text-sm text-red-700 mt-2" role="alert">Please enter your <%= label %> username.</p>
-  <% } %>
-  <% if let (PlatformAccountOutcome::Unknown, PlatformAccountVisitor::SignedIn(username)) = (self.outcome, &self.visitor) { %>
-  <p class="text-sm text-red-700 mt-2" role="alert"><%= label %> has no account named <strong><%= username %></strong>.<% if let Some(hint) = self.platform.username_hint() { %> <%= hint %><% } %></p>
-  <% } %>
-  <p class="mt-3">That's it! This is a one-time setup, even if you join more <% if self.platform.eligible_projects_url().is_some() { %>SciStarter Affiliate <% } %><%= label %> projects in the future!</p>
-  <% } %>
+  <% } _ => { %>
+  <p class="text-sm text-neutral-mid">Sign in to SciStarter to enter your <%= label %> username.</p>
+  <% } } %>
+  <% } } %>
 </div>

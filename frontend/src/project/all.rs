@@ -139,11 +139,6 @@ pub struct ProjectAll {
     pub classroom_materials: String,
     pub consent_statement: String,
     pub consent_statement_date: Option<TimeString>,
-    pub participation_tools: bool, // deprecated, maybe don't implement
-    pub participation_prompt: String, // deprecated, maybe don't implement
-    pub participation_confirmation_message: String, // deprecated, maybe don't implement
-    pub participation_notification_email: String, // deprecated, maybe don't implement
-    pub participation_usage: String, // deprecated, maybe don't implement
 
     // section Relations
     pub part_of: Option<Ulid>,
@@ -414,11 +409,6 @@ impl ProjectAll {
           "classroom_materials",
           "consent_statement",
           "consent_statement_date",
-          "participation_tools",
-          "participation_prompt",
-          "participation_confirmation_message",
-          "participation_notification_email",
-          "participation_usage",
           "part_of",
           "total_expense",
           "materials",
@@ -466,7 +456,7 @@ impl ProjectAll {
           "point"
         ) values (
           ?1,
-          ?114,
+          ?109,
           ?2,
           ?3,
           ?4,
@@ -572,26 +562,21 @@ impl ProjectAll {
           ?104,
           ?105,
           ?106,
-          ?107,
-          ?108,
-          ?109,
-          ?110,
-          ?111,
           case
-            when ?112 is null then
+            when ?107 is null then
               null
-            when substr(?112, 1, 1) == '{' and substr(?112, -1, 1) == '}' then
-              SetSRID(GeomFromGeoJSON(?112), 4326)
+            when substr(?107, 1, 1) == '{' and substr(?107, -1, 1) == '}' then
+              SetSRID(GeomFromGeoJSON(?107), 4326)
             else
-              GeomFromEWKT(?112)
+              GeomFromEWKT(?107)
           end,
           case
-            when ?113 is null then
+            when ?108 is null then
               null
-            when substr(?113, 1, 1) == '{' and substr(?113, -1, 1) == '}' then
-              SetSRID(GeomFromGeoJSON(?113), 4326)
+            when substr(?108, 1, 1) == '{' and substr(?108, -1, 1) == '}' then
+              SetSRID(GeomFromGeoJSON(?108), 4326)
             else
-              GeomFromEWKT(?113)
+              GeomFromEWKT(?108)
           end
         )
         on conflict ("project_id") do update set
@@ -658,11 +643,6 @@ impl ProjectAll {
           "classroom_materials" = excluded."classroom_materials",
           "consent_statement" = excluded."consent_statement",
           "consent_statement_date" = excluded."consent_statement_date",
-          "participation_tools" = excluded."participation_tools",
-          "participation_prompt" = excluded."participation_prompt",
-          "participation_confirmation_message" = excluded."participation_confirmation_message",
-          "participation_notification_email" = excluded."participation_notification_email",
-          "participation_usage" = excluded."participation_usage",
           "part_of" = excluded."part_of",
           "total_expense" = excluded."total_expense",
           "materials" = excluded."materials",
@@ -772,11 +752,6 @@ impl ProjectAll {
             self.classroom_materials,
             self.consent_statement,
             self.consent_statement_date,
-            self.participation_tools,
-            self.participation_prompt,
-            self.participation_confirmation_message,
-            self.participation_notification_email,
-            self.participation_usage,
             part_of,
             self.total_expense,
             self.materials,
@@ -1401,17 +1376,6 @@ impl ProjectAll {
             classroom_materials: merge_field!(classroom_materials, ClassroomMaterials),
             consent_statement: merge_field!(consent_statement, ConsentStatement),
             consent_statement_date: merge_field!(consent_statement_date, ConsentStatementDate),
-            participation_tools: merge_field!(participation_tools, ParticipationTools, copy),
-            participation_prompt: merge_field!(participation_prompt, ParticipationPrompt),
-            participation_confirmation_message: merge_field!(
-                participation_confirmation_message,
-                ParticipationConfirmationMessage
-            ),
-            participation_notification_email: merge_field!(
-                participation_notification_email,
-                ParticipationNotificationEmail
-            ),
-            participation_usage: merge_field!(participation_usage, ParticipationUsage),
 
             // Relations section
             part_of: merge_field!(part_of, PartOf, copy),
@@ -1555,9 +1519,7 @@ impl LoadStorePeered for ProjectAll {
                 prefix_how_to_logged_out, how_to_join,
                 outcomes_label, outcomes_link, time_required, training_materials,
                 classroom_materials, consent_statement, consent_statement_date,
-                participation_tools, participation_prompt,
-                participation_confirmation_message, participation_notification_email,
-                participation_usage, part_of, total_expense, materials, gear,
+                part_of, total_expense, materials, gear,
                 mobile_app_url_android, mobile_app_url_ios, mobile_app_url,
                 location_type, entirely_online, on_demand, in_person,
                 indoors, outdoors, regions_description, address, city, state,
@@ -1808,11 +1770,6 @@ impl LoadStorePeered for ProjectAll {
                 .map(|s| TimeString::try_from(s))
                 .transpose()
                 .map_err(|e| anyhow::anyhow!("Invalid consent_statement_date TimeString: {}", e))?,
-            participation_tools: project_row.participation_tools,
-            participation_prompt: project_row.participation_prompt,
-            participation_confirmation_message: project_row.participation_confirmation_message,
-            participation_notification_email: project_row.participation_notification_email,
-            participation_usage: project_row.participation_usage,
 
             // Relations section
             part_of: project_row

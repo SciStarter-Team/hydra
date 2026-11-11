@@ -260,11 +260,6 @@ pub enum ProjectFieldValue {
     ClassroomMaterials(String),
     ConsentStatement(String),
     ConsentStatementDate(Option<TimeString>),
-    ParticipationTools(bool),
-    ParticipationPrompt(String),
-    ParticipationConfirmationMessage(String),
-    ParticipationNotificationEmail(String),
-    ParticipationUsage(String),
     PartOf(Option<Ulid>),
     AssociatedProjects(Box<[Ulid]>),
     TotalExpense(Option<f32>),
@@ -560,15 +555,6 @@ impl ProjectField {
             ProjectFieldValue::ClassroomMaterials(_) => ProjectFieldType::ClassroomMaterials,
             ProjectFieldValue::ConsentStatement(_) => ProjectFieldType::ConsentStatement,
             ProjectFieldValue::ConsentStatementDate(_) => ProjectFieldType::ConsentStatementDate,
-            ProjectFieldValue::ParticipationTools(_) => ProjectFieldType::ParticipationTools,
-            ProjectFieldValue::ParticipationPrompt(_) => ProjectFieldType::ParticipationPrompt,
-            ProjectFieldValue::ParticipationConfirmationMessage(_) => {
-                ProjectFieldType::ParticipationConfirmationMessage
-            }
-            ProjectFieldValue::ParticipationNotificationEmail(_) => {
-                ProjectFieldType::ParticipationNotificationEmail
-            }
-            ProjectFieldValue::ParticipationUsage(_) => ProjectFieldType::ParticipationUsage,
             ProjectFieldValue::PartOf(_) => ProjectFieldType::PartOf,
             ProjectFieldValue::AssociatedProjects(_) => ProjectFieldType::AssociatedProjects,
             ProjectFieldValue::TotalExpense(_) => ProjectFieldType::TotalExpense,
@@ -1983,76 +1969,6 @@ impl ProjectField {
         ))
     }
 
-    async fn read_participation_tools(project_id: Ulid) -> Result<Self, Error> {
-        let project_id_str = project_id.to_string();
-        let participation_tools = sqlx::query_scalar!(
-            "SELECT participation_tools FROM projects WHERE project_id = ?",
-            project_id_str
-        )
-        .fetch_one(db())
-        .await?;
-        Ok(ProjectField::new(
-            project_id,
-            ProjectFieldValue::ParticipationTools(participation_tools),
-        ))
-    }
-
-    async fn read_participation_prompt(project_id: Ulid) -> Result<Self, Error> {
-        let project_id_str = project_id.to_string();
-        let participation_prompt = sqlx::query_scalar!(
-            "SELECT participation_prompt FROM projects WHERE project_id = ?",
-            project_id_str
-        )
-        .fetch_one(db())
-        .await?;
-        Ok(ProjectField::new(
-            project_id,
-            ProjectFieldValue::ParticipationPrompt(participation_prompt),
-        ))
-    }
-
-    async fn read_participation_confirmation_message(project_id: Ulid) -> Result<Self, Error> {
-        let project_id_str = project_id.to_string();
-        let participation_confirmation_message = sqlx::query_scalar!(
-            "SELECT participation_confirmation_message FROM projects WHERE project_id = ?",
-            project_id_str
-        )
-        .fetch_one(db())
-        .await?;
-        Ok(ProjectField::new(
-            project_id,
-            ProjectFieldValue::ParticipationConfirmationMessage(participation_confirmation_message),
-        ))
-    }
-
-    async fn read_participation_notification_email(project_id: Ulid) -> Result<Self, Error> {
-        let project_id_str = project_id.to_string();
-        let participation_notification_email = sqlx::query_scalar!(
-            "SELECT participation_notification_email FROM projects WHERE project_id = ?",
-            project_id_str
-        )
-        .fetch_one(db())
-        .await?;
-        Ok(ProjectField::new(
-            project_id,
-            ProjectFieldValue::ParticipationNotificationEmail(participation_notification_email),
-        ))
-    }
-
-    async fn read_participation_usage(project_id: Ulid) -> Result<Self, Error> {
-        let project_id_str = project_id.to_string();
-        let participation_usage = sqlx::query_scalar!(
-            "SELECT participation_usage FROM projects WHERE project_id = ?",
-            project_id_str
-        )
-        .fetch_one(db())
-        .await?;
-        Ok(ProjectField::new(
-            project_id,
-            ProjectFieldValue::ParticipationUsage(participation_usage),
-        ))
-    }
-
     async fn read_part_of(project_id: Ulid) -> Result<Self, Error> {
         let project_id_str = project_id.to_string();
         let part_of_str = sqlx::query_scalar!(
@@ -3305,72 +3221,6 @@ impl ProjectField {
         Ok(())
     }
 
-    async fn save_participation_tools(&self, participation_tools: bool) -> Result<(), Error> {
-        let project_id_str = self.project_id.to_string();
-        sqlx::query!(
-            "UPDATE projects SET participation_tools = ? WHERE project_id = ?",
-            participation_tools,
-            project_id_str
-        )
-        .execute(db())
-        .await?;
-        Ok(())
-    }
-
-    async fn save_participation_prompt(&self, participation_prompt: &str) -> Result<(), Error> {
-        let project_id_str = self.project_id.to_string();
-        sqlx::query!(
-            "UPDATE projects SET participation_prompt = ? WHERE project_id = ?",
-            participation_prompt,
-            project_id_str
-        )
-        .execute(db())
-        .await?;
-        Ok(())
-    }
-
-    async fn save_participation_confirmation_message(
-        &self,
-        participation_confirmation_message: &str,
-    ) -> Result<(), Error> {
-        let project_id_str = self.project_id.to_string();
-        sqlx::query!(
-            "UPDATE projects SET participation_confirmation_message = ? WHERE project_id = ?",
-            participation_confirmation_message,
-            project_id_str
-        )
-        .execute(db())
-        .await?;
-        Ok(())
-    }
-
-    async fn save_participation_notification_email(
-        &self,
-        participation_notification_email: &str,
-    ) -> Result<(), Error> {
-        let project_id_str = self.project_id.to_string();
-        sqlx::query!(
-            "UPDATE projects SET participation_notification_email = ? WHERE project_id = ?",
-            participation_notification_email,
-            project_id_str
-        )
-        .execute(db())
-        .await?;
-        Ok(())
-    }
-
-    async fn save_participation_usage(&self, participation_usage: &str) -> Result<(), Error> {
-        let project_id_str = self.project_id.to_string();
-        sqlx::query!(
-            "UPDATE projects SET participation_usage = ? WHERE project_id = ?",
-            participation_usage,
-            project_id_str
-        )
-        .execute(db())
-        .await?;
-        Ok(())
-    }
-
     async fn save_part_of(&self, part_of: &Option<Ulid>) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
         let part_of_str = part_of.map(|u| u.to_string());
@@ -4022,25 +3872,6 @@ impl LoadStorePeered for ProjectField {
                 self.save_consent_statement_date(consent_statement_date)
                     .await
             }
-            ProjectFieldValue::ParticipationTools(participation_tools) => {
-                self.save_participation_tools(*participation_tools).await
-            }
-            ProjectFieldValue::ParticipationPrompt(participation_prompt) => {
-                self.save_participation_prompt(participation_prompt).await
-            }
-            ProjectFieldValue::ParticipationConfirmationMessage(
-                participation_confirmation_message,
-            ) => {
-                self.save_participation_confirmation_message(participation_confirmation_message)
-                    .await
-            }
-            ProjectFieldValue::ParticipationNotificationEmail(participation_notification_email) => {
-                self.save_participation_notification_email(participation_notification_email)
-                    .await
-            }
-            ProjectFieldValue::ParticipationUsage(participation_usage) => {
-                self.save_participation_usage(participation_usage).await
-            }
             ProjectFieldValue::PartOf(part_of) => self.save_part_of(part_of).await,
             ProjectFieldValue::Materials(materials) => self.save_materials(materials).await,
             ProjectFieldValue::Gear(gear) => self.save_gear(gear).await,
@@ -4270,21 +4101,6 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::ConsentStatement => Self::read_consent_statement(project_id).await,
             ProjectFieldType::ConsentStatementDate => {
                 Self::read_consent_statement_date(project_id).await
-            }
-            ProjectFieldType::ParticipationTools => {
-                Self::read_participation_tools(project_id).await
-            }
-            ProjectFieldType::ParticipationPrompt => {
-                Self::read_participation_prompt(project_id).await
-            }
-            ProjectFieldType::ParticipationConfirmationMessage => {
-                Self::read_participation_confirmation_message(project_id).await
-            }
-            ProjectFieldType::ParticipationNotificationEmail => {
-                Self::read_participation_notification_email(project_id).await
-            }
-            ProjectFieldType::ParticipationUsage => {
-                Self::read_participation_usage(project_id).await
             }
             ProjectFieldType::PartOf => Self::read_part_of(project_id).await,
             ProjectFieldType::Materials => Self::read_materials(project_id).await,

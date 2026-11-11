@@ -68,10 +68,9 @@ pub(crate) fn push_zooniverse_affiliate_filter(qb: &mut sqlx::QueryBuilder<sqlx:
 /// How a project page talks about a platform, beside what
 /// `common::linked_platform` knows of it.
 pub trait PlatformCopy {
-    /// Where the platform's projects that credit participation are listed,
-    /// when only some of them do; None when every project on the platform
-    /// does.
-    fn eligible_projects_url(self) -> Option<String>;
+    /// The indefinite article the platform's name takes: "an iNaturalist
+    /// account".
+    fn article(self) -> &'static str;
 
     /// Where a visitor signs up or signs in to the platform to find their
     /// username.
@@ -88,14 +87,10 @@ pub trait PlatformCopy {
 }
 
 impl PlatformCopy for LinkedPlatform {
-    fn eligible_projects_url(self) -> Option<String> {
+    fn article(self) -> &'static str {
         match self {
-            LinkedPlatform::INaturalist => None,
-            LinkedPlatform::Zooniverse => Some(
-                crate::search::FinderQuery::projects()
-                    .with_misc_filter(crate::search::MiscFilter::ZooniverseAffiliate)
-                    .url(),
-            ),
+            LinkedPlatform::INaturalist => "an",
+            LinkedPlatform::Zooniverse => "a",
         }
     }
 

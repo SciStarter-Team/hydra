@@ -1,0 +1,8 @@
+<% if self.oob { %>
+<input type="hidden" id="submission-exchange-field" name="exchange" value="" hx-swap-oob="true">
+<% } %>
+<div id="submission-exchange">
+  <% if let Some(exchange) = self.exchange { %>
+  <p class="border border-linework bg-primary-light text-neutral-dark px-4 py-3 rounded mb-6">You&rsquo;re adding this <%= self.noun %> through <strong><%= &exchange.name %></strong>, who will be responsible for reviewing it. <a class="text-primary-action underline" href="<%= self.path %>?exchange=" hx-post="/add/exchange/clear" hx-target="#submission-exchange" hx-swap="outerHTML">Submit it to SciStarter instead</a></p>
+  <% } %>
+</div>

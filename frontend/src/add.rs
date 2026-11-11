@@ -6,7 +6,8 @@ use std::sync::Arc;
 use jiff::{Zoned, civil, tz::TimeZone};
 use poem::{
     IntoResponse, Response, handler,
-    web::{Query, Redirect},
+    session::Session,
+    web::{Html, Query, Redirect},
 };
 use sailfish::TemplateOnce;
 use serde::{Deserialize, Serialize};
@@ -32,6 +33,7 @@ use crate::{
     contact::{Contact, ContactRole},
     entity::{Entity, EntityKind, EntityTarget},
     event::{EventInstance, all::EventAll, facebook::FacebookEvent},
+    exchange::SubmissionExchange,
     form::QsForm,
     middleware::authorization::Authenticated,
     peering::LoadStorePeered,
@@ -62,7 +64,12 @@ struct AddChooserContent {
 #[tracing::instrument]
 pub async fn add_chooser_page(
     Authenticated(user_info): Authenticated,
+    session: &Session,
+    Query(query): Query<AddQuery>,
 ) -> Result<Response, anyhow::Error> {
+    // The chooser only passes the exchange on to the form picked from it.
+    session_exchange(session, &query).await?;
+
     let layout = StandardLayout::new(
         "/add",
         AddChooserContent {
@@ -491,6 +498,8 @@ struct AddEventPage {
 struct AddEventContent {
     error: Option<FormError>,
     values: EventFormValues,
+    /// The exchange the form's `exchange` field names, if it names one.
+    exchange: Option<SubmissionExchange>,
     event_types: ChoiceGroup,
     topics: ChoiceGroup,
     audience: ChoiceGroup,
@@ -744,27 +753,120 @@ struct TagInput {
 // Add Event: handlers
 // ---------------------------------------------------------------------------
 
-/// The query an add form can be opened with.
+/// The query an add page can be opened with.
 #[derive(Debug, Default, Deserialize)]
 pub struct AddQuery {
     /// The `path_id` of the exchange the submission is made through, which
     /// is how an exchange's "Add a Project" and "Add an Event" links open
-    /// these forms.
-    #[serde(default)]
-    exchange: String,
+    /// these pages. Present but empty, it stops submitting through one.
+    exchange: Option<String>,
 }
 
 impl AddQuery {
     /// Where to send someone who must log in first, so they come back to
     /// the same form for the same exchange.
     fn login_redirect(&self, path: &str) -> Redirect {
-        let next = if self.exchange.is_empty() {
-            path.to_string()
-        } else {
-            format!("{path}?exchange={}", self.exchange)
+        let next = match self.exchange.as_deref() {
+            Some(exchange) => format!("{path}?exchange={}", urlencoding::encode(exchange)),
+            None => path.to_string(),
         };
         Redirect::see_other(format!("/login?next={}", urlencoding::encode(&next)))
     }
+}
+
+/// The session key holding the `path_id` of the exchange this visitor's
+/// submissions go through.
+const SESSION_EXCHANGE: &str = "submission_exchange";
+
+/// How long the exchange is remembered once no add page has used it. A
+/// session lasts months, and someone who once followed an exchange's link
+/// does not mean everything they add afterwards to go to it.
+const SESSION_EXCHANGE_IDLE: jiff::SignedDuration = jiff::SignedDuration::from_hours(4);
+
+/// The exchange remembered in the session, and when an add page last used
+/// it.
+#[derive(Debug, Serialize, Deserialize)]
+struct RememberedExchange {
+    path_id: String,
+    used: jiff::Timestamp,
+}
+
+impl RememberedExchange {
+    /// Whether it has gone unused long enough at `now` to be forgotten.
+    fn lapsed(&self, now: jiff::Timestamp) -> bool {
+        now.duration_since(self.used) > SESSION_EXCHANGE_IDLE
+    }
+}
+
+/// The exchange this visitor's submissions go through.
+///
+/// An add page opened with `?exchange=` remembers it in the session, so
+/// that a project or event started later from the site's own "add" links
+/// still goes to that exchange; an empty `?exchange=` clears it. Each add
+/// page that uses it keeps it for another [`SESSION_EXCHANGE_IDLE`], and
+/// after that long unused it is forgotten, as is one that names no
+/// exchange.
+async fn session_exchange(
+    session: &Session,
+    query: &AddQuery,
+) -> Result<Option<SubmissionExchange>, anyhow::Error> {
+    let now = jiff::Timestamp::now();
+
+    let path_id = match query.exchange.as_deref().map(str::trim) {
+        Some("") => None,
+        Some(path_id) => Some(path_id.to_string()),
+        None => session
+            .get::<RememberedExchange>(SESSION_EXCHANGE)
+            .filter(|remembered| !remembered.lapsed(now))
+            .map(|remembered| remembered.path_id),
+    };
+
+    let exchange = match &path_id {
+        Some(path_id) => SubmissionExchange::find(path_id).await?,
+        None => None,
+    };
+
+    match (path_id, &exchange) {
+        (Some(path_id), Some(_)) => {
+            session.set(SESSION_EXCHANGE, RememberedExchange { path_id, used: now })
+        }
+        _ => session.remove(SESSION_EXCHANGE),
+    }
+
+    Ok(exchange)
+}
+
+/// The notice under an add form's heading naming the exchange the
+/// submission goes through, and the form's field carrying it. Answering
+/// the notice's link replaces it, and the field out of band, with an empty
+/// one.
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/add_exchange_notice.stpl.html")]
+pub struct ExchangeNotice<'a> {
+    pub exchange: Option<&'a SubmissionExchange>,
+    /// What is being added: "project" or "event".
+    pub noun: &'a str,
+    /// The form's own path, which the link falls back to without htmx.
+    pub path: &'a str,
+    /// Whether this is the reply to the link, which also clears the field.
+    pub oob: bool,
+}
+
+/// POST `/add/exchange/clear` — stop submitting through an exchange, in
+/// answer to the link in [`ExchangeNotice`].
+#[handler]
+pub async fn add_exchange_clear(session: &Session) -> Result<Response, anyhow::Error> {
+    session.remove(SESSION_EXCHANGE);
+
+    let html = ExchangeNotice {
+        exchange: None,
+        noun: "",
+        path: "",
+        oob: true,
+    }
+    .render_once()?;
+
+    Ok(Html(html).into_response())
 }
 
 /// GET `/add/event` — render the (empty) submission form. Submitting requires
@@ -773,14 +875,17 @@ impl AddQuery {
 #[tracing::instrument]
 pub async fn add_event_page(
     Authenticated(user_info): Authenticated,
+    session: &Session,
     Query(query): Query<AddQuery>,
 ) -> Result<Response, anyhow::Error> {
+    let exchange = session_exchange(session, &query).await?;
+
     if user_info.is_none() {
         return Ok(query.login_redirect("/add/event").into_response());
     }
 
     let mut values = EventFormValues::default();
-    values.exchange = query.exchange;
+    values.exchange = exchange.map(|e| e.path_id.to_string()).unwrap_or_default();
     values.repeat_frequency = RepeatFrequency::Once.as_str().to_string();
     values.instances.push(InstanceValues::default());
 
@@ -804,7 +909,9 @@ pub async fn add_event_submit(
         Ok(mut event) => {
             // Submitted through an exchange, it waits in that exchange's
             // approval queue (`reviewed` starts false).
-            event.exchange = crate::exchange::submitted_through(&form.exchange).await?;
+            event.exchange = SubmissionExchange::find(&form.exchange)
+                .await?
+                .map(|exchange| exchange.exchange_id);
 
             event.formats =
                 ChoiceValue::known(ChoiceList::EventFormat, form.formats.iter().cloned()).await?;
@@ -938,9 +1045,15 @@ async fn render_event_form(
     .await?
     .errors(error.as_ref());
 
+    let exchange = SubmissionExchange::find(&values.exchange).await?;
+    if exchange.is_none() {
+        values.exchange.clear();
+    }
+
     let content = AddEventContent {
         error,
         values,
+        exchange,
         event_types,
         topics,
         audience,
@@ -2090,6 +2203,8 @@ struct AddProjectPage {
 struct AddProjectContent {
     error: Option<FormError>,
     values: ProjectFormValues,
+    /// The exchange the form's `exchange` field names, if it names one.
+    exchange: Option<SubmissionExchange>,
     topics: ChoiceGroup,
     audience: ChoiceGroup,
     activities: ChoiceGroup,
@@ -2103,14 +2218,17 @@ struct AddProjectContent {
 #[tracing::instrument]
 pub async fn add_project_page(
     Authenticated(user_info): Authenticated,
+    session: &Session,
     Query(query): Query<AddQuery>,
 ) -> Result<Response, anyhow::Error> {
+    let exchange = session_exchange(session, &query).await?;
+
     if user_info.is_none() {
         return Ok(query.login_redirect("/add/project").into_response());
     }
 
     let values = ProjectFormValues {
-        exchange: query.exchange,
+        exchange: exchange.map(|e| e.path_id.to_string()).unwrap_or_default(),
         ..Default::default()
     };
     render_project_form(None, values, user_info).await
@@ -2132,7 +2250,9 @@ pub async fn add_project_submit(
         Ok(mut project) => {
             // Submitted through an exchange, it waits in that exchange's
             // approval queue (`reviewed` starts false).
-            project.exchange = crate::exchange::submitted_through(&form.exchange).await?;
+            project.exchange = SubmissionExchange::find(&form.exchange)
+                .await?
+                .map(|exchange| exchange.exchange_id);
 
             // Everything the project's own person wrote stands against
             // imports, as orrery gives a project made through its form full
@@ -2169,7 +2289,7 @@ pub async fn add_project_submit(
 
 async fn render_project_form(
     error: Option<FormError>,
-    values: ProjectFormValues,
+    mut values: ProjectFormValues,
     user_info: Option<Arc<BasicInfo>>,
 ) -> Result<Response, anyhow::Error> {
     let location = LocationPicker::build(
@@ -2219,9 +2339,15 @@ async fn render_project_form(
     )
     .await?;
 
+    let exchange = SubmissionExchange::find(&values.exchange).await?;
+    if exchange.is_none() {
+        values.exchange.clear();
+    }
+
     let content = AddProjectContent {
         error,
         values,
+        exchange,
         topics,
         audience,
         activities,
@@ -2379,7 +2505,99 @@ fn validate_and_build_project(
 
 #[cfg(test)]
 mod tests {
+    use assert2::check;
+
     use super::*;
+
+    fn exchange() -> SubmissionExchange {
+        SubmissionExchange {
+            exchange_id: Ulid::new().to_string(),
+            path_id: 42,
+            name: "SciStarter Australia".to_string(),
+        }
+    }
+
+    #[test]
+    fn the_exchange_notice_names_the_reviewer_and_offers_scistarter_instead() {
+        let exchange = exchange();
+        let html = ExchangeNotice {
+            exchange: Some(&exchange),
+            noun: "event",
+            path: "/add/event",
+            oob: false,
+        }
+        .render_once()
+        .unwrap();
+
+        check!(html.contains(
+            "You&rsquo;re adding this event through <strong>SciStarter Australia</strong>, \
+             who will be responsible for reviewing it."
+        ));
+        check!(html.contains(r#"href="/add/event?exchange=" hx-post="/add/exchange/clear""#));
+        check!(!html.contains("hx-swap-oob"));
+    }
+
+    #[test]
+    fn without_an_exchange_the_notice_is_empty() {
+        let html = ExchangeNotice {
+            exchange: None,
+            noun: "project",
+            path: "/add/project",
+            oob: false,
+        }
+        .render_once()
+        .unwrap();
+
+        check!(html.contains(r#"<div id="submission-exchange">"#));
+        check!(!html.contains("adding this"));
+        check!(!html.contains("<input"));
+    }
+
+    #[test]
+    fn choosing_scistarter_also_empties_the_forms_exchange_field() {
+        let html = ExchangeNotice {
+            exchange: None,
+            noun: "",
+            path: "",
+            oob: true,
+        }
+        .render_once()
+        .unwrap();
+
+        check!(html.contains(
+            r#"<input type="hidden" id="submission-exchange-field" name="exchange" value="" hx-swap-oob="true">"#
+        ));
+        check!(!html.contains("adding this"));
+    }
+
+    #[test]
+    fn a_remembered_exchange_lapses_once_left_unused() {
+        let used: jiff::Timestamp = "2026-11-11T09:00:00Z".parse().unwrap();
+        let remembered = RememberedExchange {
+            path_id: "42".to_string(),
+            used,
+        };
+
+        check!(!remembered.lapsed("2026-11-11T13:00:00Z".parse().unwrap()));
+        check!(remembered.lapsed("2026-11-11T13:00:01Z".parse().unwrap()));
+    }
+
+    #[test]
+    fn logging_in_returns_to_the_same_exchange() {
+        let query = AddQuery {
+            exchange: Some("42".to_string()),
+        };
+
+        let response = query.login_redirect("/add/project").into_response();
+
+        check!(
+            response
+                .headers()
+                .get(poem::http::header::LOCATION)
+                .unwrap()
+                == "/login?next=%2Fadd%2Fproject%3Fexchange%3D42"
+        );
+    }
 
     /// The Facebook answers are flattened into the add-event form, which
     /// must not stop serde_qs from reading the form's indexed date/time rows

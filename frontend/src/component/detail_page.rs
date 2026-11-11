@@ -42,7 +42,7 @@ use crate::middleware::authorization::Authenticated;
 use crate::participant_file::ParticipantFile;
 use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
-use crate::project::linked_platform::{NamedAccount, PlatformCopy, name_account};
+use crate::project::linked_platform::{NamedAccount, name_account};
 use common::quill::content_to_html;
 
 const DOMAIN: &str = env!("DOMAIN");
@@ -334,9 +334,9 @@ pub struct DetailPage {
     pub slug: String,
     pub kind: DetailPageKind,
     pub target_id: Ulid,
-    /// Whether an account signed up for from this page would be protected
-    /// (`auth::signup_will_be_protected`), which only the session knows.
-    pub signup_protected: bool,
+    /// The path and query the page was requested at, which signing in from
+    /// it comes back to.
+    pub return_to: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -539,31 +539,85 @@ impl GetStartedGuidance {
     }
 }
 
-/// The form a visitor names their username on a project's platform with, or
-/// for a visitor who is not signed in, the way to sign in first.
+/// The box a visitor connects their account on a project's platform with,
+/// replaced in place as they go. It shows exactly one of the three steps
+/// [`PlatformAccountStep`] names.
 #[derive(TemplateOnce, Clone)]
 #[template(path = "pages/detail_page_platform_account.stpl.html")]
 pub struct PlatformAccountForm {
     pub target_id: String,
     pub platform: LinkedPlatform,
+    pub project_name: String,
+    /// The project's own site, which a connected visitor is sent on to.
+    pub project_url: String,
     pub visitor: PlatformAccountVisitor,
+    /// Whether a connected visitor has asked to change their username.
+    pub changing: bool,
     pub outcome: PlatformAccountOutcome,
-    /// Whether the page lists the project's mobile apps, further down.
-    pub has_app_links: bool,
 }
 
 #[derive(Clone)]
 pub enum PlatformAccountVisitor {
-    /// Signed in, with the username they have named on the platform, "" if
+    /// Signed in, with the username saved for them on the platform, "" if
     /// none.
-    SignedIn(String),
-    /// Not signed in, and offered the way to.
-    SignedOut(InlineAuthForm),
+    SignedIn { saved: String },
+    /// Not signed in. Signing in comes back to `return_to`, the path and
+    /// query of the page they are on.
+    SignedOut { return_to: String },
+}
+
+/// Which of its three states the platform-account box is in.
+pub enum PlatformAccountStep<'a> {
+    /// Sign in to SciStarter first.
+    SignedOut { sign_in_url: String },
+    /// Name the platform username, starting from `value`. `keep` is the
+    /// username already saved, when this is a change of it.
+    Naming {
+        value: &'a str,
+        keep: Option<&'a str>,
+    },
+    /// Connected as `username`.
+    Connected { username: &'a str },
+}
+
+impl PlatformAccountForm {
+    pub fn step(&self) -> PlatformAccountStep<'_> {
+        let saved = match &self.visitor {
+            PlatformAccountVisitor::SignedOut { return_to } => {
+                return PlatformAccountStep::SignedOut {
+                    sign_in_url: format!("/login?next={}", urlencoding::encode(return_to)),
+                };
+            }
+            PlatformAccountVisitor::SignedIn { saved } => saved.as_str(),
+        };
+
+        if !saved.is_empty() && !self.changing && !self.outcome.refused() {
+            return PlatformAccountStep::Connected { username: saved };
+        }
+
+        PlatformAccountStep::Naming {
+            value: match &self.outcome {
+                PlatformAccountOutcome::Unknown(typed) => typed,
+                _ => saved,
+            },
+            keep: (!saved.is_empty()).then_some(saved),
+        }
+    }
+
+    /// Whether submitting `value` would change nothing, so the button that
+    /// submits it is disabled. The template's script applies the same rule
+    /// as the visitor types.
+    pub fn submits_nothing(value: &str, keep: Option<&str>) -> bool {
+        let value = value.trim();
+
+        value.is_empty() || Some(value) == keep
+    }
 }
 
 /// A sign-in / create-account form that sits in a project page, rather than
 /// a link to /login. Either way the visitor comes back signed in to the same
-/// page, having joined the project.
+/// page, having joined the project. Served at `/-detail/:id/account`, though
+/// no page offers it at present.
 #[derive(TemplateOnce, Clone)]
 #[template(path = "pages/detail_page_inline_auth.stpl.html")]
 pub struct InlineAuthForm {
@@ -621,22 +675,22 @@ impl InlineAuthProblem {
 /// The shortest password the inline signup accepts, as orrery's does.
 const MINIMUM_PASSWORD_LENGTH: usize = 8;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum PlatformAccountOutcome {
     Unsubmitted,
     Saved,
     Blank,
     /// The platform has no account with the username given.
-    Unknown,
+    Unknown(String),
 }
 
 impl PlatformAccountOutcome {
     /// Whether the username given was refused, leaving the visitor to try
     /// again.
-    pub fn refused(self) -> bool {
+    pub fn refused(&self) -> bool {
         matches!(
             self,
-            PlatformAccountOutcome::Blank | PlatformAccountOutcome::Unknown
+            PlatformAccountOutcome::Blank | PlatformAccountOutcome::Unknown(_)
         )
     }
 }
@@ -656,6 +710,17 @@ pub struct LikeButtonInclude<'a> {
     pub like_count: i64,
     pub user_has_liked: bool,
     pub target_id: &'a str,
+}
+
+/// The link that sends a visitor on to a project's own site. Every button
+/// that does so is this link, so that they all take the same path there.
+#[derive(TemplateOnce)]
+#[template(path = "pages/detail_page_visit_link.stpl.html")]
+pub struct VisitLinkInclude<'a> {
+    pub url: &'a str,
+    pub label: &'a str,
+    /// Classes beyond the button's own.
+    pub class: &'a str,
 }
 
 #[derive(TemplateOnce)]
@@ -900,9 +965,7 @@ impl DetailPage {
             async {
                 match (linked_platform, &user_info_clone) {
                     (Some(platform), Some(user)) => {
-                        let profile: UserProfile =
-                            request("user.profile.get", user.user_id.to_string()).await?;
-                        Ok::<_, Error>(Some(profile.platform_username(platform).to_string()))
+                        Ok::<_, Error>(Some(saved_platform_username(user.user_id, platform).await?))
                     }
                     _ => Ok(None),
                 }
@@ -1085,22 +1148,16 @@ impl DetailPage {
             linked_platform.map(|platform| PlatformAccountForm {
                 target_id: self.target_id.to_string(),
                 platform,
+                project_name: row.name.clone(),
+                project_url: row.url.clone(),
                 visitor: match platform_username {
-                    Some(username) => PlatformAccountVisitor::SignedIn(username),
-                    None => PlatformAccountVisitor::SignedOut(InlineAuthForm {
-                        target_id: self.target_id.to_string(),
-                        page_path: project_page_path(&self.slug),
-                        mode: InlineAuthMode::SignUp,
-                        email: String::new(),
-                        offer_newsletter: !self.signup_protected,
-                        problem: None,
-                        pending_email: None,
-                    }),
+                    Some(saved) => PlatformAccountVisitor::SignedIn { saved },
+                    None => PlatformAccountVisitor::SignedOut {
+                        return_to: self.return_to.clone(),
+                    },
                 },
+                changing: false,
                 outcome: PlatformAccountOutcome::Unsubmitted,
-                has_app_links: !row.mobile_app_url.is_empty()
-                    || !row.mobile_app_url_ios.is_empty()
-                    || !row.mobile_app_url_android.is_empty(),
             }),
         );
 
@@ -2096,30 +2153,22 @@ pub async fn record_join(
     Ok(Html("<div class=\"text-sm text-green-700\">Participation recorded!</div>").into_response())
 }
 
-#[derive(serde::Deserialize)]
-pub struct PlatformAccountSubmission {
-    username: String,
+/// The username `user_id` has saved on `platform`, "" if none.
+async fn saved_platform_username(user_id: Ulid, platform: LinkedPlatform) -> Result<String, Error> {
+    let profile: UserProfile = request("user.profile.get", user_id.to_string()).await?;
+
+    Ok(profile.platform_username(platform).to_string())
 }
 
-/// Name the visitor's username on the platform that credits this project.
+/// A signed-in visitor's platform-account box on project `id`, as it stands,
+/// for a handler to re-render.
 ///
-/// Which platform is the project's to say, not the form's, so a submission
-/// can only set the username the page asked for. Saving through
-/// `user.profile.save` stamps the connection time, the floor for importing
-/// that platform's activity.
-///
-/// The name is read, and a Zooniverse login looked up, by
-/// [`name_account`].
-#[handler]
-pub async fn connect_platform_account(
-    Path(id): Path<String>,
-    Authenticated(user_info): Authenticated,
-    Form(submission): Form<PlatformAccountSubmission>,
-) -> poem::Result<poem::Response> {
-    let internal = |e: Error| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    };
-
+/// Which platform is the project's to say, not the request's, so the box can
+/// only ever name the username the page asks for.
+async fn signed_in_platform_account(
+    id: &str,
+    user_info: Option<Arc<BasicInfo>>,
+) -> poem::Result<(Arc<BasicInfo>, PlatformAccountForm)> {
     let user = user_info.ok_or_else(|| {
         poem::Error::from_string(
             "Authentication required",
@@ -2133,14 +2182,14 @@ pub async fn connect_platform_account(
     let id_str = project_id.to_string();
 
     let project = sqlx::query!(
-        r#"SELECT is_affiliate as "is_affiliate: bool", is_inaturalist as "is_inaturalist: bool",
-                  mobile_app_url, mobile_app_url_android, mobile_app_url_ios
+        r#"SELECT name, url, is_affiliate as "is_affiliate: bool",
+                  is_inaturalist as "is_inaturalist: bool"
            FROM projects WHERE project_id = ?"#,
         id_str
     )
     .fetch_optional(db())
     .await
-    .map_err(|e| internal(e.into()))?
+    .map_err(|e| internal_error(e.into()))?
     .ok_or_else(|| poem::Error::from_status(poem::http::StatusCode::NOT_FOUND))?;
 
     let platform = crate::project::linked_platform::for_project(
@@ -2149,42 +2198,105 @@ pub async fn connect_platform_account(
         project.is_inaturalist,
     )
     .await
-    .map_err(internal)?
+    .map_err(internal_error)?
     .ok_or_else(|| poem::Error::from_status(poem::http::StatusCode::NOT_FOUND))?;
 
-    let named = name_account(platform, &submission.username).await;
-
-    let (outcome, username) = match &named {
-        NamedAccount::Blank => (PlatformAccountOutcome::Blank, String::new()),
-        NamedAccount::Unknown(username) => (PlatformAccountOutcome::Unknown, username.clone()),
-        NamedAccount::Named { username, .. } => (PlatformAccountOutcome::Saved, username.clone()),
-    };
-
-    if outcome == PlatformAccountOutcome::Saved {
-        let _: () = request(
-            "user.profile.save",
-            UserProfileUpdate::unchanged(user.user_id)
-                .with_platform_username(platform, username.clone()),
-        )
+    let saved = saved_platform_username(user.user_id, platform)
         .await
-        .map_err(internal)?;
+        .map_err(internal_error)?;
 
-        named.record(user.user_id).await;
-    }
-
-    let html = PlatformAccountForm {
+    let form = PlatformAccountForm {
         target_id: id_str,
         platform,
-        visitor: PlatformAccountVisitor::SignedIn(username),
-        outcome,
-        has_app_links: !project.mobile_app_url.is_empty()
-            || !project.mobile_app_url_android.is_empty()
-            || !project.mobile_app_url_ios.is_empty(),
-    }
-    .render_once()
-    .map_err(|e| internal(e.into()))?;
+        project_name: project.name,
+        project_url: project.url,
+        visitor: PlatformAccountVisitor::SignedIn { saved },
+        changing: false,
+        outcome: PlatformAccountOutcome::Unsubmitted,
+    };
+
+    Ok((user, form))
+}
+
+fn internal_error(e: Error) -> poem::Error {
+    poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+fn render_platform_account(form: PlatformAccountForm) -> poem::Result<poem::Response> {
+    let html = form.render_once().map_err(|e| internal_error(e.into()))?;
 
     Ok(Html(html).into_response())
+}
+
+#[derive(serde::Deserialize)]
+pub struct PlatformAccountQuery {
+    /// Whether to show a connected visitor the form to change their
+    /// username, rather than the username they are connected as.
+    #[serde(default)]
+    change: bool,
+}
+
+/// The platform-account box, for a connected visitor who has asked to
+/// change their username or has thought better of it.
+#[handler]
+pub async fn show_platform_account(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    Query(query): Query<PlatformAccountQuery>,
+) -> poem::Result<poem::Response> {
+    let (_, form) = signed_in_platform_account(&id, user_info).await?;
+
+    render_platform_account(PlatformAccountForm {
+        changing: query.change,
+        ..form
+    })
+}
+
+#[derive(serde::Deserialize)]
+pub struct PlatformAccountSubmission {
+    username: String,
+}
+
+/// Name the visitor's username on the platform that credits this project.
+///
+/// Saving through `user.profile.save` stamps the connection time, the floor
+/// for importing that platform's activity. The name is read, and a
+/// Zooniverse login looked up, by [`name_account`].
+#[handler]
+pub async fn connect_platform_account(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    Form(submission): Form<PlatformAccountSubmission>,
+) -> poem::Result<poem::Response> {
+    let (user, form) = signed_in_platform_account(&id, user_info).await?;
+
+    let named = name_account(form.platform, &submission.username).await;
+
+    let outcome = match &named {
+        NamedAccount::Blank => PlatformAccountOutcome::Blank,
+        NamedAccount::Unknown(username) => PlatformAccountOutcome::Unknown(username.clone()),
+        NamedAccount::Named { username, .. } => {
+            let _: () = request(
+                "user.profile.save",
+                UserProfileUpdate::unchanged(user.user_id)
+                    .with_platform_username(form.platform, username.clone()),
+            )
+            .await
+            .map_err(internal_error)?;
+
+            named.record(user.user_id).await;
+
+            return render_platform_account(PlatformAccountForm {
+                visitor: PlatformAccountVisitor::SignedIn {
+                    saved: username.clone(),
+                },
+                outcome: PlatformAccountOutcome::Saved,
+                ..form
+            });
+        }
+    };
+
+    render_platform_account(PlatformAccountForm { outcome, ..form })
 }
 
 #[derive(serde::Deserialize)]
@@ -2541,15 +2653,33 @@ struct EditLogEntryDisplay {
 
 #[cfg(test)]
 mod tests {
+    use assert2::check;
+
     use super::*;
 
     fn platform_form() -> PlatformAccountForm {
         PlatformAccountForm {
             target_id: Ulid::new().to_string(),
             platform: LinkedPlatform::Zooniverse,
-            visitor: PlatformAccountVisitor::SignedIn(String::new()),
+            project_name: "Artifact InSPECtor".to_string(),
+            project_url: "https://www.zooniverse.org/projects/artifact-inspector".to_string(),
+            visitor: PlatformAccountVisitor::SignedIn {
+                saved: String::new(),
+            },
+            changing: false,
             outcome: PlatformAccountOutcome::Unsubmitted,
-            has_app_links: false,
+        }
+    }
+
+    fn signed_out() -> PlatformAccountVisitor {
+        PlatformAccountVisitor::SignedOut {
+            return_to: "/projects/artifact-inspector?ref=news".to_string(),
+        }
+    }
+
+    fn signed_in(saved: &str) -> PlatformAccountVisitor {
+        PlatformAccountVisitor::SignedIn {
+            saved: saved.to_string(),
         }
     }
 
@@ -2568,6 +2698,7 @@ mod tests {
     fn inaturalist_form(visitor: PlatformAccountVisitor) -> PlatformAccountForm {
         PlatformAccountForm {
             platform: LinkedPlatform::INaturalist,
+            project_name: "City Nature Challenge".to_string(),
             visitor,
             ..platform_form()
         }
@@ -2623,103 +2754,152 @@ mod tests {
     }
 
     #[test]
-    fn a_platform_where_only_some_projects_credit_says_so() {
+    fn a_signed_out_visitor_is_sent_to_sign_in_and_back() {
         let html = PlatformAccountForm {
-            visitor: PlatformAccountVisitor::SignedOut(inline_auth_form()),
+            visitor: signed_out(),
             ..platform_form()
         }
         .render_once()
         .unwrap();
 
-        assert!(html.contains("Three Easy Steps!"));
-        assert!(html.contains("paste your Zooniverse username below (case-sensitive)."));
-        assert!(html.contains("Sign up or sign in to Zooniverse</a> and copy your username."));
-        assert!(html.contains("the name after the @ under your name on the Zooniverse home page."));
-        assert!(html.contains("even if you join more SciStarter Affiliate Zooniverse projects"));
+        check!(html.contains("Connect Your Zooniverse Account</h3>"));
+        check!(html.contains("Artifact InSPECtor is hosted on Zooniverse.<br>Connect once"));
+        check!(html.contains(
+            r#"href="/login?next=%2Fprojects%2Fartifact-inspector%3Fref%3Dnews">Sign in or create a SciStarter account</a>"#
+        ));
+        check!(html.contains("Sign in or create a Zooniverse account</a>"));
+        check!(html.contains("Enter your Zooniverse username</span>"));
+        check!(html.contains("Sign in to SciStarter to enter your Zooniverse username."));
+        check!(!html.contains("<input"));
+        check!(!html.contains("inline-auth"));
+        check!(!html.contains("(done)"));
     }
 
     #[test]
-    fn a_signed_out_visitor_is_walked_through_signing_in_first() {
-        let html = inaturalist_form(PlatformAccountVisitor::SignedOut(inline_auth_form()))
-            .render_once()
-            .unwrap();
+    fn a_signed_in_visitor_without_a_username_names_one() {
+        let html = inaturalist_form(signed_in("")).render_once().unwrap();
 
-        assert!(html.contains("Three Easy Steps!"));
-        assert!(html.contains("Sign in to SciStarter or create a free SciStarter account."));
-        assert!(html.contains("class=\"inline-auth"));
-        assert!(html.contains("<turnstile-widget"));
-        assert!(html.contains(r#"name="username" type="text" disabled"#));
-        assert!(html.contains("That's it!"));
+        check!(html.contains("Signed in to SciStarter<span class=\"sr-only\"> (done)</span>"));
+        check!(html.contains("Sign in or create an iNaturalist account</a>"));
+        check!(html.contains(r#"placeholder="Enter your iNaturalist username""#));
+        check!(html.contains("Connect My Account"));
+        check!(html.contains("disabled>Connect My Account"));
+        check!(
+            html.contains(
+                "Just once. Only observations uploaded after connecting can be credited."
+            )
+        );
+        check!(!html.contains("/login?next="));
+        check!(!html.contains("Keep "));
+        // Only Zooniverse's username is easily mistaken.
+        check!(!html.contains("the name after the @"));
     }
 
     #[test]
-    fn a_signed_in_visitor_without_a_username_has_two_steps() {
-        let html = inaturalist_form(PlatformAccountVisitor::SignedIn(String::new()))
-            .render_once()
-            .unwrap();
-
-        assert!(html.contains("Two Easy Steps!"));
-        assert!(!html.contains("inline-auth"));
-        assert!(!html.contains("disabled"));
-        assert!(!html.contains("case-sensitive"));
-        assert!(!html.contains("app links"));
-        assert!(html.contains("Sign up or sign in to iNaturalist</a> and copy your username.</p>"));
-    }
-
-    #[test]
-    fn the_app_links_are_mentioned_only_when_the_page_has_them() {
+    fn the_platforms_own_page_does_not_say_it_is_hosted_on_itself() {
         let html = PlatformAccountForm {
-            has_app_links: true,
-            ..inaturalist_form(PlatformAccountVisitor::SignedIn(String::new()))
+            project_name: "Zooniverse ".to_string(),
+            ..platform_form()
         }
         .render_once()
         .unwrap();
 
-        assert!(html.contains("Sign up or sign in to iNaturalist</a> (or use the app links below) and copy your username."));
+        check!(
+            html.contains(
+                "<p class=\"mb-2\">Connect once to track contributions on SciStarter.</p>"
+            )
+        );
+        check!(!html.contains("hosted on"));
     }
 
     #[test]
-    fn a_connected_visitor_sees_their_username_and_may_change_it() {
+    fn zooniverse_says_where_to_find_the_username() {
+        let html = platform_form().render_once().unwrap();
+
+        check!(html.contains("the name after the @ under your name on the Zooniverse home page."));
+        check!(html.contains("Only classifications made after connecting can be credited."));
+    }
+
+    #[test]
+    fn a_connected_visitor_is_sent_on_to_the_project() {
         let html = PlatformAccountForm {
             outcome: PlatformAccountOutcome::Saved,
-            ..inaturalist_form(PlatformAccountVisitor::SignedIn("Stargazer".to_string()))
+            ..inaturalist_form(signed_in("Stargazer"))
         }
         .render_once()
         .unwrap();
 
-        assert!(html.contains("Linked to iNaturalist account <strong>Stargazer</strong>"));
-        assert!(html.contains("<details"));
-        assert!(html.contains(r#"value="Stargazer""#));
-        assert!(!html.contains("Easy Steps!"));
+        check!(html.contains("You&rsquo;re connected and ready!"));
+        check!(html.contains("iNaturalist account: <strong>Stargazer</strong>"));
+        check!(html.contains("?change=true"));
+        check!(html.contains("New observations appear on your"));
+        check!(html.contains(">Start City Nature Challenge<svg"));
+        check!(html.contains(r#"href="https://www.zooniverse.org/projects/artifact-inspector""#));
+        check!(!html.contains("Connect Your"));
+        check!(!html.contains("<input"));
     }
 
     #[test]
-    fn clearing_the_username_returns_to_the_steps() {
+    fn changing_the_username_offers_to_keep_it() {
+        let html = PlatformAccountForm {
+            changing: true,
+            ..inaturalist_form(signed_in("Stargazer"))
+        }
+        .render_once()
+        .unwrap();
+
+        check!(html.contains("Connect Your iNaturalist Account"));
+        check!(html.contains(r#"value="Stargazer""#));
+        check!(html.contains(r#"data-saved="Stargazer""#));
+        check!(html.contains("disabled>Connect My Account"));
+        check!(html.contains(">Keep Stargazer</button>"));
+    }
+
+    #[test]
+    fn clearing_the_username_asks_for_one() {
         let html = PlatformAccountForm {
             outcome: PlatformAccountOutcome::Blank,
-            ..inaturalist_form(PlatformAccountVisitor::SignedIn(String::new()))
+            ..inaturalist_form(signed_in(""))
         }
         .render_once()
         .unwrap();
 
-        assert!(html.contains("Two Easy Steps!"));
-        assert!(html.contains("Please enter your iNaturalist username."));
+        check!(html.contains("Connect Your iNaturalist Account"));
+        check!(html.contains("Please enter your iNaturalist username."));
     }
 
     #[test]
-    fn a_login_zooniverse_does_not_have_returns_to_the_steps_saying_so() {
+    fn a_login_zooniverse_does_not_have_is_refused_and_the_old_one_kept() {
         let html = PlatformAccountForm {
-            outcome: PlatformAccountOutcome::Unknown,
-            visitor: PlatformAccountVisitor::SignedIn("Star Gazer".to_string()),
-            ..platform_form()
+            outcome: PlatformAccountOutcome::Unknown("Star Gazer".to_string()),
+            ..PlatformAccountForm {
+                visitor: signed_in("stargazer"),
+                ..platform_form()
+            }
         }
         .render_once()
         .unwrap();
 
-        assert!(html.contains("Two Easy Steps!"));
-        assert!(!html.contains("Linked to Zooniverse account"));
-        assert!(html.contains("Zooniverse has no account named <strong>Star Gazer</strong>. It"));
-        assert!(html.contains("the name after the @ under your name on the Zooniverse home page."));
+        check!(html.contains("Connect Your Zooniverse Account"));
+        check!(!html.contains("connected and ready"));
+        check!(html.contains("Zooniverse has no account named <strong>Star Gazer</strong>."));
+        check!(html.contains(r#"value="Star Gazer""#));
+        check!(!html.contains("disabled>Connect My Account"));
+        check!(html.contains(">Keep stargazer</button>"));
+    }
+
+    #[test]
+    fn nothing_new_to_submit_disables_the_button() {
+        check!(PlatformAccountForm::submits_nothing("  ", None));
+        check!(PlatformAccountForm::submits_nothing(
+            " Stargazer ",
+            Some("Stargazer")
+        ));
+        check!(!PlatformAccountForm::submits_nothing("Stargazer", None));
+        check!(!PlatformAccountForm::submits_nothing(
+            "Stargazer",
+            Some("stargazer")
+        ));
     }
 
     #[test]

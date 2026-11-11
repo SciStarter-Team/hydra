@@ -241,11 +241,6 @@ pub struct AdminProjectFull {
     pub classroom_materials: String,
     pub consent_statement: String,
     pub consent_statement_date: Option<String>,
-    pub participation_tools: bool,
-    pub participation_prompt: String,
-    pub participation_confirmation_message: String,
-    pub participation_notification_email: String,
-    pub participation_usage: String,
     pub part_of: Option<String>,
     pub associated_projects: Vec<String>,
     pub total_expense: Option<f32>,
@@ -417,11 +412,6 @@ impl AdminProjectFull {
             classroom_materials: project.classroom_materials,
             consent_statement: project.consent_statement,
             consent_statement_date: project.consent_statement_date.map(|t| t.to_string()),
-            participation_tools: project.participation_tools,
-            participation_prompt: project.participation_prompt,
-            participation_confirmation_message: project.participation_confirmation_message,
-            participation_notification_email: project.participation_notification_email,
-            participation_usage: project.participation_usage,
             part_of: project.part_of.map(|u| u.to_string()),
             total_expense: project.total_expense,
             materials: project.materials,
@@ -1784,15 +1774,6 @@ async fn projects_update_field(
         "classroom_materials" => crate::project::field::ProjectFieldType::ClassroomMaterials,
         "consent_statement" => crate::project::field::ProjectFieldType::ConsentStatement,
         "consent_statement_date" => crate::project::field::ProjectFieldType::ConsentStatementDate,
-        "participation_tools" => crate::project::field::ProjectFieldType::ParticipationTools,
-        "participation_prompt" => crate::project::field::ProjectFieldType::ParticipationPrompt,
-        "participation_confirmation_message" => {
-            crate::project::field::ProjectFieldType::ParticipationConfirmationMessage
-        }
-        "participation_notification_email" => {
-            crate::project::field::ProjectFieldType::ParticipationNotificationEmail
-        }
-        "participation_usage" => crate::project::field::ProjectFieldType::ParticipationUsage,
         "part_of" => crate::project::field::ProjectFieldType::PartOf,
         "associated_projects" => crate::project::field::ProjectFieldType::AssociatedProjects,
         "total_expense" => crate::project::field::ProjectFieldType::TotalExpense,
@@ -2352,28 +2333,6 @@ async fn projects_update_field(
                     )
                 };
                 crate::project::field::ProjectFieldValue::ConsentStatementDate(option_value)
-            }
-            crate::project::field::ProjectFieldType::ParticipationTools => {
-                let bool_value = form_value.parse::<bool>().unwrap_or_else(|_| {
-                    form_value.to_lowercase() == "true"
-                        || form_value == "1"
-                        || form_value.to_lowercase() == "on"
-                });
-                crate::project::field::ProjectFieldValue::ParticipationTools(bool_value)
-            }
-            crate::project::field::ProjectFieldType::ParticipationPrompt => {
-                crate::project::field::ProjectFieldValue::ParticipationPrompt(form_value)
-            }
-            crate::project::field::ProjectFieldType::ParticipationConfirmationMessage => {
-                crate::project::field::ProjectFieldValue::ParticipationConfirmationMessage(
-                    form_value,
-                )
-            }
-            crate::project::field::ProjectFieldType::ParticipationNotificationEmail => {
-                crate::project::field::ProjectFieldValue::ParticipationNotificationEmail(form_value)
-            }
-            crate::project::field::ProjectFieldType::ParticipationUsage => {
-                crate::project::field::ProjectFieldValue::ParticipationUsage(form_value)
             }
             crate::project::field::ProjectFieldType::PartOf => {
                 let option_value = if form_value.is_empty() {

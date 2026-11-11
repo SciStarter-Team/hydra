@@ -647,7 +647,11 @@ impl Entity {
                     slug: self.slug.clone(),
                     kind: crate::component::detail_page::DetailPageKind::Project,
                     target_id,
-                    signup_protected: crate::auth::signup_will_be_protected(session),
+                    return_to: req
+                        .uri()
+                        .path_and_query()
+                        .map_or("/", |pq| pq.as_str())
+                        .to_string(),
                 };
 
                 let content = detail.prepare(user_info.clone()).await?;
@@ -691,8 +695,11 @@ impl Entity {
                     slug: self.slug.clone(),
                     kind: crate::component::detail_page::DetailPageKind::Event,
                     target_id,
-                    // Nothing on an event page signs anybody up.
-                    signup_protected: false,
+                    return_to: req
+                        .uri()
+                        .path_and_query()
+                        .map_or("/", |pq| pq.as_str())
+                        .to_string(),
                 };
 
                 let content = detail.prepare(user_info.clone()).await?;

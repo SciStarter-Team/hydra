@@ -1381,3 +1381,153 @@ pub async fn exchange_event_synchronize(
         }
     }
 }
+
+/// One page of an orrery sync feed, `/staff/sync/<feed>`. A failure is
+/// logged and answered with None, and the caller waits and asks again.
+async fn fetch_orrery_feed<T: serde::de::DeserializeOwned>(
+    feed: &str,
+    query: &[(&str, String)],
+) -> Option<Vec<T>> {
+    let response = reqwest::Client::new()
+        .get(format!("https://scistarter.org/staff/sync/{feed}"))
+        .bearer_auth(env!("SYNC_TOKEN"))
+        .query(query)
+        .send()
+        .await
+        .and_then(|response| response.error_for_status());
+
+    let text = match response {
+        Ok(response) => response.text().await,
+        Err(e) => Err(e),
+    };
+
+    let text = match text {
+        Ok(text) => text,
+        Err(e) => {
+            eprintln!("Fetching orrery's {feed} feed failed: {e}");
+            return None;
+        }
+    };
+
+    match serde_json::from_str(&text) {
+        Ok(page) => Some(page),
+        Err(e) => {
+            eprintln!("Orrery's {feed} feed sent what could not be read: {e}");
+            None
+        }
+    }
+}
+
+/// One of orrery's counting windows of clicks on a project's Visit button,
+/// as `/staff/sync/join_clicks` sends it.
+#[derive(Debug, Deserialize)]
+pub struct VisitClicksData {
+    pub id: i32,
+    pub entity_ulid: String,
+    pub as_of: String,
+    pub count: i32,
+}
+
+/// The size of a page of Visit click windows, as orrery sends them.
+const VISIT_CLICKS_PAGE: usize = 500;
+
+/// Carry orrery's Visit click counts into `orrery_visit_clicks`, the record
+/// of visits from before hydra counted each one itself.
+///
+/// Watermark: `as_of`, which orrery moves on every click, so a window still
+/// counting is delivered again each time it grows, and replaces the copy
+/// held before. Once orrery stops serving, the counts stand as they last
+/// were.
+pub async fn visit_click_synchronize(
+    database: Arc<Database>,
+    cancellation_token: CancellationToken,
+) {
+    loop {
+        if cancellation_token.is_cancelled() {
+            println!("Visit click sync cancelled, exiting gracefully");
+            return;
+        }
+
+        let since = get_sync_bookmark(&database, "visit-click-sync-bookmark")
+            .await
+            .unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
+        let last_id = get_sync_last_id(&database, "visit-click-sync-last-id")
+            .await
+            .unwrap_or(0);
+
+        let page = fetch_orrery_feed::<VisitClicksData>(
+            "join_clicks",
+            &[("since", since.clone()), ("last_id", last_id.to_string())],
+        )
+        .await;
+
+        let sleep_duration = match page {
+            // Try again in a minute.
+            None => Duration::from_secs(60),
+            Some(page) => {
+                let full = page.len() == VISIT_CLICKS_PAGE;
+
+                match store_visit_click_page(&database, page).await {
+                    // A full page means more are waiting; otherwise check
+                    // back hourly.
+                    Ok(()) if full => Duration::from_secs(5),
+                    Ok(()) => Duration::from_secs(60 * 60),
+                    Err(e) => {
+                        eprintln!("Visit click sync: {e}");
+                        Duration::from_secs(60)
+                    }
+                }
+            }
+        };
+
+        tokio::select! {
+            _ = sleep(sleep_duration) => {}
+            _ = cancellation_token.cancelled() => {
+                println!("Visit click sync cancelled during sleep, exiting gracefully");
+                return;
+            }
+        }
+    }
+}
+
+/// Store a page of Visit click windows, then move the watermark up to the
+/// last one stored. The page comes in (as_of, id) order, so stopping at a
+/// row that fails keeps the watermark short of it, and it comes again.
+async fn store_visit_click_page(database: &Database, page: Vec<VisitClicksData>) -> Result<()> {
+    let mut stored = None;
+    let mut failure = None;
+
+    for window in page {
+        if let Err(e) = store_visit_clicks(&window).await {
+            failure = Some(e.context(format!("storing window {}", window.id)));
+            break;
+        }
+
+        stored = Some((window.as_of, window.id));
+    }
+
+    if let Some((as_of, id)) = stored {
+        set_sync_bookmark(database, "visit-click-sync-bookmark", &as_of).await?;
+        set_sync_last_id(database, "visit-click-sync-last-id", id).await?;
+    }
+
+    failure.map_or(Ok(()), Err)
+}
+
+async fn store_visit_clicks(window: &VisitClicksData) -> Result<()> {
+    sqlx::query!(
+        r#"INSERT INTO orrery_visit_clicks (window_id, project_id, as_of, clicks)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT (window_id)
+           DO UPDATE SET project_id = excluded.project_id, as_of = excluded.as_of,
+                         clicks = excluded.clicks"#,
+        window.id,
+        window.entity_ulid,
+        window.as_of,
+        window.count,
+    )
+    .execute(common::shared::db())
+    .await?;
+
+    Ok(())
+}

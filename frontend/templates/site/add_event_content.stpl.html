@@ -6,10 +6,12 @@
   <div class="add-form-shell">
     <h1 class="add-form-title">Add an Event</h1>
 
+    <%+ crate::add::ExchangeNotice { exchange: self.exchange.as_ref(), noun: "event", path: "/add/event", oob: false } %>
+
     <%+ crate::component::floating_field::FormErrorNotice { error } %>
 
     <form method="post" action="/add/event" class="add-form">
-      <input type="hidden" name="exchange" value="<%= &self.values.exchange %>">
+      <input type="hidden" id="submission-exchange-field" name="exchange" value="<%= &self.values.exchange %>">
       <p class="field-help add-area-note">Fields marked <span aria-hidden="true">*</span> are required.</p>
 
       <%# The groups below are the columns of the desktop layout (the image,

@@ -1070,9 +1070,8 @@ pub async fn project_add(body: String) -> Result<Response, Error> {
     if let Some(difficulty) = obj.get("difficulty").and_then(|v| v.as_str()) {
         proj.difficulty = api_difficulty(difficulty).to_string();
     }
-    if let Some(flag) = truthy("preregistration") {
-        proj.participation_tools = flag;
-    }
+    // `preregistration` asked for orrery's participation tools, which hydra
+    // does not have. A record that sets it is accepted, and the key ignored.
     if let Some(value) = text("new_member_url") {
         proj.signup_url = value;
     }

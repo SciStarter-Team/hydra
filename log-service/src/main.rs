@@ -40,7 +40,7 @@ use parking_lot::RwLock;
 use sync::{
     acts_of_science_synchronize, bookmark_synchronize, exchange_event_synchronize,
     golink_synchronize, join_synchronize, participation_synchronize, rating_synchronize,
-    review_synchronize,
+    review_synchronize, visit_click_synchronize,
 };
 
 // Global database instance for handler access - using RwLock<Option<>> so we can take ownership for shutdown
@@ -76,6 +76,7 @@ async fn main() -> Result<()> {
     let golink_cancel = CancellationToken::new();
     let acts_cancel = CancellationToken::new();
     let exchange_events_cancel = CancellationToken::new();
+    let visit_clicks_cancel = CancellationToken::new();
     let zoo_projects_cancel = CancellationToken::new();
     let zoo_sync_cancel = CancellationToken::new();
     let inat_cancel = CancellationToken::new();
@@ -158,6 +159,14 @@ async fn main() -> Result<()> {
     let exchange_events_database = Arc::clone(&database);
     background_tasks.spawn(async move {
         exchange_event_synchronize(exchange_events_database, exchange_events_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn orrery Visit click count (legacy visit history) sync task
+    let visit_clicks_cancel_clone = visit_clicks_cancel.clone();
+    let visit_clicks_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        visit_click_synchronize(visit_clicks_database, visit_clicks_cancel_clone).await;
         Ok::<(), anyhow::Error>(())
     });
 
@@ -549,6 +558,7 @@ async fn main() -> Result<()> {
     golink_cancel.cancel();
     acts_cancel.cancel();
     exchange_events_cancel.cancel();
+    visit_clicks_cancel.cancel();
     zoo_projects_cancel.cancel();
     zoo_sync_cancel.cancel();
     inat_cancel.cancel();

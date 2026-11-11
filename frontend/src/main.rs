@@ -282,6 +282,7 @@ fn user_facing() -> impl Endpoint {
             get(invitation::accept_invitation),
         )
         .at("/add", get(add::add_chooser_page))
+        .at("/add/exchange/clear", post(add::add_exchange_clear))
         .at(
             "/add/event",
             get(add::add_event_page).post(add::add_event_submit),
@@ -386,7 +387,8 @@ fn user_facing() -> impl Endpoint {
         )
         .at(
             "/-detail/:id/platform-account",
-            post(component::detail_page::connect_platform_account),
+            get(component::detail_page::show_platform_account)
+                .post(component::detail_page::connect_platform_account),
         )
         .at(
             "/-detail/:id/account",
@@ -1209,11 +1211,6 @@ mod sync {
         classroom_materials: Option<String>,
         consent_statement: Option<String>,
         consent_statement_date: Option<Timestamp>,
-        participation_tools: Option<bool>, // deprecated, maybe don't implement
-        participation_prompt: Option<String>, // deprecated, maybe don't implement
-        participation_confirmation_message: Option<String>, // deprecated, maybe don't implement
-        participation_notification_email: Option<String>, // deprecated, maybe don't implement
-        participation_usage: Option<String>, // deprecated, maybe don't implement
         // section Relations
         part_of: Option<String>,
         associated_projects: Option<String>, // multiple, joined by ,
@@ -1644,13 +1641,6 @@ mod sync {
                 proj.classroom_materials = data.classroom_materials.unwrap_or_default();
                 proj.consent_statement = data.consent_statement.unwrap_or_default();
                 proj.consent_statement_date = data.consent_statement_date.map(|ts| ts.into());
-                proj.participation_tools = data.participation_tools.unwrap_or_default();
-                proj.participation_prompt = data.participation_prompt.unwrap_or_default();
-                proj.participation_confirmation_message =
-                    data.participation_confirmation_message.unwrap_or_default();
-                proj.participation_notification_email =
-                    data.participation_notification_email.unwrap_or_default();
-                proj.participation_usage = data.participation_usage.unwrap_or_default();
                 proj.part_of = data.part_of.and_then(|s| s.parse().ok());
                 proj.associated_projects = data
                     .associated_projects
