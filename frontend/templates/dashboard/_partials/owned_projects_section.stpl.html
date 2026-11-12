@@ -18,7 +18,12 @@
             <p class="text-sm opacity-70 mb-2">Project Status: <%= row.card.status %></p>
             <% } %>
             <div class="flex gap-8 mb-3">
-                <div><span class="text-xl font-bold"><%= row.joins %></span> <span class="text-sm">joins</span></div>
+                <div>
+                    <span class="text-xl font-bold"><%= row.joins.total %></span> <span class="text-sm">joins</span>
+                    <% if let (Some(since_primary), Some(since)) = (row.joins.since_primary, &self.primary_since) { %>
+                    <span class="block text-xs opacity-70"><%= since_primary %> since <%- local_time(since, TimeFormat::ShortDate) %></span>
+                    <% } %>
+                </div>
                 <div><span class="text-xl font-bold"><%= row.saves %></span> <span class="text-sm">saves</span></div>
             </div>
             <ul class="flex flex-wrap gap-x-6 gap-y-1 text-sm list-none m-0 p-0">

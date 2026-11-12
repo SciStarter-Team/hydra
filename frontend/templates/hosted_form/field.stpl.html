@@ -1,0 +1,116 @@
+<% use common::message::form::{BooleanStyle, ChoiceWidget, FieldKind}; %>
+<%# One field of a hosted form. A field another answer shows carries what
+    shows it (`data-show-if-*`), which js/hosted-form.js reads; hidden, it is
+    disabled too, so that nothing of it is sent. %>
+<% let id = self.id(); %>
+<% let required = self.field.required; %>
+<fieldset class="hf-field" id="<%= id %>-field"<% if let (Some(name), Some(condition)) = (&self.condition_name, &self.field.visible_if) { %> data-show-if-name="<%= name %>" data-show-if-value="<%= condition.equals %>"<% } %><% if !self.shown { %> hidden disabled<% } %>>
+  <% if self.field.kind.asks() { %>
+  <% if self.grouped() { %>
+  <legend class="hf-label"><%= self.field.label %><% if required { %><span class="hf-required" aria-hidden="true"> *</span><% } %></legend>
+  <% } else if !self.is_checkbox() { %>
+  <label class="hf-label" for="<%= id %>"><%= self.field.label %><% if required { %><span class="hf-required" aria-hidden="true"> *</span><% } %></label>
+  <% } %>
+  <% if !self.field.help.trim().is_empty() { %>
+  <div class="hf-help prose" id="<%= id %>-help"><%- self.help_html() %></div>
+  <% } %>
+  <% } %>
+
+  <% match &self.field.kind { FieldKind::Heading => { %>
+  <h2 class="hf-heading"><%= self.field.label %></h2>
+  <% } FieldKind::Markdown { text } => { %>
+  <div class="hf-markdown prose"><%- crate::markdown::form_content_html(text) %></div>
+  <% } FieldKind::Image { url } => { %>
+  <% if let Some(url) = crate::hosted_form::link(url) { %>
+  <figure class="hf-image">
+    <img src="<%= url %>" alt="<%= self.field.label %>">
+    <% if !self.field.label.trim().is_empty() { %>
+    <figcaption><%= self.field.label %></figcaption>
+    <% } %>
+  </figure>
+  <% } %>
+  <% } FieldKind::Text { multiline: true, placeholder } => { %>
+  <textarea <%- self.attributes(true, required) %> rows="4" placeholder="<%= placeholder %>"><%= self.value() %></textarea>
+  <% } FieldKind::Text { multiline: false, placeholder } => { %>
+  <input type="text" <%- self.attributes(true, required) %> value="<%= self.value() %>" placeholder="<%= placeholder %>">
+  <% } FieldKind::Number { min, max, integer } => { %>
+  <input type="number" <%- self.attributes(true, required) %> value="<%= self.value() %>" step="<% if *integer { %>1<% } else { %>any<% } %>"<% if *integer { %> inputmode="numeric"<% } else { %> inputmode="decimal"<% } %><% if let Some(min) = min { %> min="<%= min %>"<% } %><% if let Some(max) = max { %> max="<%= max %>"<% } %>>
+  <% } FieldKind::Choice { options, multiple, widget: ChoiceWidget::Select } => { %>
+  <select <%- self.attributes(true, required) %><% if *multiple { %> multiple<% } %>>
+    <% if !*multiple { %>
+    <option value=""></option>
+    <% } %>
+    <% for option in options { %>
+    <option value="<%= option.value %>"<% if self.has(&option.value) { %> selected<% } %>><%= option.label %></option>
+    <% } %>
+  </select>
+  <% } FieldKind::Choice { options, multiple, widget: ChoiceWidget::Buttons } => { %>
+  <div class="hf-options">
+    <% for option in options { %>
+    <label class="hf-option">
+      <input type="<% if *multiple { %>checkbox<% } else { %>radio<% } %>" <%- self.attributes(false, required && !*multiple) %> value="<%= option.value %>"<% if self.has(&option.value) { %> checked<% } %>>
+      <span><%= option.label %></span>
+    </label>
+    <% } %>
+  </div>
+  <% } FieldKind::Boolean { style: BooleanStyle::Checkbox } => { %>
+  <label class="hf-option hf-checkbox">
+    <%# Unticked, the box sends nothing, which is "no". %>
+    <input type="checkbox" <%- self.attributes(true, required) %> value="true" data-unchecked="false"<% if self.has("true") { %> checked<% } %>>
+    <span><%= self.field.label %><% if required { %><span class="hf-required" aria-hidden="true"> *</span><% } %></span>
+  </label>
+  <% } FieldKind::Boolean { style } => { %>
+  <% let (yes, no) = if *style == BooleanStyle::TrueFalse { ("True", "False") } else { ("Yes", "No") }; %>
+  <div class="hf-options hf-inline">
+    <label class="hf-option">
+      <input type="radio" <%- self.attributes(false, required) %> value="true"<% if self.has("true") { %> checked<% } %>>
+      <span><%= yes %></span>
+    </label>
+    <label class="hf-option">
+      <input type="radio" <%- self.attributes(false, required) %> value="false"<% if self.has("false") { %> checked<% } %>>
+      <span><%= no %></span>
+    </label>
+  </div>
+  <% } FieldKind::Date { not_in_future } => { %>
+  <input type="date" <%- self.attributes(true, required) %> value="<%= self.value() %>"<% if *not_in_future { %> max="<%= self.today | disp %>"<% } %>>
+  <% } FieldKind::Time { min, max, .. } => { %>
+  <% let offered = self.offered_times(); %>
+  <% if offered.is_empty() { %>
+  <input type="time" <%- self.attributes(true, required) %> value="<%= self.value() %>"<% if let Some(min) = min { %> min="<%= min.strftime("%H:%M").to_string() %>"<% } %><% if let Some(max) = max { %> max="<%= max.strftime("%H:%M").to_string() %>"<% } %>>
+  <% } else { %>
+  <select <%- self.attributes(true, required) %>>
+    <option value=""></option>
+    <% for time in &offered { %>
+    <option value="<%= time %>"<% if self.has(time) { %> selected<% } %>><%= time %></option>
+    <% } %>
+  </select>
+  <% } %>
+  <% } FieldKind::DateTime => { %>
+  <input type="datetime-local" <%- self.attributes(true, required) %> value="<%= self.value() %>">
+  <% } FieldKind::Photo { multiple } => { %>
+  <%# Each photo is uploaded as soon as it is chosen; what the form sends
+      is the uploaded photos' addresses, not the files. %>
+  <div class="hf-photos" id="<%= id %>-photos">
+    <% for url in self.values { %>
+    <%+ super::photo::PhotoItem { name: self.name(), url: url.clone() } %>
+    <% } %>
+  </div>
+  <input type="file" accept="image/*" name="photo" class="hf-photo-input"<% if *multiple { %> multiple<% } %>
+    hx-post="<%= self.photo_url() %>" hx-encoding="multipart/form-data" hx-trigger="change"
+    hx-target="#<%= id %>-status" hx-swap="outerHTML"
+    aria-label="Choose <% if *multiple { %>photos<% } else { %>a photo<% } %> for: <%= self.field.label %>">
+  <span class="hf-photo-status" id="<%= id %>-status" aria-live="polite"></span>
+  <% } FieldKind::Location => { %>
+  <div class="hf-location" data-location-field<% if let Some(center) = self.center { %> data-center="<%= center.latitude %>,<%= center.longitude %>"<% } %>>
+    <input type="text" <%- self.attributes(true, required) %> value="<%= self.value() %>" class="hf-location-input" placeholder="latitude, longitude" inputmode="decimal" autocomplete="off">
+    <div class="hf-location-map" hidden></div>
+    <p class="hf-location-hint" hidden>Click the map to mark the place, or drag the marker to move it.
+      <button type="button" class="hf-location-here" hidden>Use my current location</button>
+    </p>
+  </div>
+  <% } } %>
+
+  <% if let Some(error) = self.error { %>
+  <p class="hf-error" id="<%= id %>-error"><%= error %></p>
+  <% } %>
+</fieldset>

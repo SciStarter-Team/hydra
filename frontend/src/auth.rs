@@ -543,8 +543,6 @@ pub struct PasswordSignup {
     pub password: String,
     pub newsletter: bool,
     pub zipcode: String,
-    /// The project to join, if the signup was made from one's page.
-    pub join_project: Option<String>,
 }
 
 /// How a password signup came out.
@@ -608,7 +606,6 @@ pub async fn sign_up_with_password(
         badgeclass: staked_out_badge(session),
         attribution: first_touch(session),
         pending_transitions: pending_transitions::list(session),
-        join_project: fields.join_project,
     };
 
     if !turnstile_ok {
@@ -717,7 +714,6 @@ pub async fn signup_action(
         password: form.password1,
         newsletter: form.newsletter.unwrap_or(false),
         zipcode: form.zipcode,
-        join_project: None,
     };
 
     match sign_up_with_password(session, client_ip, fields, token, next.clone()).await {
@@ -1454,7 +1450,6 @@ pub async fn webauthn_registration_complete(
                         badgeclass: staked_out_badge(session),
                         attribution: first_touch(session),
                         pending_transitions: pending_transitions::list(session),
-                        join_project: None,
                     };
 
                     match request_with_retry::<Option<BasicInfo>>(

@@ -1,0 +1,140 @@
+<%# One field of the form builder. Its controls are named
+    field.<token>.<property>; moving or removing the card is done on the page
+    alone, and the editor reads the cards in the order they come. %>
+<% use crate::hosted_form::admin::{Kind, STYLES, WIDGETS}; %>
+<% use common::message::form::FieldKind; %>
+<% let kind = self.kind(); %>
+<li class="fb-card rounded-md border border-gray-200 bg-gray-50 p-4 space-y-3">
+    <input type="hidden" name="<%= self.control("kind") %>" value="<%= kind.as_str() %>">
+    <div class="flex items-center justify-between gap-2">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500"><%= kind.label() %></span>
+        <span class="flex gap-1">
+            <button type="button" class="px-2 py-1 text-xs rounded border border-gray-300 bg-white" aria-label="Move up"
+                    hx-on:click="const card = this.closest('.fb-card'); card.previousElementSibling?.before(card)">&uarr;</button>
+            <button type="button" class="px-2 py-1 text-xs rounded border border-gray-300 bg-white" aria-label="Move down"
+                    hx-on:click="const card = this.closest('.fb-card'); card.nextElementSibling?.after(card)">&darr;</button>
+            <button type="button" class="px-2 py-1 text-xs rounded border border-red-300 bg-white text-red-700"
+                    hx-on:click="this.closest('.fb-card').remove()">Remove</button>
+        </span>
+    </div>
+
+    <div class="grid gap-3 sm:grid-cols-3">
+        <label class="block sm:col-span-2">
+            <span class="block text-sm font-medium text-gray-700"><%= if self.asks() { "Question" } else { "Heading or caption" } %></span>
+            <input type="text" id="<%= self.id("label") %>" name="<%= self.control("label") %>" value="<%= self.field.label %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+        </label>
+        <label class="block">
+            <span class="block text-sm font-medium text-gray-700">Key</span>
+            <input type="text" name="<%= self.control("key") %>" value="<%= self.field.key.as_str() %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm font-mono sm:text-sm" placeholder="made from the question">
+        </label>
+    </div>
+    <p class="text-xs text-gray-500">Answers are kept under the key, so changing it leaves earlier answers under the old one.</p>
+
+    <% match &self.field.kind { FieldKind::Markdown { text } => { %>
+    <label class="block">
+        <span class="block text-sm font-medium text-gray-700">Text (Markdown)</span>
+        <textarea name="<%= self.control("text") %>" rows="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm font-mono sm:text-sm"><%= text %></textarea>
+    </label>
+    <% } FieldKind::Image { url } => { %>
+    <label class="block">
+        <span class="block text-sm font-medium text-gray-700">Picture (address)</span>
+        <input type="text" name="<%= self.control("url") %>" value="<%= url %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+    </label>
+    <% } FieldKind::Text { multiline, placeholder } => { %>
+    <div class="grid gap-3 sm:grid-cols-2">
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="<%= self.control("multiline") %>"<% if *multiline { %> checked<% } %>> Several lines</label>
+        <label class="block">
+            <span class="block text-sm font-medium text-gray-700">Placeholder</span>
+            <input type="text" name="<%= self.control("placeholder") %>" value="<%= placeholder %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+        </label>
+    </div>
+    <% } FieldKind::Number { min, max, integer } => { %>
+    <div class="grid gap-3 sm:grid-cols-3">
+        <label class="block">
+            <span class="block text-sm font-medium text-gray-700">Least</span>
+            <input type="number" step="any" name="<%= self.control("min") %>" value="<%= crate::hosted_form::admin::FieldCard::number(min) %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+        </label>
+        <label class="block">
+            <span class="block text-sm font-medium text-gray-700">Most</span>
+            <input type="number" step="any" name="<%= self.control("max") %>" value="<%= crate::hosted_form::admin::FieldCard::number(max) %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+        </label>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="<%= self.control("integer") %>"<% if *integer { %> checked<% } %>> Whole numbers only</label>
+    </div>
+    <% } FieldKind::Choice { options, multiple, widget } => { %>
+    <label class="block">
+        <span class="block text-sm font-medium text-gray-700">Choices, one to a line: <code>value | label</code>, or the label alone</span>
+        <textarea name="<%= self.control("options") %>" rows="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm font-mono sm:text-sm"><%= crate::hosted_form::admin::options_text(options) %></textarea>
+    </label>
+    <div class="grid gap-3 sm:grid-cols-2">
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="<%= self.control("multiple") %>"<% if *multiple { %> checked<% } %>> Several may be chosen</label>
+        <label class="block">
+            <span class="block text-sm font-medium text-gray-700">Shown as</span>
+            <select name="<%= self.control("widget") %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+                <% for (each, name, label) in &WIDGETS { %>
+                <option value="<%= name %>"<% if each == widget { %> selected<% } %>><%= label %></option>
+                <% } %>
+            </select>
+        </label>
+    </div>
+    <% } FieldKind::Boolean { style } => { %>
+    <label class="block">
+        <span class="block text-sm font-medium text-gray-700">Answered with</span>
+        <select name="<%= self.control("style") %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+            <% for (each, name, label) in &STYLES { %>
+            <option value="<%= name %>"<% if each == style { %> selected<% } %>><%= label %></option>
+            <% } %>
+        </select>
+    </label>
+    <% } FieldKind::Date { not_in_future } => { %>
+    <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="<%= self.control("not_in_future") %>"<% if *not_in_future { %> checked<% } %>> Not after today</label>
+    <% } FieldKind::Time { min, max, step_minutes, not_before } => { %>
+    <div class="grid gap-3 sm:grid-cols-4">
+        <label class="block">
+            <span class="block text-sm font-medium text-gray-700">Earliest</span>
+            <input type="time" name="<%= self.control("min") %>" value="<%= crate::hosted_form::admin::FieldCard::time(min) %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+        </label>
+        <label class="block">
+            <span class="block text-sm font-medium text-gray-700">Latest</span>
+            <input type="time" name="<%= self.control("max") %>" value="<%= crate::hosted_form::admin::FieldCard::time(max) %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+        </label>
+        <label class="block">
+            <span class="block text-sm font-medium text-gray-700">Minutes apart</span>
+            <input type="number" min="1" step="1" name="<%= self.control("step_minutes") %>" value="<%= step_minutes.map(|step| step.to_string()).unwrap_or_default() %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+        </label>
+        <label class="block">
+            <span class="block text-sm font-medium text-gray-700">Not before (a time field&rsquo;s key)</span>
+            <input type="text" name="<%= self.control("not_before") %>" value="<%= not_before.as_ref().map_or("", |key| key.as_str()) %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm font-mono sm:text-sm">
+        </label>
+    </div>
+    <% } FieldKind::Photo { multiple } => { %>
+    <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="<%= self.control("multiple") %>"<% if *multiple { %> checked<% } %>> Several photos</label>
+    <% } FieldKind::Heading | FieldKind::DateTime | FieldKind::Location => {} } %>
+
+    <% if self.asks() { %>
+    <label class="block">
+        <span class="block text-sm font-medium text-gray-700">Help (Markdown)</span>
+        <textarea name="<%= self.control("help") %>" rows="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm font-mono sm:text-sm"><%= self.field.help %></textarea>
+    </label>
+    <div class="grid gap-3 sm:grid-cols-3">
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="<%= self.control("required") %>"<% if self.field.required { %> checked<% } %>> Must be answered</label>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="<%= self.control("remember") %>"<% if self.field.remember { %> checked<% } %>> Starts with the person&rsquo;s last answer</label>
+        <% if kind != Kind::Photo && kind != Kind::Location { %>
+        <label class="block">
+            <span class="block text-sm font-medium text-gray-700">Starting answer</span>
+            <input type="text" name="<%= self.control("default") %>" value="<%= self.field.default.as_deref().unwrap_or_default() %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
+        </label>
+        <% } %>
+    </div>
+    <% } %>
+
+    <div class="grid gap-3 sm:grid-cols-2">
+        <label class="block">
+            <span class="block text-sm font-medium text-gray-700">Shown only when the field with key</span>
+            <input type="text" name="<%= self.control("show_if_field") %>" value="<%= self.show_if_field() %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm font-mono sm:text-sm">
+        </label>
+        <label class="block">
+            <span class="block text-sm font-medium text-gray-700">is answered</span>
+            <input type="text" name="<%= self.control("show_if_equals") %>" value="<%= self.show_if_equals() %>" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm font-mono sm:text-sm">
+        </label>
+    </div>
+</li>

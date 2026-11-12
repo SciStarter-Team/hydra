@@ -1,0 +1,268 @@
+/* Hosted forms (templates/hosted_form/): a form's page and its map, and the
+   cards of its submissions for the people running it. */
+
+.hosted-form {
+    max-width: 52rem;
+}
+.hf-title {
+    font-size: var(--text-2xl);
+    @apply font-semibold mb-4;
+}
+
+/* ---------------------------------------------------------------- the page */
+
+.hf-cover {
+    @apply w-full rounded-lg mb-4 object-cover;
+    max-height: 20rem;
+}
+.hf-intro {
+    @apply mb-4;
+}
+.hf-sign-in,
+.hf-submitter,
+.hf-notice,
+.hf-closed,
+.hf-thanks {
+    @apply rounded-lg p-4 mb-4;
+    background: var(--color-primary-light);
+}
+.hf-notice {
+    background: #fdecea;
+    color: var(--color-alert);
+}
+.hf-small-print {
+    @apply text-sm mt-2;
+    color: var(--color-neutral-dark);
+}
+.hf-thanks-actions {
+    @apply flex flex-wrap gap-2 mt-4;
+}
+
+.hf-body.hf-with-aside {
+    @apply grid gap-8;
+}
+@media (min-width: 64rem) {
+    .hf-body.hf-with-aside {
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    }
+}
+.hf-aside {
+    @apply rounded-lg p-4 self-start;
+    background: var(--color-neutral-xlight);
+}
+
+.hf-fields {
+    @apply flex flex-col gap-5;
+}
+.hf-fields:disabled {
+    opacity: 0.6;
+}
+
+/* A field: its question, help, control and refusal, one under another. */
+.hf-field {
+    @apply flex flex-col gap-1.5 min-w-0;
+}
+.hf-field[hidden] {
+    display: none;
+}
+.hf-label {
+    @apply font-semibold;
+}
+.hf-required {
+    color: var(--color-alert);
+}
+.hf-help {
+    @apply text-sm;
+    color: var(--color-neutral-dark);
+}
+.hf-heading {
+    font-size: var(--text-xl);
+    @apply font-semibold mt-4;
+}
+.hf-image {
+    @apply max-w-full rounded-lg;
+}
+
+.hf-field :is(input[type="text"], input[type="number"], input[type="date"],
+    input[type="time"], input[type="datetime-local"], select, textarea) {
+    @apply w-full bg-white rounded-lg px-3 py-2;
+    border: 1px solid var(--color-field-border);
+}
+.hf-field :is(input, select, textarea):focus-visible {
+    outline: 2px solid var(--color-primary-action);
+    outline-offset: 1px;
+}
+.hf-field [aria-invalid="true"] {
+    border-color: var(--color-alert);
+}
+.hf-error {
+    @apply text-sm font-medium;
+    color: var(--color-alert);
+}
+
+.hf-options {
+    @apply flex flex-col gap-1.5;
+}
+.hf-options.hf-inline {
+    @apply flex-row flex-wrap gap-4;
+}
+.hf-option {
+    @apply flex items-center gap-2;
+}
+.hf-option input {
+    accent-color: var(--color-primary-action);
+    width: 1.1rem;
+    height: 1.1rem;
+}
+
+.hf-actions {
+    @apply flex justify-end mt-2;
+}
+
+/* ---------------------------------------------------------------- photos */
+
+.hf-photos {
+    @apply flex flex-wrap gap-3;
+}
+.hf-photo {
+    @apply flex flex-col items-start gap-1;
+}
+.hf-photo img {
+    @apply rounded-lg object-cover;
+    width: 8rem;
+    height: 8rem;
+}
+.hf-photo-remove {
+    @apply text-sm underline;
+    color: var(--color-alert);
+}
+.hf-photo-status {
+    @apply text-sm;
+}
+
+/* ---------------------------------------------------------------- places */
+
+.hf-location {
+    @apply flex flex-col gap-2;
+}
+.hf-location-map {
+    @apply w-full rounded-lg overflow-hidden;
+    height: 18rem;
+    border: 1px solid var(--color-field-border);
+}
+.hf-location-hint {
+    @apply text-sm flex flex-wrap items-center gap-2;
+    color: var(--color-neutral-dark);
+}
+.hf-location-here {
+    @apply underline;
+    color: var(--color-primary-action);
+}
+
+/* ---------------------------------------------------------------- the map */
+
+.hf-map {
+    @apply w-full rounded-lg overflow-hidden relative;
+    height: min(70vh, 36rem);
+    border: 1px solid var(--color-neutral-light);
+}
+.hf-map-empty {
+    @apply absolute inset-x-0 top-4 mx-auto w-fit rounded-lg bg-white px-4 py-2 shadow;
+    z-index: 1;
+}
+.hf-popup {
+    @apply text-sm;
+}
+.hf-popup-day {
+    @apply font-semibold mb-1;
+}
+.hf-popup dt {
+    @apply font-semibold mt-1;
+}
+.hf-popup-photos,
+.hf-card-photos {
+    @apply flex flex-wrap gap-2;
+}
+.hf-popup-photos img {
+    @apply rounded object-cover;
+    width: 4.5rem;
+    height: 4.5rem;
+}
+
+/* ---------------------------------------------------------------- submissions */
+
+.hf-submissions-summary {
+    @apply mb-4;
+}
+.hf-cards {
+    @apply flex flex-col gap-4;
+}
+.hf-card {
+    @apply rounded-lg p-4 flex flex-col gap-3 bg-white;
+    border: 1px solid var(--color-neutral-light);
+}
+.hf-card-header {
+    @apply flex flex-wrap gap-x-3 gap-y-1 text-sm;
+    color: var(--color-neutral-dark);
+}
+.hf-card-header time {
+    @apply font-semibold;
+}
+.hf-card-answers {
+    @apply grid gap-x-4 gap-y-1 text-sm;
+    grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr);
+}
+.hf-card-answers dt {
+    @apply font-semibold;
+}
+.hf-card-answers dd {
+    overflow-wrap: anywhere;
+}
+.hf-card-note {
+    @apply font-normal;
+    color: var(--color-neutral-mid);
+}
+.hf-card-photos img {
+    @apply rounded object-cover;
+    width: 6rem;
+    height: 6rem;
+}
+.hf-card-evaluation {
+    @apply grid gap-2 items-end text-sm rounded-lg p-3;
+    background: var(--color-neutral-xlight);
+    grid-template-columns: minmax(10rem, 1fr) minmax(0, 2fr) auto auto;
+}
+.hf-card-evaluation label {
+    @apply flex flex-col gap-1;
+}
+.hf-card-evaluation :is(select, textarea) {
+    @apply bg-white rounded px-2 py-1;
+    border: 1px solid var(--color-field-border);
+}
+@media (max-width: 40rem) {
+    .hf-card-answers,
+    .hf-card-evaluation {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+.hf-card-saved {
+    color: var(--color-primary-action);
+}
+.hf-card-delete summary {
+    @apply text-sm cursor-pointer w-fit;
+    color: var(--color-alert);
+}
+.hf-card-delete[open] {
+    @apply flex flex-col gap-2 items-start;
+}
+.hf-pages {
+    @apply flex items-center justify-center gap-4 mt-6;
+}
+.hf-danger {
+    @apply text-white border;
+    background: var(--color-alert);
+    border-color: var(--color-alert);
+}
+.hf-danger:hover {
+    background: var(--color-accent1-dark);
+}

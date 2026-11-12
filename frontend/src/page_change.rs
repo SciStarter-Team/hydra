@@ -7,13 +7,16 @@
 //! a whole record whether or not anything in it is new, so they compare what
 //! is held before and after the write with [`Stored`].
 
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use common::{
     message::log::{Housekeeping, LastChangedRequest, LastChangedResponse, PageChange},
     service::{log_activity, request},
+    shared::db,
     timestring::TimeString,
+    transaction::Immediate,
 };
+use tokio::time::sleep;
 use ulid::Ulid;
 
 use crate::{
@@ -167,6 +170,69 @@ pub async fn last_changes(targets: Vec<Ulid>) -> Result<HashMap<Ulid, TimeString
         );
     }
     Ok(changes)
+}
+
+/// How often each instance copies the projects' last changes out of the
+/// log; see [`refresh_project_last_changes`].
+const PROJECT_LAST_CHANGES_INTERVAL: Duration = Duration::from_secs(10 * 60);
+
+/// Copy when each project was last updated out of the activity log into
+/// `project_last_changes`, where a search can order by it, and say how many
+/// projects have a change logged.
+///
+/// The log is the only record of when a page last changed; the table is a
+/// copy of it that SQL can reach, the way `project_regions` is a copy of
+/// what the region polygons say. The whole table is replaced each time, so
+/// a project that has gone loses its row with everything else.
+pub async fn refresh_project_last_changes() -> Result<usize, anyhow::Error> {
+    let project_ids = sqlx::query_scalar!(r#"SELECT "project_id" AS "project_id!" FROM projects"#)
+        .fetch_all(db())
+        .await?;
+
+    let changes = last_changes(
+        project_ids
+            .iter()
+            .filter_map(|project_id| Ulid::from_string(project_id).ok())
+            .collect(),
+    )
+    .await?;
+
+    let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
+
+    sqlx::query!("DELETE FROM project_last_changes")
+        .execute(&mut tx)
+        .await?;
+
+    for (project_id, changed) in changes.iter() {
+        let project_id = project_id.to_string();
+        let changed = changed.to_string();
+
+        sqlx::query!(
+            r#"INSERT INTO project_last_changes ("project_id", "changed") VALUES (?, ?)"#,
+            project_id,
+            changed
+        )
+        .execute(&mut tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+
+    Ok(changes.len())
+}
+
+/// Keep `project_last_changes` within [`PROJECT_LAST_CHANGES_INTERVAL`] of
+/// the log, from startup on. Every instance keeps its own copy, as it keeps
+/// its own database.
+pub async fn refresh_project_last_changes_periodically() {
+    loop {
+        match refresh_project_last_changes().await {
+            Ok(changed) => tracing::debug!("Copied the last changes of {changed} projects"),
+            Err(err) => tracing::error!("Could not copy the projects' last changes: {err:#}"),
+        }
+
+        sleep(PROJECT_LAST_CHANGES_INTERVAL).await;
+    }
 }
 
 /// The action a staff change to an entity of `kind` is logged as. An

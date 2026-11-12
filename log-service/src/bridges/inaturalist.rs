@@ -14,6 +14,7 @@ use log_service::database::{Database, tables::ParticipationRow};
 use log_service::ledger::{self, Feed};
 
 use super::{Link, Platform};
+use crate::contributor_joins::ContributorJoins;
 
 const INATURALIST_ORIGIN: i16 = 5;
 
@@ -148,6 +149,7 @@ async fn process_user(
     // offset and the stored connection time a Z, and "+00:00" sorts before
     // "Z" whatever the instants are.
     let floor = linked_platform::import_floor(user.inat_linked_at.as_deref());
+    let mut contributor_joins = ContributorJoins::default();
     let since = user
         .inat_last_update
         .as_deref()
@@ -268,11 +270,13 @@ async fn process_user(
                     task_name: None,
                 };
 
-                if let Err(e) = database.participation.insert(row).await {
+                if let Err(e) = database.participation.insert(row.clone()).await {
                     eprintln!("Error inserting iNat participation: {}", e);
                     ledger::release(Feed::InatObservations, obs.id).await;
                     return;
                 }
+
+                contributor_joins.join(&row).await;
             }
         }
 

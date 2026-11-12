@@ -173,3 +173,8 @@
 .event-finder .ef-info p {
     @apply text-sm;
 }
+/* The group a limited event is for: its label, then the group in bold. */
+.event-finder .ef-limited {
+    @apply flex flex-wrap items-baseline gap-x-2;
+    overflow-wrap: anywhere;
+}

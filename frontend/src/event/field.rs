@@ -38,6 +38,9 @@ pub enum EventFieldValue {
     PartOf(Option<Ulid>),
     LocationType(String),
     EntirelyOnline(bool),
+    /// Whether an event held at its address can also be joined online. Never
+    /// true of an event joined only online: saving either clears this.
+    AlsoOnline(bool),
     LocationName(String),
     LocationDescription(String),
     Address(String),
@@ -53,6 +56,8 @@ pub enum EventFieldValue {
     Topics(std::collections::BTreeSet<String>),
     Audience(std::collections::BTreeSet<String>),
     TicketingBegins(Option<TimeString>),
+    TicketUrl(String),
+    Cost(String),
     OutcomesLabel(Option<String>),
     OutcomesLink(Option<String>),
     CircuitId(Option<String>),
@@ -62,9 +67,18 @@ pub enum EventFieldValue {
     PageEditorIds(Box<[Ulid]>),
     Reviewed(bool),
     FacebookEvent(FacebookEvent),
+    /// The group the event is limited to, in the organizer's words; empty
+    /// when it's open to everyone.
+    LimitedTo(String),
 }
 
 impl EventFieldValue {
+    /// The group an editor gave the event as limited to, as it is kept:
+    /// without the space around it.
+    pub fn limited_to(group: &str) -> Self {
+        EventFieldValue::LimitedTo(group.trim().to_string())
+    }
+
     /// The field holding the slugs an event picks from `list`, or `None` for
     /// a list events pick nothing from.
     pub fn choices(
@@ -111,6 +125,7 @@ impl EventField {
             EventFieldValue::PartOf(_) => EventFieldType::PartOf,
             EventFieldValue::LocationType(_) => EventFieldType::LocationType,
             EventFieldValue::EntirelyOnline(_) => EventFieldType::EntirelyOnline,
+            EventFieldValue::AlsoOnline(_) => EventFieldType::AlsoOnline,
             EventFieldValue::LocationName(_) => EventFieldType::LocationName,
             EventFieldValue::LocationDescription(_) => EventFieldType::LocationDescription,
             EventFieldValue::Address(_) => EventFieldType::Address,
@@ -124,6 +139,9 @@ impl EventField {
             EventFieldValue::Topics(_) => EventFieldType::Topics,
             EventFieldValue::Audience(_) => EventFieldType::Audience,
             EventFieldValue::TicketingBegins(_) => EventFieldType::TicketingBegins,
+            EventFieldValue::TicketUrl(_) => EventFieldType::TicketUrl,
+            EventFieldValue::Cost(_) => EventFieldType::Cost,
+            EventFieldValue::LimitedTo(_) => EventFieldType::LimitedTo,
             EventFieldValue::OutcomesLabel(_) => EventFieldType::OutcomesLabel,
             EventFieldValue::OutcomesLink(_) => EventFieldType::OutcomesLink,
             EventFieldValue::CircuitId(_) => EventFieldType::CircuitId,
@@ -557,16 +575,82 @@ impl EventField {
         .execute(db())
         .await?;
 
+        // A global event's geometry places it in no region.
+        crate::region::refresh_event(&event_id_str).await?;
+
         Ok(())
     }
 
+    /// An event joined only online is not also joined online besides.
     async fn save_entirely_online(&self, entirely_online: &bool) -> Result<(), Error> {
         use common::shared::db;
 
         let event_id_str = self.event_id.to_string();
         sqlx::query!(
-            "UPDATE events SET entirely_online = ? WHERE event_id = ?",
+            r#"UPDATE events SET entirely_online = ?1, also_online = also_online AND NOT ?1
+               WHERE event_id = ?2"#,
             entirely_online,
+            event_id_str
+        )
+        .execute(db())
+        .await?;
+
+        Ok(())
+    }
+
+    /// Kept false for an event joined only online.
+    async fn save_also_online(&self, also_online: &bool) -> Result<(), Error> {
+        use common::shared::db;
+
+        let event_id_str = self.event_id.to_string();
+        sqlx::query!(
+            r#"UPDATE events SET also_online = ? AND NOT entirely_online WHERE event_id = ?"#,
+            also_online,
+            event_id_str
+        )
+        .execute(db())
+        .await?;
+
+        Ok(())
+    }
+
+    async fn save_ticket_url(&self, ticket_url: &str) -> Result<(), Error> {
+        use common::shared::db;
+
+        let event_id_str = self.event_id.to_string();
+        sqlx::query!(
+            "UPDATE events SET ticket_url = ? WHERE event_id = ?",
+            ticket_url,
+            event_id_str
+        )
+        .execute(db())
+        .await?;
+
+        Ok(())
+    }
+
+    async fn save_cost(&self, cost: &str) -> Result<(), Error> {
+        use common::shared::db;
+
+        let event_id_str = self.event_id.to_string();
+        sqlx::query!(
+            "UPDATE events SET cost = ? WHERE event_id = ?",
+            cost,
+            event_id_str
+        )
+        .execute(db())
+        .await?;
+
+        Ok(())
+    }
+
+    async fn save_limited_to(&self, limited_to: &str) -> Result<(), Error> {
+        use common::shared::db;
+
+        let event_id_str = self.event_id.to_string();
+        sqlx::query!(
+            "UPDATE events SET limited_to = ? WHERE event_id = ?",
+            limited_to,
             event_id_str
         )
         .execute(db())
@@ -1049,6 +1133,60 @@ impl EventField {
         ))
     }
 
+    async fn read_also_online(event_id: Ulid) -> Result<Self, Error> {
+        use common::shared::db;
+        let event_id_str = event_id.to_string();
+        let also_online = sqlx::query_scalar!(
+            r#"SELECT also_online AS "also_online: bool" FROM events WHERE event_id = ?"#,
+            event_id_str
+        )
+        .fetch_one(db())
+        .await?;
+        Ok(EventField::new(
+            event_id,
+            EventFieldValue::AlsoOnline(also_online),
+        ))
+    }
+
+    async fn read_ticket_url(event_id: Ulid) -> Result<Self, Error> {
+        use common::shared::db;
+        let event_id_str = event_id.to_string();
+        let ticket_url = sqlx::query_scalar!(
+            "SELECT ticket_url FROM events WHERE event_id = ?",
+            event_id_str
+        )
+        .fetch_one(db())
+        .await?;
+        Ok(EventField::new(
+            event_id,
+            EventFieldValue::TicketUrl(ticket_url),
+        ))
+    }
+
+    async fn read_cost(event_id: Ulid) -> Result<Self, Error> {
+        use common::shared::db;
+        let event_id_str = event_id.to_string();
+        let cost = sqlx::query_scalar!("SELECT cost FROM events WHERE event_id = ?", event_id_str)
+            .fetch_one(db())
+            .await?;
+        Ok(EventField::new(event_id, EventFieldValue::Cost(cost)))
+    }
+
+    async fn read_limited_to(event_id: Ulid) -> Result<Self, Error> {
+        use common::shared::db;
+        let event_id_str = event_id.to_string();
+        let limited_to = sqlx::query_scalar!(
+            "SELECT limited_to FROM events WHERE event_id = ?",
+            event_id_str
+        )
+        .fetch_one(db())
+        .await?;
+        Ok(EventField::new(
+            event_id,
+            EventFieldValue::LimitedTo(limited_to),
+        ))
+    }
+
     async fn read_location_name(event_id: Ulid) -> Result<Self, Error> {
         use common::shared::db;
         let event_id_str = event_id.to_string();
@@ -1260,6 +1398,7 @@ impl LoadStorePeered for EventField {
             EventFieldValue::EntirelyOnline(entirely_online) => {
                 self.save_entirely_online(entirely_online).await
             }
+            EventFieldValue::AlsoOnline(also_online) => self.save_also_online(also_online).await,
             EventFieldValue::LocationName(location_name) => {
                 self.save_location_name(location_name).await
             }
@@ -1334,6 +1473,9 @@ impl LoadStorePeered for EventField {
             EventFieldValue::TicketingBegins(ticketing_begins) => {
                 self.save_ticketing_begins(ticketing_begins).await
             }
+            EventFieldValue::TicketUrl(ticket_url) => self.save_ticket_url(ticket_url).await,
+            EventFieldValue::Cost(cost) => self.save_cost(cost).await,
+            EventFieldValue::LimitedTo(limited_to) => self.save_limited_to(limited_to).await,
             EventFieldValue::OutcomesLabel(outcomes_label) => {
                 self.save_outcomes_label(outcomes_label).await
             }
@@ -1382,6 +1524,7 @@ impl LoadStorePeered for EventField {
             EventFieldType::PartOf => Self::read_part_of(event_id).await,
             EventFieldType::LocationType => Self::read_location_type(event_id).await,
             EventFieldType::EntirelyOnline => Self::read_entirely_online(event_id).await,
+            EventFieldType::AlsoOnline => Self::read_also_online(event_id).await,
             EventFieldType::LocationName => Self::read_location_name(event_id).await,
             EventFieldType::LocationDescription => Self::read_location_description(event_id).await,
             EventFieldType::Address => Self::read_address(event_id).await,
@@ -1430,6 +1573,9 @@ impl LoadStorePeered for EventField {
                 .await
             }
             EventFieldType::TicketingBegins => Self::read_ticketing_begins(event_id).await,
+            EventFieldType::TicketUrl => Self::read_ticket_url(event_id).await,
+            EventFieldType::Cost => Self::read_cost(event_id).await,
+            EventFieldType::LimitedTo => Self::read_limited_to(event_id).await,
             EventFieldType::OutcomesLabel => Self::read_outcomes_label(event_id).await,
             EventFieldType::OutcomesLink => Self::read_outcomes_link(event_id).await,
             EventFieldType::CircuitId => Self::read_circuit_id(event_id).await,

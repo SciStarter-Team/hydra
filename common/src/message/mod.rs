@@ -1,5 +1,6 @@
 pub mod dashboard;
 pub mod email;
+pub mod form;
 pub mod forum;
 pub mod health;
 pub mod location;

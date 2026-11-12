@@ -1,6 +1,6 @@
 <% let full = self.full(); %>
 <% if let Some(legend) = &self.legend { %>
-<fieldset class="choice-group">
+<fieldset class="choice-group choice-category">
   <legend><%= legend %></legend>
 <% } %>
   <div class="choice-checkboxes checkbox-grid"<% if let Some(limit) = self.limit { %> data-pick-limit="<%= limit %>"<% } %>>

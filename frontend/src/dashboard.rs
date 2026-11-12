@@ -17,8 +17,11 @@ use std::time::Duration;
 
 use anyhow::Error;
 use common::message::dashboard::{EntitySummary, EntitySummaryKind};
-use common::message::user::{EntityCountsRequest, EntityCountsResponse};
+use common::message::user::{
+    EntityCountsRequest, EntityCountsResponse, JoinCount, JoinCountsByProjectsResponse,
+};
 use common::shared::db;
+use common::timestring::TimeString;
 use poem::{Endpoint, EndpointExt, Route, get, post};
 use sailfish::TemplateOnce;
 
@@ -122,6 +125,38 @@ pub async fn fetch_bookmarked(
     Ok(summaries
         .into_iter()
         .partition(|s| s.kind == EntitySummaryKind::Project))
+}
+
+/// How many people have joined each of a set of projects.
+#[derive(Default)]
+pub struct ProjectJoinCounts {
+    /// When hydra became the primary server, which each
+    /// [`JoinCount::since_primary`] counts from.
+    pub primary_since: Option<TimeString>,
+    pub by_project: HashMap<String, JoinCount>,
+}
+
+/// How many people have joined each of these projects, tolerating failure
+/// as [`entity_counts`] does.
+pub async fn join_counts(project_ids: &[String]) -> ProjectJoinCounts {
+    if project_ids.is_empty() {
+        return ProjectJoinCounts::default();
+    }
+
+    match common::service::request::<JoinCountsByProjectsResponse>(
+        "user.joins.count_by_projects",
+        EntityCountsRequest {
+            entity_ids: project_ids.to_vec(),
+        },
+    )
+    .await
+    {
+        Ok(response) => ProjectJoinCounts {
+            primary_since: response.primary_since,
+            by_project: response.counts.into_iter().collect(),
+        },
+        Err(_) => ProjectJoinCounts::default(),
+    }
 }
 
 /// Fetch per-entity engagement counts from the given user-service

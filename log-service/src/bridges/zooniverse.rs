@@ -18,6 +18,7 @@ use ulid::Ulid;
 use log_service::database::{Database, tables::ParticipationRow};
 
 use super::{Link, Platform};
+use crate::contributor_joins::ContributorJoins;
 
 pub mod access;
 pub mod admin;
@@ -576,6 +577,8 @@ async fn sync_project(
         reader: _,
     } = project;
 
+    let mut contributor_joins = ContributorJoins::default();
+
     loop {
         if cancellation_token.is_cancelled() {
             return;
@@ -732,8 +735,9 @@ async fn sync_project(
                     task_name: None,
                 };
 
-                if let Err(e) = database.participation.insert(row).await {
-                    eprintln!("Error inserting zooniverse participation: {}", e);
+                match database.participation.insert(row.clone()).await {
+                    Ok(()) => contributor_joins.join(&row).await,
+                    Err(e) => eprintln!("Error inserting zooniverse participation: {}", e),
                 }
             }
         }

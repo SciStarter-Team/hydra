@@ -1,5 +1,5 @@
 <% use crate::dashboard::settings::{SettingsNotice, SettingsTab}; %>
-<% use crate::project::linked_platform::PlatformCopy; %>
+<% use crate::project::linked_platform::{PlatformCopy, UnknownAccount}; %>
 <div class="ss-container !pt-8 !pb-8 mx-auto">
     <h1>Account Settings</h1>
 
@@ -9,7 +9,7 @@
     </div>
     <% } Some(SettingsNotice::UnknownAccount { platform, username }) => { %>
     <div class="ss-card !p-4 mb-4 bg-red-50 border border-red-200 text-red-800" role="alert">
-        Nothing was saved. <%= platform.label() %> has no account named <strong><%= username %></strong>.<% if let Some(hint) = platform.username_hint() { %> <%= hint %><% } %>
+        Nothing was saved. <%+ UnknownAccount { platform: *platform, username } %><% if let Some(hint) = platform.username_hint() { %> <%= hint %><% } %>
     </div>
     <% } None => {} } %>
 

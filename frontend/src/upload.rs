@@ -43,6 +43,35 @@ pub fn anonymous_routes() -> impl Endpoint {
     Route::new().at("/:file_id", get(get_untracked_file))
 }
 
+/// Keep the file a multipart `field` carries as an untracked upload, one
+/// anyone may fetch, and give its path (`/-uploaded/<id>`). `uploaded_by`
+/// is `None` for someone not signed in.
+///
+/// Every form that takes an upload keeps it through here.
+pub async fn store_untracked(
+    field: poem::web::Field,
+    uploaded_by: Option<Ulid>,
+) -> Result<String, anyhow::Error> {
+    let original_filename = field.file_name().map(str::to_string);
+    let content_type = field.content_type().map(str::to_string);
+
+    let mut data = Vec::new();
+    field.into_async_read().read_to_end(&mut data).await?;
+
+    let metadata = FileMetadata {
+        file_id: Ulid::new(),
+        original_filename,
+        content_type,
+        size: data.len() as u64,
+        uploaded_by,
+        access: FileAccess::Untracked,
+        variant: None,
+        force_download: false,
+    };
+
+    STORAGE.upload_file(metadata, data).await
+}
+
 #[handler]
 async fn upload_tracked_file(
     Authenticated(user_info): Authenticated,
@@ -123,7 +152,7 @@ async fn upload_tracked_file(
         original_filename: Some(filename),
         content_type,
         size: data.len() as u64,
-        uploaded_by: user_info.user_id,
+        uploaded_by: Some(user_info.user_id),
         access: FileAccess::Tracked,
         variant: None,         // Original upload, no variant
         force_download: false, // Default to letting browser decide
@@ -210,61 +239,38 @@ async fn upload_untracked_file(
     while let Some(field) = multipart.next_field().await? {
         let name = field.name().map(|s| s.to_string());
 
-        if let Some(field_name) = name {
-            if field_name == "file" {
-                let filename = field.file_name().map(|s| s.to_string());
-                let content_type = field.content_type().map(|s| s.to_string());
+        if name.as_deref() == Some("file") {
+            return match store_untracked(field, Some(user_info.user_id)).await {
+                Ok(file_path) => {
+                    let file_id = storage::untracked_file_id(&file_path)
+                        .map(|file_id| file_id.to_string())
+                        .unwrap_or_default();
 
-                let file_id = Ulid::new();
-                let mut data = Vec::new();
-                let mut reader = field.into_async_read();
-                reader.read_to_end(&mut data).await.map_err(|e| {
-                    error!("Failed to read uploaded file: {}", e);
-                    poem::Error::from_string(
-                        "Failed to read file",
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                    )
-                })?;
-
-                let metadata = FileMetadata {
-                    file_id,
-                    original_filename: filename,
-                    content_type,
-                    size: data.len() as u64,
-                    uploaded_by: user_info.user_id,
-                    access: FileAccess::Untracked,
-                    variant: None,         // Original upload, no variant
-                    force_download: false, // Default to letting browser decide
-                };
-
-                match STORAGE.upload_file(metadata, data).await {
-                    Ok(file_path) => {
-                        return Ok(Response::builder()
-                            .status(StatusCode::OK)
-                            .content_type("application/json")
-                            .body(
-                                serde_json::to_string(&serde_json::json!({
-                                    "file_id": file_id.to_string(),
-                                    "file_path": file_path,
-                                    "status": "uploaded"
-                                }))
-                                .map_err(|e| {
-                                    poem::Error::from_string(
-                                        e.to_string(),
-                                        StatusCode::INTERNAL_SERVER_ERROR,
-                                    )
-                                })?,
-                            ));
-                    }
-                    Err(e) => {
-                        error!("Failed to upload untracked file: {:#}", e);
-                        return Err(poem::Error::from_string(
-                            "Upload failed",
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                        ));
-                    }
+                    Ok(Response::builder()
+                        .status(StatusCode::OK)
+                        .content_type("application/json")
+                        .body(
+                            serde_json::to_string(&serde_json::json!({
+                                "file_id": file_id,
+                                "file_path": file_path,
+                                "status": "uploaded"
+                            }))
+                            .map_err(|e| {
+                                poem::Error::from_string(
+                                    e.to_string(),
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                )
+                            })?,
+                        ))
                 }
-            }
+                Err(e) => {
+                    error!("Failed to upload untracked file: {:#}", e);
+                    Err(poem::Error::from_string(
+                        "Upload failed",
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                    ))
+                }
+            };
         }
     }
 

@@ -81,7 +81,6 @@ async fn create_account(
     let badgeclass = form.badgeclass;
     let attribution = form.attribution;
     let pending_transitions = form.pending_transitions;
-    let join_project = form.join_project;
 
     // Some signup contexts identify a cohort that needs protecting. The rule
     // lives here rather than in a frontend handler so that every lane —
@@ -305,14 +304,6 @@ async fn create_account(
         }
     }
 
-    // The project the visitor signed up from. Joined here for the reasons
-    // the badge is granted here: every lane obeys it, and non-fatally.
-    if let Some(project_id) = join_project {
-        if let Err(e) = crate::project_joins::record_join(user_id, &project_id).await {
-            eprintln!("Failed to join {user_id} to {project_id} at signup: {e}");
-        }
-    }
-
     log_activity(None, "signup", user_id, None, None).await.ok();
 
     // Some cohorts are welcomed in their own words. The tag decides which,
@@ -453,7 +444,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                        "badgeclass" = ?, "next" = ?, "ip_address" = ?, "email_sent" = ?,
                        "referer" = ?, "origin" = ?, "utm_source" = ?, "utm_medium" = ?,
                        "utm_campaign" = ?, "utm_term" = ?, "utm_content" = ?,
-                       "pending_transitions" = ?, "join_project" = ?
+                       "pending_transitions" = ?
                        where "email_lower" = ?"#,
                     form.email,
                     form.handle,
@@ -475,7 +466,6 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                     attribution.utm_term,
                     attribution.utm_content,
                     pending_transitions,
-                    form.join_project,
                     email_lower,
                 )
                 .execute(db())
@@ -491,7 +481,7 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                        "badgeclass" = ?, "next" = ?, "ip_address" = ?,
                        "referer" = ?, "origin" = ?, "utm_source" = ?, "utm_medium" = ?,
                        "utm_campaign" = ?, "utm_term" = ?, "utm_content" = ?,
-                       "pending_transitions" = ?, "join_project" = ?
+                       "pending_transitions" = ?
                        where "email_lower" = ?"#,
                     form.email,
                     form.handle,
@@ -512,7 +502,6 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                     attribution.utm_term,
                     attribution.utm_content,
                     pending_transitions,
-                    form.join_project,
                     email_lower,
                 )
                 .execute(db())
@@ -533,9 +522,8 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                    "newsletter", "zipcode", "protected", "point", "tags",
                    "badgeclass", "next", "ip_address", "created", "email_sent",
                    "referer", "origin", "utm_source", "utm_medium",
-                   "utm_campaign", "utm_term", "utm_content", "pending_transitions",
-                   "join_project"
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                   "utm_campaign", "utm_term", "utm_content", "pending_transitions"
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
                 code,
                 form.email,
                 email_lower,
@@ -559,7 +547,6 @@ pub async fn defer_signup(req: &Request) -> Result<DeferSignupOutcome, Error> {
                 attribution.utm_term,
                 attribution.utm_content,
                 pending_transitions,
-                form.join_project,
             )
             .execute(db())
             .await?;
@@ -582,8 +569,7 @@ pub async fn complete_signup(req: &Request) -> Result<Option<CompleteSignupRespo
         r#"select "email", "handle", "password", "newsletter", "zipcode",
                   "protected", "point", "tags", "badgeclass", "next",
                   "referer", "origin", "utm_source", "utm_medium",
-                  "utm_campaign", "utm_term", "utm_content", "pending_transitions",
-                  "join_project"
+                  "utm_campaign", "utm_term", "utm_content", "pending_transitions"
            from "pending_signups"
            where "code" = ? and datetime("created") >= datetime('now', '-7 days')"#,
         complete.code
@@ -651,7 +637,6 @@ pub async fn complete_signup(req: &Request) -> Result<Option<CompleteSignupRespo
                 Vec::new()
             },
         ),
-        join_project: row.join_project,
     };
 
     let basic_info = match create_account(form, row.password, true).await {

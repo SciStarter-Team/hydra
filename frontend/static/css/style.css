@@ -69,6 +69,7 @@
 @import "./components/feature-panel.css" layer(hydra);
 @import "./components/notifications.css" layer(hydra);
 @import "./components/add-form.css" layer(hydra);
+@import "./components/hosted-form.css" layer(hydra);
 
 @import "./components/flip.css" layer(hydra);
 @import "./components/dashboard.css" layer(hydra);

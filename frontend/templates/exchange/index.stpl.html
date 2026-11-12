@@ -30,11 +30,15 @@
                 </div>
               </div>
             </div>
-            <% for (label, phrase) in self.predefined.iter() { %>
-            <label for="id-pre-<%= phrase %>" style="display: block">
-              <input type="checkbox" name="phrase[]" value="<%= phrase %>" id="id-pre-<%= phrase %>">
-              <%= label %>
-            </label>
+            <% if !self.predefined.is_empty() { %>
+            <div class="u-mb">
+              <% for (label, phrase) in self.predefined.iter() { %>
+              <label for="id-pre-<%= phrase %>" style="display: block">
+                <input type="checkbox" name="phrase[]" value="<%= phrase %>" id="id-pre-<%= phrase %>">
+                <%= label %>
+              </label>
+              <% } %>
+            </div>
             <% } %>
             <!-- <div class="el-form-item"> -->
             <!--   <label for="location " class="el-form-item__label">search by location</label> -->
@@ -89,16 +93,16 @@
               <!--   <button type="button" class="el-button el-tooltip question-mark-tooltip el-button--default" aria-label="'Projects' are typically ongoing while 'events' are short-term." data-microtip-position="top" role="tooltip" tabindex="0"><span>?</span></button> -->
               <!-- </div> -->
 
-              <label for="include-inactive">
+              <label for="include-inactive" style="display: block">
                 <input id="include-inactive" name="inactive" value="true" type="checkbox">
                 include inactive projects
               </label>
-              <label for="include-past">
+              <label for="include-past" style="display: block">
                 <input id="include-past" name="past" value="true" type="checkbox">
                 include past events
               </label>
               <% if self.exchange.info.settings.region_id.is_some() { %>
-              <label for="include-global">
+              <label for="include-global" style="display: block">
                 <input id="include-global" name="global" value="true" type="checkbox" <% if self.params.global { %>checked<% } %>>
                 include global projects and events
               </label>

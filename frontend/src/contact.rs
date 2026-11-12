@@ -33,6 +33,24 @@ impl Contact {
     }
 }
 
+/// Whether `email` could be someone's address: one `@`, something before it,
+/// and after it a domain of two or more dot-separated labels, with no
+/// whitespace anywhere. A browser's `type="email"` field lets `test@test`
+/// through, and orrery's admin then refuses the record; orrery's add forms
+/// refuse what this does.
+pub fn plausible_email(email: &str) -> bool {
+    if email.chars().any(char::is_whitespace) {
+        return false;
+    }
+    let Some((local, domain)) = email.split_once('@') else {
+        return false;
+    };
+    !local.is_empty()
+        && !domain.contains('@')
+        && domain.split('.').count() >= 2
+        && domain.split('.').all(|label| !label.is_empty())
+}
+
 // orrery describes a project's contacts with flat fields: the contact person
 // (`contact_*`), the manager (`manager_*`), and `contact_is_manager`, under
 // which the contact person is the manager and the `manager_*` fields go
@@ -169,6 +187,22 @@ mod tests {
             contact(ContactRole::ContactPerson, "contact@example.org"),
             contact(ContactRole::Manager, "contact@example.org"),
         ])
+    }
+
+    #[test]
+    fn a_plausible_email_has_one_at_and_a_dotted_domain() {
+        check!(plausible_email("name@example.org"));
+        check!(plausible_email("first.last+tag@mail.example.co.uk"));
+        check!(!plausible_email("test@test"));
+        check!(!plausible_email("@example.org"));
+        check!(!plausible_email("name@"));
+        check!(!plausible_email("name@@example.org"));
+        check!(!plausible_email("a@b@example.org"));
+        check!(!plausible_email("name@example..org"));
+        check!(!plausible_email("name@.example.org"));
+        check!(!plausible_email("name@example.org."));
+        check!(!plausible_email("na me@example.org"));
+        check!(!plausible_email("name.example.org"));
     }
 
     #[test]

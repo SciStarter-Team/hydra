@@ -1,0 +1,23 @@
+<%# Forms, for someone who may see their submissions: hosted_form::FormLinks. %>
+<% match &self.forms { None => { %>
+<p class="text-sm">The forms couldn&rsquo;t be listed just now. Please try again in a little while.</p>
+<% } Some(forms) => { %>
+<ul class="list-none m-0 p-0 space-y-3">
+  <% for link in forms { %>
+  <li class="flex flex-col gap-1">
+    <span class="font-semibold">
+      <% if let Some(path) = &link.page_path { %>
+      <a href="<%= path %>" class="hover:underline"><%= link.form.name %></a>
+      <% } else { %>
+      <%= link.form.name %>
+      <% } %>
+      <% if link.form.closed { %><span class="text-sm font-normal opacity-70">(closed)</span><% } %>
+    </span>
+    <span class="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+      <a href="/-form/<%= link.form.form_id|disp %>/submissions" class="text-primary-action hover:underline">See the submissions</a>
+      <a href="/-form/<%= link.form.form_id|disp %>/submissions.csv" class="text-primary-action hover:underline" download>Download them (CSV)</a>
+    </span>
+  </li>
+  <% } %>
+</ul>
+<% } } %>

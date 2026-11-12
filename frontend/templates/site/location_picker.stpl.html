@@ -2,6 +2,13 @@
 <% let inperson_active = self.mode == "in_person"; %>
 <% let online_active = self.mode == "online"; %>
 <% let region_active = self.mode == "region"; %>
+<% let anywhere_active = self.mode == "anywhere"; %>
+<%# Across a wider area and anywhere in the world are kinds of in person,
+    reached by the links under it: the toggle shows In person for them, and
+    its radio submits whichever of the three is chosen. %>
+<% let in_person_toggled = self.mode == "in_person" || region_active || anywhere_active; %>
+<% let in_person_value = if region_active || anywhere_active { self.mode.as_str() } else { "in_person" }; %>
+<% let toggle = [("in_person", "In person"), ("online", "Online")]; %>
 <%# Taken out of `self` up front: rendering the region editor consumes it. %>
 <% let error = self.error.clone(); %>
 <% let error = error.as_ref(); %>
@@ -9,20 +16,23 @@
 <%# Attributes marking a hand-written control the form's error is about. %>
 <% let invalid_attrs = |field: &str| if error.is_some_and(|e| e.is_about(field)) { format!(r#" aria-invalid="true" aria-describedby="{}""#, FormError::ELEMENT_ID) } else { String::new() }; %>
 <div data-location-picker class="space-y-2">
-  <%# The label stands in for a placeholder until a mode is chosen: the empty
-      option is selected and the required select is `:invalid`. %>
-  <div class="pill-field">
-    <label class="pill-body">
-      <span class="pill-label">Is it in person or virtual?</span>
-      <select id="location-mode" name="location_mode" required<%- invalid_attrs("location_mode") %>>
-        <option value="" <% if self.mode.is_empty() { %>selected<% } %> disabled hidden></option>
-        <option value="in_person" <% if inperson_active { %>selected<% } %>>In person</option>
-        <option value="online" <% if online_active { %>selected<% } %>>Virtual</option>
-        <%# Not offered in the dropdown; selected via the "wider area" link. %>
-        <option value="region" <% if region_active { %>selected<% } %> hidden>Across a wider area</option>
-      </select>
-    </label>
-  </div>
+  <fieldset class="choice-group location-toggle">
+    <legend>Is it in person or online?<span class="pill-required" aria-hidden="true"> *</span></legend>
+    <div class="toggle-options">
+      <% for (value, label) in toggle { %>
+      <% let in_person = value == "in_person"; %>
+      <% let checked = if in_person { in_person_toggled } else { self.mode == value }; %>
+      <label class="toggle-option">
+        <input type="radio" name="location_mode" value="<%= if in_person { in_person_value } else { value } %>"<% if in_person { %> data-in-person<% } %> required<%- invalid_attrs("location_mode") %><% if checked { %> checked<% } %>>
+        <span><%= label %></span>
+      </label>
+      <% } %>
+    </div>
+  </fieldset>
+  <%# What the chosen mode means, where its name alone doesn't say. %>
+  <% if self.offers_event_modes { %>
+  <p class="field-help" data-only-mode="anywhere" <% if !anywhere_active { %>hidden<% } %>>People take part in person wherever they are, as in a worldwide bioblitz or bird count. A location note can say more.</p>
+  <% } %>
 
   <%# Each mode's fields live in a fieldset that is disabled (so its controls
       don't submit) whenever that mode isn't selected. %>
@@ -31,10 +41,13 @@
       <div class="pill-field">
         <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
         <label class="pill-body">
-          <span class="pill-label">Add a place or address</span>
+          <%# An address or a city is required in person, but not as
+              `required`: typing them into the details below does as well as
+              picking here. The marks show only while this fieldset does. %>
+          <span class="pill-label">Add a place or address<span class="pill-required" aria-hidden="true"> *</span></span>
           <%# The address the in-person check wants is set by picking here, so
               an error about it marks this, the control a visitor sees. %>
-          <input id="place-search-input" type="search" placeholder=" "
+          <input id="place-search-input" type="search" placeholder=" " aria-required="true"
             autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"
             aria-controls="place-search-results"<%- invalid_attrs("address") %>>
         </label>
@@ -48,15 +61,16 @@
 
     <%# Collapsed even once filled: `syncSummary` in js/location-picker.js states
         on the summary what a picked place put in the fields, so it can be checked
-        without opening them. It composes that line from the fields themselves —
-        the values are the browser's until they are submitted — leaving this the
-        label a visitor without JavaScript gets. %>
+        without opening them, and the link beside it then reads "Edit". It
+        composes that line from the fields themselves — the values are the
+        browser's until they are submitted — leaving this the label a visitor
+        without JavaScript gets. %>
     <%# The venue's address, not the visitor's: `autocomplete="off"` keeps
         browsers from offering to fill in their own. %>
     <details class="place-details">
-      <summary class="cursor-pointer text-sm">
-        <span class="place-summary" data-place-summary>Venue &amp; address details</span>
-        <span class="place-summary-edit" hidden>edit</span>
+      <summary>
+        <span class="place-summary" data-place-summary hidden></span>
+        <span class="place-summary-action" data-place-summary-action>Venue &amp; address details</span>
       </summary>
       <div class="mt-2 space-y-2">
         <%+ FloatingField::new(FieldKind::Text, "location_name", "Venue name", self.location_name.as_str()).autocomplete("off").errors(error) %>
@@ -72,13 +86,27 @@
       </div>
     </details>
 
-    <button type="button" class="link-btn" data-mode-link="region">Happens across a wider area? Draw the region instead.</button>
+    <%# Only an event held at an address says what kind of venue it is;
+        disabled with the rest of this fieldset in any other mode, and
+        dropped by the server there too. %>
+    <% if let Some(venues) = self.venues { %>
+    <%+ venues %>
+    <% } %>
+
+    <button type="button" class="link-btn" data-mode-link="region" data-only-mode="in_person">Happens across a wider area? Draw the region instead.</button>
+    <% if self.offers_event_modes { %>
+    <button type="button" class="link-btn" data-mode-link="anywhere" data-only-mode="in_person">Can people take part anywhere in the world? Choose that instead.</button>
+    <% } %>
   </fieldset>
 
   <fieldset class="location-fields space-y-2 border-0 p-0 m-0" data-mode="region" <% if !region_active { %>hidden disabled<% } %>>
     <%+ self.region_editor %>
     <button type="button" class="link-btn" data-mode-link="in_person">Back to a single place</button>
   </fieldset>
+
+  <% if self.offers_event_modes { %>
+  <button type="button" class="link-btn" data-mode-link="in_person" data-only-mode="anywhere" <% if !anywhere_active { %>hidden<% } %>>Back to a single place</button>
+  <% } %>
 
   <%# Fields meaningful in every mode, held back until the "in person or
       virtual?" question is answered so the section starts as one control. %>
@@ -88,10 +116,12 @@
       data-online-help="The link people use to join or participate online."
       data-default-label="Link / URL"
       data-default-help="A website, registration page, or livestream link.">
+      <%# Required for an event joined online, which is refused without it;
+          js/location-picker.js moves the marks as the mode changes. %>
       <div class="pill-field">
         <label class="pill-body">
-          <span class="pill-label url-label"><% if online_active { %>Join link<% } else { %>Link / URL<% } %></span>
-          <input id="add-url" type="url" name="url" value="<%= self.url %>" placeholder=" "<% if url_invalid { %> aria-invalid="true" aria-describedby="<%= FormError::ELEMENT_ID %> add-url-help"<% } else { %> aria-describedby="add-url-help"<% } %>>
+          <span class="pill-label"><span class="url-label"><% if online_active { %>Join link<% } else { %>Link / URL<% } %></span><span class="pill-required url-required" aria-hidden="true" <% if !online_active { %>hidden<% } %>> *</span></span>
+          <input id="add-url" type="url" name="url" value="<%= self.url %>" placeholder=" "<% if online_active { %> required<% } %><% if url_invalid { %> aria-invalid="true" aria-describedby="<%= FormError::ELEMENT_ID %> add-url-help"<% } else { %> aria-describedby="add-url-help"<% } %>>
         </label>
       </div>
       <p id="add-url-help" class="field-help url-help"><% if online_active { %>The link people use to join or participate online.<% } else { %>A website, registration page, or livestream link.<% } %></p>

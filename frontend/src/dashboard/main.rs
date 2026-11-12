@@ -5,6 +5,8 @@ use common::message::log::{
     UserParticipationRequest, UserParticipationResponse, UserRecentVisitsRequest,
     UserRecentVisitsResponse,
 };
+use common::message::user::JoinCount;
+use common::timestring::TimeString;
 use poem::web::{Html, Path, Query};
 use poem::{IntoResponse, Response, handler, session::Session, web::RealIp};
 use sailfish::TemplateOnce;
@@ -14,7 +16,7 @@ use crate::component::{Component, Head, StandardLayout};
 use crate::dashboard::link_tokens::LinkTokensSection;
 use crate::dashboard::{
     EntityCardModel, Pager, SECTION_PAGE_SIZE, clamp_page, entity_counts, entity_grid_section,
-    entity_summary, fetch_bookmarked, fetch_joined, fetch_owned,
+    entity_summary, fetch_bookmarked, fetch_joined, fetch_owned, join_counts,
 };
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
@@ -93,6 +95,7 @@ pub async fn page(
         .collect();
 
     let (owned_projects, owned_events) = fetch_owned(&user_id_str).await?;
+    let owned_forms = crate::hosted_form::FormLinks::owned_by(user_id).await;
     let joined = fetch_joined(&user_id_str).await?;
     let (bookmarked_projects, bookmarked_events) = fetch_bookmarked(&user_id_str).await?;
 
@@ -134,7 +137,8 @@ pub async fn page(
         None => (user_info.handle.clone(), None),
     };
 
-    let has_owned = !owned_projects.is_empty() || !owned_events.is_empty();
+    let has_owned =
+        !owned_projects.is_empty() || !owned_events.is_empty() || owned_forms.has_forms();
     let show_empty_state = participation.total == 0
         && !has_owned
         && joined.is_empty()
@@ -153,6 +157,7 @@ pub async fn page(
             owned_events_count: owned_events.len(),
             projects: owned_projects_section(&owned_projects, 0).await,
             events: owned_events_section(&owned_events, 0).await,
+            forms: owned_forms,
         },
         participant: ParticipantPanel {
             total_contributions: participation.total,
@@ -267,13 +272,19 @@ fn my_events_section(
     )
 }
 
+/// One page of the detailed owned-entity rows.
+struct OwnedRows {
+    rows: Vec<OwnedEntityRow>,
+    page_num: usize,
+    pages: usize,
+    /// When hydra became the primary server, which the rows' joins since
+    /// then are counted from.
+    primary_since: Option<TimeString>,
+}
+
 /// One page of the detailed owned-entity rows, with the engagement
 /// counts fetched only for the rows on the page.
-async fn owned_rows(
-    summaries: &[EntitySummary],
-    page_num: usize,
-    with_joins: bool,
-) -> (Vec<OwnedEntityRow>, usize, usize) {
+async fn owned_rows(summaries: &[EntitySummary], page_num: usize, with_joins: bool) -> OwnedRows {
     let (page_num, pages) = clamp_page(summaries.len(), page_num);
     let slice: Vec<&EntitySummary> = summaries
         .iter()
@@ -283,7 +294,7 @@ async fn owned_rows(
     let ids: Vec<String> = slice.iter().map(|s| s.id.to_string()).collect();
 
     let join_counts = if with_joins {
-        entity_counts("user.joins.count_by_projects", &ids).await
+        join_counts(&ids).await
     } else {
         Default::default()
     };
@@ -293,21 +304,37 @@ async fn owned_rows(
         .into_iter()
         .map(|s| OwnedEntityRow {
             card: EntityCardModel::from_summary(s),
-            joins: *join_counts.get(&s.id.to_string()).unwrap_or(&0),
+            joins: join_counts
+                .by_project
+                .get(&s.id.to_string())
+                .copied()
+                .unwrap_or_default(),
             saves: *save_counts.get(&s.id.to_string()).unwrap_or(&0),
         })
         .collect();
-    (rows, page_num, pages)
+
+    OwnedRows {
+        rows,
+        page_num,
+        pages,
+        primary_since: join_counts.primary_since,
+    }
 }
 
 async fn owned_projects_section(
     summaries: &[EntitySummary],
     page_num: usize,
 ) -> OwnedProjectsSection {
-    let (rows, page_num, pages) = owned_rows(summaries, page_num, true).await;
+    let OwnedRows {
+        rows,
+        page_num,
+        pages,
+        primary_since,
+    } = owned_rows(summaries, page_num, true).await;
     OwnedProjectsSection {
         target: "dash-sec-owned-projects".to_string(),
         rows,
+        primary_since,
         pager: Pager {
             page: page_num,
             pages,
@@ -318,7 +345,12 @@ async fn owned_projects_section(
 }
 
 async fn owned_events_section(summaries: &[EntitySummary], page_num: usize) -> OwnedEventsSection {
-    let (rows, page_num, pages) = owned_rows(summaries, page_num, false).await;
+    let OwnedRows {
+        rows,
+        page_num,
+        pages,
+        primary_since: _,
+    } = owned_rows(summaries, page_num, false).await;
     OwnedEventsSection {
         target: "dash-sec-owned-events".to_string(),
         rows,
@@ -343,7 +375,7 @@ pub struct AffiliateParticipationRow {
 /// the leader panel's management rows.
 pub struct OwnedEntityRow {
     pub card: EntityCardModel,
-    pub joins: i64,
+    pub joins: JoinCount,
     pub saves: i64,
 }
 
@@ -352,6 +384,7 @@ pub struct OwnedEntityRow {
 pub struct OwnedProjectsSection {
     target: String,
     rows: Vec<OwnedEntityRow>,
+    primary_since: Option<TimeString>,
     pager: Pager,
 }
 
@@ -370,6 +403,8 @@ struct LeaderPanel {
     owned_events_count: usize,
     projects: OwnedProjectsSection,
     events: OwnedEventsSection,
+    /// The hosted forms the person owns, whose submissions they may see.
+    forms: crate::hosted_form::FormLinks,
 }
 
 #[derive(TemplateOnce)]

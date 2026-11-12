@@ -46,6 +46,7 @@ pub fn routes() -> impl Endpoint {
         .at("/:exchange/:slug/event.html", poem::get(exchange_event))
         .at("/:exchange/:slug/visit", poem::get(visit))
         .at("/:exchange/:project_slug/save", poem::post(save_project))
+        .at("/:exchange/:project_slug/join", poem::post(join_project))
         .at("/:exchange/:project_slug/vote", poem::post(vote_project))
         .at(
             "/:exchange/:project_slug/squelch",

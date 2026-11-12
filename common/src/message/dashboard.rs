@@ -1067,6 +1067,19 @@ pub struct EntitySummary {
     pub end: Option<String>,
 }
 
+impl EntitySummary {
+    /// The canonical path of the entity's page, as the frontend's
+    /// `entity_link` builds it, for a service that cannot reach that.
+    pub fn page_path(&self) -> String {
+        let prefix = match self.kind {
+            EntitySummaryKind::Project => "projects",
+            EntitySummaryKind::Event => "events",
+        };
+
+        format!("/{prefix}/{}", self.slug)
+    }
+}
+
 /// A user-saved point-of-interest. Returned by
 /// `user.places.list_by_user`.
 #[derive(Debug, Clone, Serialize, Deserialize)]

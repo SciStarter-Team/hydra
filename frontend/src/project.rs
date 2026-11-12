@@ -9,6 +9,27 @@ pub mod location;
 pub mod publish;
 pub mod reference;
 
+/// Join `user_id` to `project_id`, on the evidence `source` names.
+pub async fn join(
+    user_id: ulid::Ulid,
+    project_id: &str,
+    source: common::message::user::JoinSource,
+) -> Result<(), anyhow::Error> {
+    use common::message::user::{ProjectJoinRequest, ProjectJoinResponse};
+
+    let _: ProjectJoinResponse = common::service::request(
+        "user.joins.create",
+        ProjectJoinRequest {
+            user_id,
+            project_id: project_id.to_string(),
+            source,
+        },
+    )
+    .await?;
+
+    Ok(())
+}
+
 /// Tags whose name begins with `_` (e.g. `_nasa`) are internal/system tags used
 /// for filtering and attribution. They are hidden from user-facing displays,
 /// though they remain in the data model and in editor-facing views.

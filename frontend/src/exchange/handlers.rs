@@ -131,17 +131,24 @@ pub(super) fn push_hidden_exclusion(
 
 /// Keep what reaches any of these regions: several region tick-boxes read
 /// as "any of these".
+///
+/// Something that can be done anywhere is in no region (see
+/// `region::Placement::footprint`), so `with_global` -- the "include global"
+/// box on an exchange that has a region, as [`with_global`] decides it --
+/// admits global rows beside the ticked regions' own. Both listings order
+/// them after the rest. Orrery's `push_named_regions` is the same.
 pub(super) fn push_named_regions(
     query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
     catalogue: &Catalogue,
     regions: &[i64],
+    with_global: bool,
 ) {
     if regions.is_empty() {
         return;
     }
 
     query_builder.push(format!(
-        " AND {} IN (SELECT {} FROM {} WHERE region_id IN (",
+        " AND ({} IN (SELECT {} FROM {} WHERE region_id IN (",
         catalogue.id, catalogue.regions_owner, catalogue.regions
     ));
 
@@ -151,6 +158,20 @@ pub(super) fn push_named_regions(
     }
 
     query_builder.push("))");
+
+    if with_global {
+        query_builder.push(format!(" OR {}.location_type = ", catalogue.row));
+        query_builder.push_bind(GLOBAL_LOCATION_TYPE);
+    }
+
+    query_builder.push(")");
+}
+
+/// Whether a search takes in what can be done anywhere beside what reaches
+/// its region: the finder's "include global" box, which only means anything
+/// on an exchange that has a region.
+pub(super) fn with_global(exchange: &ExchangeInfo, params: &SearchParams) -> bool {
+    exchange.settings.region_id.is_some() && params.global
 }
 
 /// What a search is actually asking for, once its phrases have been read.
@@ -470,6 +491,30 @@ pub(super) fn push_choice_conditions(
     );
 }
 
+/// The order an exchange lists projects in: what can be done anywhere after
+/// the rest, as orrery's `Exchange::find` orders them, so that a search
+/// taking in global projects beside a region's own leads with the region's.
+/// Within each, the best text match first when there is text to match, then
+/// the most recently updated, as orrery orders by its `updated`.
+///
+/// When a project was last updated is the activity log's to say, read here
+/// from the copy in `project_last_changes`
+/// ([`crate::page_change::refresh_project_last_changes`]). A project with no
+/// change logged was last updated when it was created.
+fn push_project_order(query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>, has_text_search: bool) {
+    query_builder.push(" ORDER BY p.location_type = ");
+    query_builder.push_bind(GLOBAL_LOCATION_TYPE);
+
+    if has_text_search {
+        query_builder.push(", bm25(projects_fts)");
+    }
+
+    query_builder.push(
+        ", COALESCE((SELECT lc.changed FROM project_last_changes lc \
+         WHERE lc.project_id = p.project_id), p.created) DESC",
+    );
+}
+
 /// Apply common search filters to a query builder
 fn apply_search_filters<'a>(
     query_builder: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
@@ -479,7 +524,12 @@ fn apply_search_filters<'a>(
 ) {
     push_membership(query_builder, &PROJECTS, exchange, params.global);
     push_listing_filter(query_builder, params, &scope.now);
-    push_named_regions(query_builder, &PROJECTS, &scope.regions);
+    push_named_regions(
+        query_builder,
+        &PROJECTS,
+        &scope.regions,
+        with_global(exchange, params),
+    );
 
     push_choice_conditions(query_builder, &PROJECTS, params);
 }
@@ -953,7 +1003,9 @@ async fn load_exchange_event_detail(id: Ulid, slug: &str) -> Result<ExchangeEven
 /// An exchange's page for one event.
 ///
 /// An unpublished event -- one waiting in the approval queue -- is shown
-/// only to the exchange's own people, as an unpublished project is.
+/// only to those who may run the exchange: its own people and SciStarter's
+/// staff ([`access::may_manage`]), as an unpublished project is. Anyone else
+/// is told there is no such event.
 #[handler]
 pub async fn exchange_event(
     Path((path_id, slug)): Path<(i64, String)>,
@@ -975,12 +1027,11 @@ pub async fn exchange_event(
         slug
     )
     .fetch_optional(db())
-    .await?
-    .ok_or_else(|| anyhow::anyhow!("Event not found"))?;
+    .await?;
 
-    if !row.publish && !exchange.user_is_authorized {
-        return Err(anyhow::anyhow!("Event not found"));
-    }
+    let Some(row) = row.filter(|row| row.publish || exchange.user_is_authorized) else {
+        return Ok(error_response(poem::http::StatusCode::NOT_FOUND, ""));
+    };
 
     let event_id = Ulid::from_string(&row.event_id)?;
 
@@ -1049,10 +1100,12 @@ async fn orrery_project_slug(
 /// Follow a project or event out to its own website, from an exchange.
 ///
 /// Recorded as a referral -- the "visit" the exchange's data page counts.
-/// Someone signed in who follows a project out is counted as having joined
-/// it, as orrery counts them. A project's sign-up address is preferred to
-/// its website. The redirect is temporary, so a browser asks again, and is
+/// A visit is not a join: someone who follows a project out has only gone
+/// to look. A project's sign-up address is preferred to its website. The redirect is temporary, so a browser asks again, and is
 /// counted again, every time.
+///
+/// Something unpublished can be followed out only by those who may see its
+/// page; anyone else is told there is no such thing.
 #[handler]
 pub async fn visit(
     Path((path_id, slug)): Path<(i64, String)>,
@@ -1065,6 +1118,7 @@ pub async fn visit(
     let target = sqlx::query!(
         r#"
         SELECT ent.kind as "kind: crate::entity::EntityKind", ent.target as "target!",
+               ent.publish as "publish!: bool",
                CASE ent.kind
                  WHEN 'Project' THEN (SELECT CASE WHEN p.signup_url != '' THEN p.signup_url ELSE p.url END
                                       FROM projects p WHERE p.project_id = ent.target)
@@ -1087,6 +1141,12 @@ pub async fn visit(
             None => error_response(poem::http::StatusCode::NOT_FOUND, ""),
         });
     };
+
+    // Something unpublished is not there to be visited, except by those who
+    // may run the exchange, as on its page.
+    if !target.publish && !access::may_manage(exchange.exchange_id, auth.0.as_deref()).await? {
+        return Ok(error_response(poem::http::StatusCode::NOT_FOUND, ""));
+    }
 
     let id = Ulid::from_string(&target.target)?;
     let page = match target.kind {
@@ -1121,19 +1181,6 @@ pub async fn visit(
     } else {
         format!("http://{url}")
     };
-
-    if let (TrackedPage::Project, Some(user_id)) = (page, user_id) {
-        use common::message::user::{ProjectJoinRequest, ProjectJoinResponse};
-
-        let _: ProjectJoinResponse = request(
-            "user.joins.create",
-            ProjectJoinRequest {
-                user_id,
-                project_id: id.to_string(),
-            },
-        )
-        .await?;
-    }
 
     tracking::record(
         exchange.exchange_id,
@@ -1532,12 +1579,7 @@ pub async fn exchange_results(
     // Apply common search filters
     apply_search_filters(&mut query_builder, &exchange.info, &params, &scope);
 
-    // Add ordering - use bm25() relevance for text search, otherwise creation date
-    if has_text_search {
-        query_builder.push(" ORDER BY bm25(projects_fts), p.created DESC");
-    } else {
-        query_builder.push(" ORDER BY p.created DESC");
-    }
+    push_project_order(&mut query_builder, has_text_search);
 
     // Add pagination
     query_builder.push(" LIMIT ");
@@ -1675,11 +1717,7 @@ pub async fn exchange_csv(
     build_base_where_clause(&mut query_builder, exchange.exchange_id, &scope, false);
     apply_search_filters(&mut query_builder, &exchange, &params, &scope);
 
-    if scope.has_text_search() {
-        query_builder.push(" ORDER BY bm25(projects_fts), p.created DESC");
-    } else {
-        query_builder.push(" ORDER BY p.created DESC");
-    }
+    push_project_order(&mut query_builder, scope.has_text_search());
 
     let rows = query_builder
         .build_query_as::<(
@@ -2379,6 +2417,9 @@ struct ExchangeSettingsForm {
     /// Empty means "no region": a view of the whole catalogue.
     #[serde(default)]
     region_id: String,
+    /// Empty means the standard sentence.
+    #[serde(default)]
+    submission_notice: String,
 }
 
 /// Why `search` cannot be an exchange's search setting, if it cannot.
@@ -2423,6 +2464,7 @@ pub async fn exchange_update_settings(
     exchange.settings.restricted_add = form.restricted_add;
     exchange.settings.global_by_default = form.global_by_default;
     exchange.settings.region_id = form.region_id.trim().parse().ok();
+    exchange.settings.submission_notice = form.submission_notice.trim().to_string();
 
     // Use LoadStorePeered to save and broadcast to peers
     exchange.store().await?;
@@ -2926,7 +2968,8 @@ pub async fn exchange_project(
         });
     };
 
-    // If project is not published, check if user is authorized for the exchange
+    // An unpublished project is shown only to those who may run the
+    // exchange: its own people and SciStarter's staff.
     if !project_row.publish && !exchange.user_is_authorized {
         return Ok(error_response(poem::http::StatusCode::NOT_FOUND, ""));
     }
@@ -3014,6 +3057,43 @@ pub async fn save_project(
     } else {
         Ok(Html(format!("Error: {}", response.message)).into_response())
     }
+}
+
+/// "I have already joined this project": the visitor says they take part
+/// in it.
+#[handler]
+pub async fn join_project(
+    Path((exchange_id, project_slug)): Path<(i64, String)>,
+    Authenticated(user_info): Authenticated,
+    device: Device,
+    interaction: Interaction,
+) -> Result<poem::Response, Error> {
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let exchange = ExchangeInfo::load_by_id(exchange_id).await?;
+    let project_id = project_by_slug(&project_slug)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Project not found"))?;
+
+    crate::project::join(
+        user_info.user_id,
+        &project_id.to_string(),
+        common::message::user::JoinSource::Explicit,
+    )
+    .await?;
+
+    tracking::record(
+        exchange.exchange_id,
+        Some(user_info.user_id),
+        &device,
+        &interaction,
+        TrackedPage::Project,
+        Some(project_id),
+        TrackedAction::AddDashboard,
+        None,
+    )
+    .await?;
+
+    Ok(Html("Added to your dashboard.").into_response())
 }
 
 /// Vote on project
@@ -3671,10 +3751,12 @@ mod tests {
         let pool = membership_catalogue().await;
 
         const REGION: i64 = 7;
+        // A global row is in no region (`region::Placement::footprint`), so
+        // it never has a cached region of its own.
         for (name, location_type, in_region) in [
-            ("global-elsewhere", GLOBAL_LOCATION_TYPE, false),
-            ("global-here", GLOBAL_LOCATION_TYPE, true),
+            ("global", GLOBAL_LOCATION_TYPE, false),
             ("local", "At a specific address", true),
+            ("elsewhere", "At a specific address", false),
         ] {
             for (insert_row, insert_region) in [
                 (
@@ -3805,10 +3887,12 @@ mod tests {
         let pool = membership_catalogue().await;
 
         const REGION: i64 = 7;
+        // A global row is in no region (`region::Placement::footprint`), so
+        // it never has a cached region of its own.
         for (name, location_type, in_region) in [
-            ("global-elsewhere", GLOBAL_LOCATION_TYPE, false),
-            ("global-here", GLOBAL_LOCATION_TYPE, true),
+            ("global", GLOBAL_LOCATION_TYPE, false),
             ("local", "At a specific address", true),
+            ("elsewhere", "At a specific address", false),
         ] {
             sqlx::query("INSERT INTO projects VALUES (?, ?, NULL, 'scistarter', ?)")
                 .bind(name)
@@ -3835,11 +3919,208 @@ mod tests {
 
         assert_eq!(
             members_with_global(&pool, regional(), true).await,
-            ["global-elsewhere", "global-here", "local"]
+            ["global", "local"]
         );
         assert_eq!(
             members_with_global(&pool, regional(), false).await,
-            ["global-here", "local"]
+            ["local"]
+        );
+    }
+
+    /// The names of the rows of `table`, listed as `catalogue`, that an
+    /// exchange with `region_id` lists when the `ticked` region tick-boxes
+    /// are ticked, with "include global" as given.
+    async fn ticked_region_members(
+        pool: &SqlitePool,
+        catalogue: &Catalogue,
+        table: &str,
+        region_id: Option<i64>,
+        ticked: &[i64],
+        include_global: bool,
+    ) -> Vec<String> {
+        let exchange = ExchangeInfo {
+            exchange_id: Ulid::from_string(EXCHANGE).unwrap(),
+            path_id: 1,
+            slug: "exchange".into(),
+            name: "Exchange".into(),
+            description: String::new(),
+            logo_url: None,
+            settings: ExchangeSettings {
+                region_id,
+                ..Default::default()
+            },
+        };
+        let params = SearchParams {
+            global: include_global,
+            ..Default::default()
+        };
+
+        let row = catalogue.row;
+        let mut query_builder =
+            sqlx::QueryBuilder::new(format!("SELECT {row}.name FROM {table} {row} WHERE 1"));
+        push_membership(&mut query_builder, catalogue, &exchange, params.global);
+        push_named_regions(
+            &mut query_builder,
+            catalogue,
+            ticked,
+            with_global(&exchange, &params),
+        );
+        query_builder.push(format!(" ORDER BY {row}.name"));
+
+        query_builder
+            .build_query_scalar::<String>()
+            .fetch_all(pool)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_ticked_region_takes_in_global_rows_while_global_is_included() {
+        let pool = membership_catalogue().await;
+
+        const COUNTRY: i64 = 1;
+        const STATE: i64 = 2;
+        for (name, location_type, regions) in [
+            ("global", GLOBAL_LOCATION_TYPE, vec![]),
+            ("in-state", "At a specific address", vec![COUNTRY, STATE]),
+            (
+                "elsewhere-in-country",
+                "At a specific address",
+                vec![COUNTRY],
+            ),
+        ] {
+            for (insert_row, insert_region) in [
+                (
+                    "INSERT INTO projects VALUES (?, ?, NULL, 'scistarter', ?)",
+                    "INSERT INTO project_regions VALUES (?, ?)",
+                ),
+                (
+                    "INSERT INTO events VALUES (?, ?, NULL, 'scistarter', ?)",
+                    "INSERT INTO event_regions VALUES (?, ?)",
+                ),
+            ] {
+                sqlx::query(insert_row)
+                    .bind(name)
+                    .bind(name)
+                    .bind(location_type)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+
+                for region in regions.iter() {
+                    sqlx::query(insert_region)
+                        .bind(name)
+                        .bind(region)
+                        .execute(&pool)
+                        .await
+                        .unwrap();
+                }
+            }
+        }
+
+        for (catalogue, table) in [(&PROJECTS, "projects"), (&EVENTS, "events")] {
+            let ticked = |region_id, include_global| {
+                ticked_region_members(&pool, catalogue, table, region_id, &[STATE], include_global)
+            };
+
+            check!(
+                ticked(Some(COUNTRY), true).await == ["global", "in-state"],
+                "{table}"
+            );
+            check!(
+                ticked(Some(COUNTRY), false).await == ["in-state"],
+                "{table}"
+            );
+
+            // Without a region of its own an exchange has no "include
+            // global" box, and a ticked region means only itself.
+            check!(ticked(None, true).await == ["in-state"], "{table}");
+        }
+    }
+
+    #[tokio::test]
+    async fn global_projects_are_listed_after_the_rest_each_most_recently_updated_first() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        for statement in [
+            "CREATE TABLE projects (project_id TEXT, name TEXT, location_type TEXT, created TEXT)",
+            "CREATE TABLE project_last_changes (project_id TEXT PRIMARY KEY, changed TEXT)",
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+
+        // (name, location type, created, last change logged)
+        for (name, location_type, created, changed) in [
+            ("new-global", GLOBAL_LOCATION_TYPE, "2026-11-03", None),
+            (
+                "old-local-edited",
+                "At a specific address",
+                "2019-01-01",
+                Some("2026-11-10"),
+            ),
+            (
+                "new-local",
+                "In a geographic location or range",
+                "2026-11-02",
+                None,
+            ),
+            (
+                "old-local",
+                "At a specific address",
+                "2020-01-01",
+                Some("2021-01-01"),
+            ),
+            (
+                "old-global-edited",
+                GLOBAL_LOCATION_TYPE,
+                "2018-01-01",
+                Some("2026-11-11"),
+            ),
+        ] {
+            sqlx::query("INSERT INTO projects VALUES (?, ?, ?, ?)")
+                .bind(name)
+                .bind(name)
+                .bind(location_type)
+                .bind(created)
+                .execute(&pool)
+                .await
+                .unwrap();
+
+            if let Some(changed) = changed {
+                sqlx::query("INSERT INTO project_last_changes VALUES (?, ?)")
+                    .bind(name)
+                    .bind(changed)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
+        }
+
+        let mut query_builder = sqlx::QueryBuilder::new("SELECT p.name FROM projects p");
+        push_project_order(&mut query_builder, false);
+        let names = query_builder
+            .build_query_scalar::<String>()
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+
+        check!(
+            names
+                == [
+                    "old-local-edited",
+                    "new-local",
+                    "old-local",
+                    "old-global-edited",
+                    "new-global",
+                ]
+        );
+
+        let mut text_search = sqlx::QueryBuilder::new("");
+        push_project_order(&mut text_search, true);
+        check!(
+            text_search
+                .sql()
+                .as_str()
+                .starts_with(" ORDER BY p.location_type = ?, bm25(projects_fts), COALESCE(")
         );
     }
 

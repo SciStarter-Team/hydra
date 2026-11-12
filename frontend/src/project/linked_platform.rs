@@ -14,6 +14,7 @@ use anyhow::Error;
 use common::linked_platform::LinkedPlatform;
 use common::message::user::{ZooniverseAccount, ZooniverseIdentityAnswer};
 use common::service::request;
+use sailfish::TemplateOnce;
 use ulid::Ulid;
 
 use crate::lazy_cache::{Announced, LazyCached, get_cached, push_cached_value};
@@ -68,9 +69,9 @@ pub(crate) fn push_zooniverse_affiliate_filter(qb: &mut sqlx::QueryBuilder<sqlx:
 /// How a project page talks about a platform, beside what
 /// `common::linked_platform` knows of it.
 pub trait PlatformCopy {
-    /// The indefinite article the platform's name takes: "an iNaturalist
-    /// account".
-    fn article(self) -> &'static str;
+    /// Whether only the platform's SciStarter Affiliate projects credit
+    /// participation, rather than every project on it.
+    fn affiliates_only(self) -> bool;
 
     /// Where a visitor signs up or signs in to the platform to find their
     /// username.
@@ -87,10 +88,10 @@ pub trait PlatformCopy {
 }
 
 impl PlatformCopy for LinkedPlatform {
-    fn article(self) -> &'static str {
+    fn affiliates_only(self) -> bool {
         match self {
-            LinkedPlatform::INaturalist => "an",
-            LinkedPlatform::Zooniverse => "a",
+            LinkedPlatform::INaturalist => false,
+            LinkedPlatform::Zooniverse => true,
         }
     }
 
@@ -106,9 +107,9 @@ impl PlatformCopy for LinkedPlatform {
             LinkedPlatform::INaturalist => None,
             // Their signed-in home page shows the username as @login,
             // beneath a display name that is easily mistaken for it.
-            LinkedPlatform::Zooniverse => {
-                Some("It's the name after the @ under your name on the Zooniverse home page.")
-            }
+            LinkedPlatform::Zooniverse => Some(
+                "Your username is the name after the @ under your name on the Zooniverse home page.",
+            ),
         }
     }
 
@@ -125,6 +126,15 @@ impl PlatformCopy for LinkedPlatform {
             LinkedPlatform::Zooniverse => "made",
         }
     }
+}
+
+/// What a visitor is told when the platform has no account by the username
+/// they gave, wherever they gave it.
+#[derive(TemplateOnce)]
+#[template(path = "pages/unknown_platform_account.stpl.html")]
+pub struct UnknownAccount<'a> {
+    pub platform: LinkedPlatform,
+    pub username: &'a str,
 }
 
 /// What a username somebody names as theirs on a platform comes to.

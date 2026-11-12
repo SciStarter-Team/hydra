@@ -10,7 +10,7 @@ pub struct LocationInfo {
     pub time_zone: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Point {
     pub latitude: f64,
     pub longitude: f64,
@@ -56,6 +56,14 @@ impl LocationInfo {
             latitude,
             longitude,
         })
+    }
+
+    /// Where the address was found to be, if it was found: the lookup
+    /// answers an address it has no place for with 0, 0, which is in the
+    /// sea off Africa and is no one's place.
+    pub fn place(&self) -> Option<Point> {
+        self.as_point()
+            .filter(|point| point.latitude != 0.0 || point.longitude != 0.0)
     }
 }
 

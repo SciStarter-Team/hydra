@@ -193,6 +193,11 @@ async fn main() {
         "delete",
         stored_emails::handle_delete_stored_email
     ));
+    toplevel.spawn(handler!(
+        stored_group,
+        "send",
+        stored_emails::handle_send_stored_email
+    ));
 
     // Register oneoff email handlers
     let oneoff_group = service.group("emailer.oneoff");

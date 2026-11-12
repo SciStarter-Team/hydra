@@ -1,5 +1,5 @@
 use anyhow::Result;
-use common::message::dashboard::{EntitySummary, EntitySummaryKind};
+use common::message::dashboard::EntitySummary;
 use common::timestring::TimeString;
 use common::{
     message::log::{
@@ -956,15 +956,9 @@ async fn announce_first_contribution(user_id: Ulid, project_id: &str) -> Result<
     let mut fields = vec![("project_id".to_string(), project_id.to_string())];
 
     if let Some(summary) = summary {
-        // The same two canonical paths the frontend's `entity_link` builds;
-        // that helper lives in the frontend crate and is not reachable here.
-        let prefix = match summary.kind {
-            EntitySummaryKind::Project => "projects",
-            EntitySummaryKind::Event => "events",
-        };
         fields.push((
             "project_page_url".to_string(),
-            format!("https://{}/{prefix}/{}", env!("DOMAIN"), summary.slug),
+            format!("https://{}{}", env!("DOMAIN"), summary.page_path()),
         ));
         fields.push(("project_name".to_string(), summary.name));
     }
@@ -1019,8 +1013,10 @@ pub async fn handle_project_participation_record(req: &async_nats::service::Requ
             .as_ref()
             .expect("Database not initialized")
             .clone();
-        database.participation.insert(row).await?;
+        database.participation.insert(row.clone()).await?;
     }
+
+    crate::contributor_joins::join_contributor(&row).await;
 
     // Send SSE notification to user
     common::channel::send_to_user(

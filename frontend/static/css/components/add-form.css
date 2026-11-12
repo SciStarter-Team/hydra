@@ -127,6 +127,16 @@ form .pill-field-multiline .pill-body {
     @apply justify-start;
 }
 
+/* A field's character count, at the right inside its box; red past the
+   limit. */
+form .pill-counter {
+    @apply shrink-0 text-sm text-neutral-mid;
+    font-variant-numeric: tabular-nums;
+}
+form .pill-counter-over {
+    @apply text-alert font-semibold;
+}
+
 /* Required fields: the asterisk is for the eye; `required` says it to
    assistive software. */
 form .pill-required {
@@ -291,20 +301,36 @@ form .quiet-disclosure[open] > summary {
     display: none;
 }
 
-/* The picked place, stated on the collapsed address fields. */
+/* The address fields' disclosure, read as a link with a chevron that turns
+   as it opens, after the picked place's summary when there is one. */
 form .place-details > summary {
-    @apply text-sm text-neutral-mid;
+    @apply flex flex-wrap items-center gap-x-2 text-sm cursor-pointer;
+    width: fit-content;
     min-height: 1.5rem;
     list-style: none;
 }
 form .place-details > summary::-webkit-details-marker {
     display: none;
 }
+form .place-details > summary::after {
+    content: "";
+    @apply w-1.5 h-1.5 shrink-0;
+    border-right: 2px solid var(--color-primary-action);
+    border-bottom: 2px solid var(--color-primary-action);
+    transform: translateY(-25%) rotate(45deg);
+    transition: transform 120ms ease;
+}
+form .place-details[open] > summary::after {
+    transform: translateY(25%) rotate(-135deg);
+}
+form .place-details > summary:hover .place-summary-action {
+    text-decoration-thickness: 2px;
+}
 form .place-details .place-summary {
     @apply text-neutral-dark;
 }
-form .place-details .place-summary-edit {
-    @apply ml-2 text-primary-action underline;
+form .place-details .place-summary-action {
+    @apply text-primary-action underline;
 }
 
 /* Optional sections: a list of rows, each an icon, a bold title and a
@@ -370,6 +396,56 @@ form .choice-options {
     @apply flex flex-wrap gap-x-6 gap-y-1;
 }
 
+/* The location toggle: one bordered row of equal segments as wide as the
+   fields around it, the chosen one filled. Each radio covers its segment,
+   unseen, so the segment is what's clicked and focused. */
+form .toggle-options {
+    @apply flex overflow-hidden rounded-lg bg-white;
+    border: 1px solid var(--color-field-border);
+}
+form .toggle-option {
+    @apply relative m-0 min-w-0 font-normal;
+    flex: 1 1 0;
+}
+form .toggle-option + .toggle-option {
+    border-left: 1px solid var(--color-field-border);
+}
+form .toggle-option input {
+    @apply absolute inset-0 w-full h-full m-0 opacity-0 cursor-pointer;
+}
+form .toggle-option span {
+    @apply flex items-center justify-center px-2 text-center;
+    min-height: 3rem;
+}
+form .toggle-option:has(input:checked) span {
+    @apply bg-primary-action text-white font-semibold;
+}
+form .toggle-option:has(input:focus-visible) span {
+    outline: 2px solid var(--color-primary-action);
+    outline-offset: -4px;
+}
+form .toggle-option:has(input:checked:focus-visible) span {
+    outline-color: var(--color-white);
+}
+
+/* A question the form's error is about, outlined as an invalid pill field
+   is. */
+form .choice-group:has([aria-invalid="true"]) {
+    border-radius: var(--radius-lg);
+    outline: 2px solid var(--color-alert);
+    outline-offset: calc(var(--spacing) * 2);
+}
+
+/* One of the lists a choice section picks from, under the question it
+   answers ("Format", "Venue"): the legend heads its group, set apart from
+   the next. */
+form .choice-group.choice-category > legend {
+    font-weight: 600;
+}
+form .choice-group.choice-category:not(:last-child) {
+    margin-bottom: 1rem;
+}
+
 /* The Facebook questions (FacebookQuestions): each follow-up appears only
    while the answer it follows up is checked, so the form needs no script. */
 form .facebook-questions {
@@ -389,7 +465,24 @@ form .add-form-submit {
 form .add-form-cancel {
     @apply self-center text-sm text-neutral-mid underline;
 }
+/* The fields that follow the description, out in the open rather than in
+   a section of their own: stacked on a phone, beside each other on a desktop
+   screen as in a section's body. */
+form .add-more-fields {
+    @apply flex flex-col gap-3;
+}
+
 @media (min-width: 64rem) {
+    form .add-more-fields {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 0.5rem 1rem;
+    }
+    form .add-more-fields > :not(.pill-field, [data-tag-input]),
+    form .add-more-fields > .pill-field-multiline {
+        grid-column: 1 / -1;
+    }
+
     /* The optional sections stay one list of rows (a grid of them would share
        row heights, so opening one would open a gap beside it); inside an open
        one, the fields sit two across, and help lines and multi-part widgets

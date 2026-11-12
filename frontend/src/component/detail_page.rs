@@ -13,12 +13,11 @@ use common::{
         },
         user::{
             BasicInfo, BookmarkCheckRequest, BookmarkCheckResponse, BookmarkCreateRequest,
-            BookmarkCreateResponse, ProjectJoinCheckRequest, ProjectJoinCheckResponse,
-            ProjectJoinRequest, ProjectJoinResponse, UserDisplayInfoBatchRequest,
-            UserDisplayInfoBatchResponse,
+            BookmarkCreateResponse, JoinSource, ProjectJoinCheckRequest, ProjectJoinCheckResponse,
+            UserDisplayInfoBatchRequest, UserDisplayInfoBatchResponse,
         },
     },
-    service::{log_share, request, send},
+    service::{log_share, request},
     shared::db,
     timestring::TimeString,
 };
@@ -397,6 +396,9 @@ pub struct DetailPageContent {
     // Location
     pub location_type: String,
     pub entirely_online: bool,
+    /// An event held at its address that can also be joined online. Always
+    /// false for projects.
+    pub also_online: bool,
     pub location_name: String,
     /// Name of the geographic area a NEAR-located project covers ("Middleborough,
     /// MA"). Projects imported without an address carry their only human-readable
@@ -439,6 +441,13 @@ pub struct DetailPageContent {
     // Event-specific
     pub instances: Vec<EventInstanceDisplay>,
     pub ticketing_begins: Option<TimeString>,
+    /// Where people get tickets or register, when that isn't `url`.
+    pub ticket_url: String,
+    /// What attending costs, in the organizer's words.
+    pub cost: String,
+    /// The group an event is limited to, in the organizer's words; empty
+    /// when it's open to everyone, and always for projects.
+    pub limited_to: String,
     /// The umbrella event this one is part of (name + path), empty if none.
     pub part_of_name: String,
     pub part_of_path: String,
@@ -465,6 +474,10 @@ pub struct DetailPageContent {
     /// What an event's organizer said about promoting it on Facebook, shown
     /// to editors only. Always unanswered for a project.
     pub facebook_event: crate::event::facebook::FacebookEvent,
+
+    /// A project's hosted forms, for its editors, who may see what was sent
+    /// through them. `None` for anyone else, and for an event.
+    pub forms: Option<crate::hosted_form::FormLinks>,
 
     // Pre-rendered per-field display partials, keyed by field_type. The full page
     // renders each editable field through the same partial as an inline save, so
@@ -568,7 +581,7 @@ pub enum PlatformAccountVisitor {
 
 /// Which of its three states the platform-account box is in.
 pub enum PlatformAccountStep<'a> {
-    /// Sign in to SciStarter first.
+    /// Log in to SciStarter first.
     SignedOut { sign_in_url: String },
     /// Name the platform username, starting from `value`. `keep` is the
     /// username already saved, when this is a change of it.
@@ -1096,6 +1109,12 @@ impl DetailPage {
         )
         .await;
 
+        let forms = if can_edit {
+            Some(crate::hosted_form::FormLinks::of_project(self.target_id).await)
+        } else {
+            None
+        };
+
         let status: DetailPageStatus = row.status.into();
         let last_updated = if last_edited_str.is_empty() {
             TimeString::try_from(row.created).ok()
@@ -1185,6 +1204,7 @@ impl DetailPage {
             guidance,
             location_type: row.location_type,
             entirely_online: row.entirely_online,
+            also_online: false,
             location_name: row.location_name,
             regions_description: row.regions_description,
             location_description: row.location_description,
@@ -1222,6 +1242,9 @@ impl DetailPage {
             member_count,
             instances: Vec::new(),
             ticketing_begins: None,
+            ticket_url: String::new(),
+            cost: String::new(),
+            limited_to: String::new(),
             part_of_name: String::new(),
             part_of_path: String::new(),
             region_geojson: None,
@@ -1234,6 +1257,7 @@ impl DetailPage {
             is_staff_editor,
             additional_fields,
             facebook_event: crate::event::facebook::FacebookEvent::Unanswered,
+            forms,
         })
     }
 
@@ -1256,6 +1280,7 @@ impl DetailPage {
                 how_to_join,
                 location_type,
                 entirely_online as "entirely_online: bool",
+                also_online as "also_online: bool",
                 location_name,
                 location_description,
                 address,
@@ -1264,6 +1289,9 @@ impl DetailPage {
                 zip,
                 country,
                 ticketing_begins,
+                ticket_url,
+                cost,
+                limited_to,
                 part_of,
                 AsGeoJSON(regions) as "region_geojson: Option<String>",
                 point IS NOT NULL as "has_point: bool",
@@ -1431,6 +1459,9 @@ impl DetailPage {
             ("presenter", row.presenter.clone()),
             ("name", row.name.clone()),
             ("url", row.url.clone()),
+            ("ticket_url", row.ticket_url.clone()),
+            ("cost", row.cost.clone()),
+            ("limited_to", row.limited_to.clone()),
             ("description", row.description.clone()),
             (
                 "entirely_online",
@@ -1521,6 +1552,7 @@ impl DetailPage {
             guidance: GetStartedGuidance::Nothing,
             location_type: row.location_type,
             entirely_online: row.entirely_online,
+            also_online: row.also_online,
             location_name: row.location_name,
             regions_description: String::new(),
             location_description: row.location_description,
@@ -1551,6 +1583,9 @@ impl DetailPage {
             ticketing_begins: row
                 .ticketing_begins
                 .and_then(|s| TimeString::try_from(s).ok()),
+            ticket_url: row.ticket_url,
+            cost: row.cost,
+            limited_to: row.limited_to,
             part_of_name,
             part_of_path,
             region_geojson: row.region_geojson.flatten(),
@@ -1567,6 +1602,7 @@ impl DetailPage {
                 row.facebook_event_url,
                 row.facebook_event_requested,
             ),
+            forms: None,
         })
     }
 }
@@ -2114,14 +2150,12 @@ pub struct AddToListForm {
     pub list_id: String,
 }
 
-/// Record "I already joined" participation
+/// "I already joined": the visitor says they take part in this project.
 #[handler]
 pub async fn record_join(
     Path(id): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> poem::Result<poem::Response> {
-    use common::message::log::ProjectParticipationRecord;
-
     let user = user_info.ok_or_else(|| {
         poem::Error::from_string(
             "Authentication required",
@@ -2129,28 +2163,14 @@ pub async fn record_join(
         )
     })?;
 
-    send(
-        "log.project_participation_record",
-        ProjectParticipationRecord {
-            user_id: user.user_id,
-            project_id: id,
-            origin: Some(0),
-            when: None,
-            duration: None,
-            where_point: None,
-            magnitude: None,
-            authenticated: Some(true),
-            extra: None,
-            fidelity: None,
-            task_name: None,
-        },
-    )
-    .await
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+    crate::project::join(user.user_id, &id, JoinSource::Explicit)
+        .await
+        .map_err(internal_error)?;
 
-    Ok(Html("<div class=\"text-sm text-green-700\">Participation recorded!</div>").into_response())
+    Ok(
+        Html("<div class=\"text-sm text-green-700\">Added to your dashboard.</div>")
+            .into_response(),
+    )
 }
 
 /// The username `user_id` has saved on `platform`, "" if none.
@@ -2286,6 +2306,13 @@ pub async fn connect_platform_account(
 
             named.record(user.user_id).await;
 
+            // Connecting from the project's page is what lets their work on
+            // it be credited, which is as good a sign of taking part as there
+            // is short of the credit itself.
+            crate::project::join(user.user_id, &form.target_id, JoinSource::PlatformConnect)
+                .await
+                .map_err(internal_error)?;
+
             return render_platform_account(PlatformAccountForm {
                 visitor: PlatformAccountVisitor::SignedIn {
                     saved: username.clone(),
@@ -2378,8 +2405,8 @@ pub async fn inline_auth_form(
     })
 }
 
-/// Sign in or create an account from a project page's inline form, joining
-/// the project either way, and reload the page signed in. Anything short of
+/// Sign in or create an account from a project page's inline form, and
+/// reload the page signed in. Anything short of
 /// that shows the form again, saying why.
 #[handler]
 pub async fn inline_auth(
@@ -2414,24 +2441,7 @@ pub async fn inline_auth(
             )
             .await
             {
-                PasswordLogin::SignedIn(basic_info) => {
-                    // A signup joins as part of creating the account; signing
-                    // in has to ask separately. Not fatal: they are signed in
-                    // whether or not this lands.
-                    if let Err(e) = request::<ProjectJoinResponse>(
-                        "user.joins.create",
-                        ProjectJoinRequest {
-                            user_id: basic_info.user_id,
-                            project_id: project_id.to_string(),
-                        },
-                    )
-                    .await
-                    {
-                        tracing::warn!("Failed to join {project_id} on signing in: {e}");
-                    }
-
-                    Ok(signed_in_response())
-                }
+                PasswordLogin::SignedIn(_) => Ok(signed_in_response()),
                 PasswordLogin::Refused => render_inline_auth(form(
                     InlineAuthMode::SignIn,
                     Some(InlineAuthProblem::WrongPassword),
@@ -2459,7 +2469,6 @@ pub async fn inline_auth(
                 password: submission.password,
                 newsletter: submission.newsletter.unwrap_or(false),
                 zipcode: String::new(),
-                join_project: Some(project_id.to_string()),
             };
 
             let token = submission.cf_turnstile_response.as_deref().unwrap_or("");
@@ -2765,11 +2774,14 @@ mod tests {
         check!(html.contains("Connect Your Zooniverse Account</h3>"));
         check!(html.contains("Artifact InSPECtor is hosted on Zooniverse.<br>Connect once"));
         check!(html.contains(
-            r#"href="/login?next=%2Fprojects%2Fartifact-inspector%3Fref%3Dnews">Sign in or create a SciStarter account</a>"#
+            r#"href="/login?next=%2Fprojects%2Fartifact-inspector%3Fref%3Dnews">Log in or sign up on SciStarter</a>"#
         ));
-        check!(html.contains("Sign in or create a Zooniverse account</a>"));
+        check!(html.contains("Log in or sign up on Zooniverse</a>"));
         check!(html.contains("Enter your Zooniverse username</span>"));
-        check!(html.contains("Sign in to SciStarter to enter your Zooniverse username."));
+        check!(html.contains("Log in to SciStarter to enter your Zooniverse username."));
+        check!(html.contains(
+            "This is a one-time setup, even if you join more SciStarter Affiliate Zooniverse projects in the future!"
+        ));
         check!(!html.contains("<input"));
         check!(!html.contains("inline-auth"));
         check!(!html.contains("(done)"));
@@ -2779,16 +2791,16 @@ mod tests {
     fn a_signed_in_visitor_without_a_username_names_one() {
         let html = inaturalist_form(signed_in("")).render_once().unwrap();
 
-        check!(html.contains("Signed in to SciStarter<span class=\"sr-only\"> (done)</span>"));
-        check!(html.contains("Sign in or create an iNaturalist account</a>"));
+        check!(html.contains("Logged in to SciStarter<span class=\"sr-only\"> (done)</span>"));
+        check!(html.contains("Log in or sign up on iNaturalist</a>"));
         check!(html.contains(r#"placeholder="Enter your iNaturalist username""#));
         check!(html.contains("Connect My Account"));
         check!(html.contains("disabled>Connect My Account"));
-        check!(
-            html.contains(
-                "Just once. Only observations uploaded after connecting can be credited."
-            )
-        );
+        check!(html.contains(">Only observations uploaded after connecting can be credited."));
+        // Every iNaturalist project credits, not only the affiliates.
+        check!(html.contains(
+            "This is a one-time setup, even if you join more iNaturalist projects in the future!"
+        ));
         check!(!html.contains("/login?next="));
         check!(!html.contains("Keep "));
         // Only Zooniverse's username is easily mistaken.
@@ -2830,6 +2842,8 @@ mod tests {
         .unwrap();
 
         check!(html.contains("You&rsquo;re connected and ready!"));
+        check!(html.contains("data-connected"));
+        check!(html.contains(r#"tabindex="-1" autofocus"#));
         check!(html.contains("iNaturalist account: <strong>Stargazer</strong>"));
         check!(html.contains("?change=true"));
         check!(html.contains("New observations appear on your"));
@@ -2853,6 +2867,7 @@ mod tests {
         check!(html.contains(r#"data-saved="Stargazer""#));
         check!(html.contains("disabled>Connect My Account"));
         check!(html.contains(">Keep Stargazer</button>"));
+        check!(!html.contains("one-time setup"), "not while changing it");
     }
 
     #[test]
@@ -2869,6 +2884,19 @@ mod tests {
     }
 
     #[test]
+    fn a_visitor_already_connected_keeps_focus_where_the_page_puts_it() {
+        let html = PlatformAccountForm {
+            outcome: PlatformAccountOutcome::Unsubmitted,
+            ..inaturalist_form(signed_in("Stargazer"))
+        }
+        .render_once()
+        .unwrap();
+
+        check!(html.contains("You&rsquo;re connected and ready!"));
+        check!(!html.contains("autofocus"));
+    }
+
+    #[test]
     fn a_login_zooniverse_does_not_have_is_refused_and_the_old_one_kept() {
         let html = PlatformAccountForm {
             outcome: PlatformAccountOutcome::Unknown("Star Gazer".to_string()),
@@ -2882,7 +2910,8 @@ mod tests {
 
         check!(html.contains("Connect Your Zooniverse Account"));
         check!(!html.contains("connected and ready"));
-        check!(html.contains("Zooniverse has no account named <strong>Star Gazer</strong>."));
+        check!(!html.contains("data-connected"));
+        check!(html.contains("Zooniverse username not recognized: <strong>Star Gazer</strong>."));
         check!(html.contains(r#"value="Star Gazer""#));
         check!(!html.contains("disabled>Connect My Account"));
         check!(html.contains(">Keep stargazer</button>"));

@@ -132,6 +132,17 @@
                 <input hx-on:input="document.querySelector('#settings-feedback').textContent=''" type="checkbox" name="restricted_add" value="true" <% if self.exchange.settings.restricted_add { %>checked<% } %> />
               </div>
               <div class="org-item oi-line">
+                <span class="label">Note on the add forms</span>
+                <textarea hx-on:input="document.querySelector('#settings-feedback').textContent=''" name="submission_notice"><%= &self.exchange.settings.submission_notice %></textarea>
+                <small>
+                  Shown at the top of the add forms to someone adding a
+                  project or event through this exchange, saying how their
+                  submission will be handled. Leave it empty for the
+                  standard sentence, which says your organization will
+                  review it.
+                </small>
+              </div>
+              <div class="org-item oi-line">
                 <span class="label">Prompted search terms</span>
                 <div id="predef-searches">
                   <div>

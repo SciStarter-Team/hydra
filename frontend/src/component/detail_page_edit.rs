@@ -15,7 +15,7 @@ use common::service::request;
 
 use crate::admin::autocomplete::resolve_user_names;
 use crate::choice::{ChoiceCheckboxes, ChoiceList, ChoiceValue, limited_heading};
-use crate::component::facebook_questions::{self, FacebookAnswers};
+use crate::component::facebook_questions::FacebookAnswers;
 use crate::component::floating_field::FormError;
 use crate::contact::{Contact, ContactRole};
 use crate::event::facebook::FacebookEvent;
@@ -367,6 +367,18 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
         }),
 
         // Event-only fields
+        ("ticket_url", DetailPageKind::Event) => Some(FieldMeta {
+            label: "Tickets",
+            input_kind: FieldInputKind::Url,
+        }),
+        ("cost", DetailPageKind::Event) => Some(FieldMeta {
+            label: "Cost",
+            input_kind: FieldInputKind::Text,
+        }),
+        ("limited_to", DetailPageKind::Event) => Some(FieldMeta {
+            label: "Who is eligible to attend (empty if it's open to everyone)",
+            input_kind: FieldInputKind::Text,
+        }),
 
         // Event additional fields
         ("status", DetailPageKind::Event) => Some(FieldMeta {
@@ -880,6 +892,23 @@ async fn read_event_field(id: &str, field_type: &str) -> Result<String, Error> {
             .await?;
             Ok(if v { "true" } else { "false" }.to_string())
         }
+        "ticket_url" => Ok(sqlx::query_scalar!(
+            "SELECT ticket_url FROM events WHERE event_id = ?",
+            id
+        )
+        .fetch_one(db())
+        .await?),
+        "cost" => Ok(
+            sqlx::query_scalar!("SELECT cost FROM events WHERE event_id = ?", id)
+                .fetch_one(db())
+                .await?,
+        ),
+        "limited_to" => Ok(sqlx::query_scalar!(
+            "SELECT limited_to FROM events WHERE event_id = ?",
+            id
+        )
+        .fetch_one(db())
+        .await?),
         "status" => Ok(sqlx::query_scalar!(
             r#"SELECT status as "v: String" FROM events WHERE event_id = ?"#,
             id
@@ -1056,6 +1085,9 @@ async fn save_event_field(
             "zip" => EventFieldValue::Zip(value.to_string()),
             "country" => EventFieldValue::Country(value.to_string()),
             "entirely_online" => EventFieldValue::EntirelyOnline(value == "true"),
+            "ticket_url" => EventFieldValue::TicketUrl(value.to_string()),
+            "cost" => EventFieldValue::Cost(value.to_string()),
+            "limited_to" => EventFieldValue::limited_to(value),
             "status" => {
                 let status = match value {
                     "Active" => crate::event::EventStatus::Active,
@@ -1211,6 +1243,9 @@ fn field_self_labeled(field_type: &str, kind: DetailPageKind) -> bool {
                 | "training_materials"
                 | "classroom_materials"
                 | "entirely_online"
+                | "ticket_url"
+                | "cost"
+                | "limited_to"
                 | "mobile_app_url"
                 | "mobile_app_url_ios"
                 | "mobile_app_url_android"
@@ -1294,6 +1329,9 @@ pub fn editable_field_list(kind: DetailPageKind) -> &'static [&'static str] {
             "topics",
             "audience",
             "url",
+            "ticket_url",
+            "cost",
+            "limited_to",
             "description",
             "entirely_online",
             "location_name",
@@ -1802,6 +1840,33 @@ async fn format_display_value(
                 )
             }
         }
+
+        // Each an event's labelled row under its `url`.
+        "ticket_url" => format!(
+            r#"<p class="mb-2 flex flex-wrap gap-x-2"><span class="font-semibold">Tickets:</span>{}</p>"#,
+            if empty {
+                not_set().to_string()
+            } else {
+                format!(
+                    r#"<a href="{0}" class="text-primary-action underline break-all" target="_blank" rel="noopener">{0}</a>"#,
+                    esc()
+                )
+            }
+        ),
+        "cost" => format!(
+            r#"<p class="mb-4 flex flex-wrap gap-x-2"><span class="font-semibold">Cost:</span>{}</p>"#,
+            if empty { not_set().to_string() } else { esc() }
+        ),
+        // An event's labelled row above its links, the group it's limited
+        // to or that it's open to everyone.
+        "limited_to" => format!(
+            r#"<p class="mb-2 flex flex-wrap gap-x-2"><span class="font-semibold">Who can attend:</span>{}</p>"#,
+            if empty {
+                "Open to everyone".to_string()
+            } else {
+                esc()
+            }
+        ),
 
         // Ribbon-box fields (top-level styled blocks)
         "goal" if kind == DetailPageKind::Project => {
@@ -2880,7 +2945,7 @@ pub async fn update_facebook_event(
             facebook_event: load_facebook_event(target).await.map_err(internal_error)?,
             refused: Some(RefusedFacebookAnswers {
                 answers,
-                error: FormError::at(facebook_questions::URL_FIELD, problem),
+                error: FormError::at(problem.field, problem.message),
             }),
         }
     } else {
@@ -3788,5 +3853,28 @@ mod choice_field_tests {
         check!(refuse_values("topics", DetailPageKind::Event, &repeated).is_none());
 
         check!(refuse_values("audience", DetailPageKind::Event, &topics(20)).is_none());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use assert2::check;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn an_event_says_who_can_attend() {
+        let line = |value: &'static str| {
+            format_display_value("limited_to", value, "", DetailPageKind::Event, false)
+        };
+
+        check!(
+            line("").await
+                == r#"<p class="mb-2 flex flex-wrap gap-x-2"><span class="font-semibold">Who can attend:</span>Open to everyone</p>"#
+        );
+        check!(
+            line("K–12 teachers & aides").await
+                == r#"<p class="mb-2 flex flex-wrap gap-x-2"><span class="font-semibold">Who can attend:</span>K–12 teachers &amp; aides</p>"#
+        );
     }
 }

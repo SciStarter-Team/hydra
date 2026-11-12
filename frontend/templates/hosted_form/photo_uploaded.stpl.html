@@ -1,0 +1,11 @@
+<%# The answer to a photo upload: the field's status line, which the upload
+    control targets, and the photos uploaded, out of band into the field's
+    list of them. A failed upload changes only the status line. %>
+<span class="hf-photo-status<% if self.failed { %> hf-error<% } %>" id="<%= self.status_id %>" aria-live="polite"><%= self.message %></span>
+<% if !self.photos.is_empty() { %>
+<div id="<%= self.photos_id %>" hx-swap-oob="<% if self.multiple { %>beforeend<% } else { %>innerHTML<% } %>">
+  <% for photo in self.photos { %>
+  <%+ photo %>
+  <% } %>
+</div>
+<% } %>

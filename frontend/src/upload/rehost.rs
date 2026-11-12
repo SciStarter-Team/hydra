@@ -36,7 +36,7 @@ pub async fn rehost_image_url(url: &str, uploaded_by: Ulid) -> Option<String> {
         original_filename: rehosted_filename(url, content_type.as_deref()),
         content_type,
         size: data.len() as u64,
-        uploaded_by,
+        uploaded_by: Some(uploaded_by),
         access: FileAccess::Untracked,
         variant: None,
         force_download: false,

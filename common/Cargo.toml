@@ -23,7 +23,7 @@ sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "sqlite-load-ex
 tokio = { version = "1.47.1", features = ["full"] }
 hex = "0.4.3"
 sha2 = "0.10.9"
-jiff = "0.2.15"
+jiff = { version = "0.2.15", features = ["serde"] }
 ulid = { version = "1.2.1", features = ["serde"] }
 tracing = "0.1"
 uuid = "1.18"

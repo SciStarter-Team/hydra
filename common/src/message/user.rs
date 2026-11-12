@@ -38,11 +38,6 @@ pub struct Signup {
     /// keeps them on the pending row until the emailed link is clicked.
     #[serde(default)]
     pub pending_transitions: Vec<PendingTransition>,
-    /// The project the visitor signed up from, which the new account joins --
-    /// orrery's `join` signup field. A deferred signup keeps it on the
-    /// pending row until the emailed link is clicked.
-    #[serde(default)]
-    pub join_project: Option<String>,
 }
 
 /// A training step a visitor earned while signed out, waiting for the account
@@ -1447,10 +1442,39 @@ pub struct BookmarkCheckResponse {
 }
 
 // Project joins
+
+/// What made someone a participant in a project: the evidence a join rests
+/// on. A visit to a project's website is not a join, nor is signing up or
+/// signing in on its page; those are counted as what they are.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "database", derive(sqlx::Type))]
+#[cfg_attr(feature = "database", sqlx(rename_all = "snake_case"))]
+pub enum JoinSource {
+    /// A confirmed join copied from orrery, by whatever orrery's rules were,
+    /// which included following some projects out to their websites. Made
+    /// only by the join sync, never asked for over `user.joins.create`.
+    LegacyOrrery,
+
+    /// They said so themselves ("I already joined").
+    Explicit,
+
+    /// A contribution of theirs was credited to the project.
+    Participation,
+
+    /// They connected their account on the project's platform from the
+    /// project's page, which is what lets their contributions be credited.
+    PlatformConnect,
+}
+
+/// Join someone to a project (`user.joins.create`). Joining a project they
+/// have already joined adds nothing, except that anything hydra records
+/// replaces the source of orrery's copy: it says more than orrery's rules did.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ProjectJoinRequest {
     pub user_id: Ulid,
     pub project_id: String,
+    pub source: JoinSource,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1476,6 +1500,31 @@ pub struct ProjectJoinCheckResponse {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EntityCountsRequest {
     pub entity_ids: Vec<String>,
+}
+
+/// How many joins one figure covers.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct JoinCount {
+    /// Every join, orrery's copies included: the figure as it has always
+    /// been read.
+    pub total: i64,
+
+    /// Of those, the joins hydra recorded itself since it became the primary
+    /// server; `None` until it has been.
+    pub since_primary: Option<i64>,
+}
+
+/// How many people have joined each of the requested projects
+/// (`user.joins.count_by_projects`, asked with an [`EntityCountsRequest`]).
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct JoinCountsByProjectsResponse {
+    /// When hydra became the primary server, which each
+    /// [`JoinCount::since_primary`] counts from; `None` until it has been.
+    pub primary_since: Option<TimeString>,
+
+    /// One pair per requested id that anyone has joined; ids no one has
+    /// joined are omitted.
+    pub counts: Vec<(String, JoinCount)>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1940,8 +1989,12 @@ pub struct JoinCountsByUsersRequest {
 
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct JoinCountsByUsersResponse {
+    /// When hydra became the primary server, which each
+    /// [`JoinCount::since_primary`] counts from; `None` until it has been.
+    pub primary_since: Option<TimeString>,
+
     /// `(user_id, joins)`. People with no joins are absent.
-    pub counts: Vec<(String, i64)>,
+    pub counts: Vec<(String, JoinCount)>,
 }
 
 /// A staff member asking to take on another user's identity
@@ -2422,7 +2475,6 @@ mod tests {
             badgeclass: None,
             attribution: attribution.clone(),
             pending_transitions: vec![],
-            join_project: None,
         };
 
         let decoded: Signup =

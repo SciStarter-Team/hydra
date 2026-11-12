@@ -1,0 +1,103 @@
+<%# A hosted form's page. Its states are page.rs's `State`: closed, thanks
+    for a submission just made, signing in first, or open to fill in. A form
+    with a map has a second tab, the map of where submissions were made. %>
+<% let has_map = self.form.map.is_some() && self.state != State::Closed; %>
+<div class="ss-container hosted-form mx-auto !pt-8 !pb-8">
+  <h1 class="hf-title"><%= self.form.name %></h1>
+
+  <% if has_map { %>
+  <div class="tabs-bar-wrapper mb-4">
+    <div class="tabs-wrapper no-shadow">
+      <div class="tabs tabs-bar" role="tablist" aria-label="The form and its map">
+        <button type="button" class="tab" role="tab" aria-selected="true" aria-controls="hf-panel-form" id="hf-tab-form">
+          <span class="tab-text"><span class="tab-name">Form</span></span>
+        </button>
+        <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="hf-panel-map" id="hf-tab-map">
+          <span class="tab-text"><span class="tab-name">Map</span></span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
+  <div class="tab-panels">
+    <div class="tab-panel" id="hf-panel-form" role="tabpanel" aria-hidden="false"<% if has_map { %> aria-labelledby="hf-tab-form"<% } %>>
+      <% match self.state { State::Closed => { %>
+      <p class="hf-closed">Sorry, this form is not available.</p>
+      <% } State::Thanks => { %>
+      <div class="hf-thanks" role="status">
+        <% if self.form.confirmation_message.trim().is_empty() { %>
+        <p><strong>Success!</strong> Your contribution has been recorded.</p>
+        <% } else { %>
+        <%- self.form.confirmation_message %>
+        <% } %>
+        <p class="hf-thanks-actions">
+          <% if let Some(onward) = self.onward() { %>
+          <a class="btn btn-primary" href="<%= onward %>">Continue</a>
+          <% } %>
+          <a class="btn btn-secondary" href="<%= self.path %>">Submit another</a>
+          <% if has_map { %>
+          <button type="button" class="btn btn-secondary" data-show-tab="hf-tab-map">See the map of contributions</button>
+          <% } %>
+        </p>
+      </div>
+      <% } State::SignInFirst | State::Open => { %>
+      <% if !self.form.image.trim().is_empty() { %>
+      <img class="hf-cover" src="<%= self.form.image %>" alt="">
+      <% } %>
+      <% if !self.form.intro.trim().is_empty() { %>
+      <div class="hf-intro prose"><%- self.intro_html() %></div>
+      <% } %>
+
+      <% if self.state == State::SignInFirst { %>
+      <p class="hf-sign-in">You’re almost there! You’ll just need to <a href="<%= self.login_url() %>">log in</a> to your SciStarter account or <a href="<%= self.signup_url() %>">sign up</a> first.</p>
+      <% } else if let Some(user) = &self.user { %>
+      <div class="hf-submitter">
+        <p>You’re submitting this as <strong><%= user.handle %></strong>. If this isn’t you, <a href="<%= self.login_url() %>">log in</a> as someone else.</p>
+        <p class="hf-small-print">By submitting this form, you assert that you have a right to share this information and that SciStarter and the scientists operating the project have the right to use it. You also agree to SciStarter’s <a href="/terms">Terms of Use</a>.</p>
+      </div>
+      <% } %>
+
+      <% if !self.errors.is_empty() { %>
+      <div class="hf-notice" role="alert">
+        <p>Please check the answers marked below.</p>
+      </div>
+      <% } %>
+
+      <div class="hf-body<% if !self.form.aside.trim().is_empty() { %> hf-with-aside<% } %>">
+        <%# Every refusal comes from the server, beside its question, so the
+            browser's own checks are off; `required` stays for assistive
+            technology. %>
+        <form method="post" action="/-form/<%= self.form.form_id | disp %>" class="hf-form" novalidate>
+          <% if let Some(next) = &self.next { %>
+          <input type="hidden" name="next" value="<%= next %>">
+          <% } %>
+          <fieldset class="hf-fields"<% if self.state == State::SignInFirst { %> disabled<% } %>>
+            <% for index in 0..self.form.fields.len() { %>
+            <%+ self.field(index) %>
+            <% } %>
+            <div class="hf-actions">
+              <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+          </fieldset>
+        </form>
+        <% if !self.form.aside.trim().is_empty() { %>
+        <aside class="hf-aside prose"><%- self.aside_html() %></aside>
+        <% } %>
+      </div>
+      <% } } %>
+    </div>
+
+    <% if has_map { %>
+    <div class="tab-panel" id="hf-panel-map" role="tabpanel" aria-hidden="true" aria-labelledby="hf-tab-map">
+      <% if self.form.map.as_ref().is_some_and(|map| !map.intro.trim().is_empty()) { %>
+      <div class="hf-intro prose"><%- self.map_intro_html() %></div>
+      <% } %>
+      <div class="hf-map" data-hosted-form-map="/-form/<%= self.form.form_id | disp %>/map.json">
+        <p class="hf-map-empty" hidden>No contributions to show yet.</p>
+      </div>
+      <noscript><p>The map needs JavaScript.</p></noscript>
+    </div>
+    <% } %>
+  </div>
+</div>

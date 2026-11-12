@@ -1,0 +1,40 @@
+<%# A page of a form's submissions, newest first, each a card. %>
+<% let (newer, older) = (self.newer(), self.older()); %>
+<% let shown = self.cards.len() as u32; %>
+<div class="ss-container hosted-form hf-submissions mx-auto !pt-8 !pb-8">
+  <h1 class="hf-title"><%= self.form.name %></h1>
+
+  <p class="hf-submissions-summary">
+    <% if self.total == 1 { %>1 submission<% } else { %><%= self.total %> submissions<% } %>
+    &middot; <a href="<%= self.form_path %>">The form</a>
+    <% if self.total > 0 { %>
+    &middot; <a href="/-form/<%= self.form.form_id|disp %>/submissions.csv" download>Download them all as a spreadsheet (CSV)</a>
+    <% } %>
+  </p>
+
+  <% if shown == 0 { %>
+  <p class="hf-submissions-none">
+    <% if self.total == 0 { %>Nobody has sent this form in yet.<% } else { %>There are no more submissions.<% } %>
+  </p>
+  <% } else { %>
+  <ol class="hf-cards">
+    <% for card in self.cards { %>
+    <%+ card %>
+    <% } %>
+  </ol>
+  <% } %>
+
+  <% if newer.is_some() || older.is_some() { %>
+  <nav class="hf-pages" aria-label="Pages of submissions">
+    <% if let Some(offset) = newer { %>
+    <a class="btn btn-secondary" href="?offset=<%= offset %>" rel="prev">Newer</a>
+    <% } %>
+    <span>
+      <%= self.offset + 1 %>&ndash;<%= self.offset + shown %> of <%= self.total %>
+    </span>
+    <% if let Some(offset) = older { %>
+    <a class="btn btn-secondary" href="?offset=<%= offset %>" rel="next">Older</a>
+    <% } %>
+  </nav>
+  <% } %>
+</div>

@@ -18,7 +18,8 @@ pub struct FileMetadata {
     pub original_filename: Option<String>,
     pub content_type: Option<String>,
     pub size: u64,
-    pub uploaded_by: Ulid,
+    /// Who uploaded it; `None` for someone not signed in.
+    pub uploaded_by: Option<Ulid>,
     pub access: FileAccess,
     pub variant: Option<String>,
     pub force_download: bool, // Whether to serve with attachment headers
@@ -148,7 +149,7 @@ impl StorageManager {
         match metadata.access {
             FileAccess::Tracked => {
                 if let Some(user_id) = requesting_user {
-                    if metadata.uploaded_by != user_id {
+                    if metadata.uploaded_by != Some(user_id) {
                         return Err(anyhow::anyhow!(
                             "Access denied: file belongs to different user"
                         ));
@@ -304,7 +305,7 @@ struct FileMetadataRow {
     original_filename: Option<String>,
     content_type: Option<String>,
     size: i64,
-    uploaded_by: String,
+    uploaded_by: Option<String>,
     access: String,
     #[allow(dead_code)]
     created_at: String,
@@ -320,7 +321,8 @@ impl TryFrom<FileMetadataRow> for FileMetadata {
 
         let uploaded_by = row
             .uploaded_by
-            .parse()
+            .map(|uploaded_by| uploaded_by.parse())
+            .transpose()
             .context("Invalid uploaded_by ULID")?;
 
         let access = match row.access.as_str() {
@@ -366,7 +368,7 @@ impl LoadStorePeered for FileMetadata {
         };
 
         let file_id_string = self.file_id.to_string();
-        let uploaded_by_string = self.uploaded_by.to_string();
+        let uploaded_by_string = self.uploaded_by.map(|uploaded_by| uploaded_by.to_string());
         let size_i64 = self.size as i64;
         sqlx::query!(
             r#"INSERT OR REPLACE INTO uploaded_files (file_id, original_filename, content_type, size, uploaded_by, access, created_at, variant, force_download)

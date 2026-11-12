@@ -3,6 +3,14 @@
   display: none !important;
 }
 
+/* Once the visitor has connected the project's platform, the project's own
+   joining instructions give way to the "Start" button, except to an editor
+   in edit mode. The connect block marks itself, so this holds as soon as an
+   htmx swap connects or disconnects it. */
+.page-content:not(.edit-mode) .get-started:has(> #platform-account[data-connected]) > #field-how_to_join {
+  display: none;
+}
+
 .page-content:not(.edit-mode) .min-h-6 {
   min-height: 0 !important;
 }

@@ -48,8 +48,21 @@
         <%+ self.field("topics") %>
         <%+ self.field("audience") %>
         <% } %>
+        <%# Who can attend, where people see it before following the links
+            that sign them up. %>
+        <% if self.kind.is_event() { %>
+        <%+ self.field("limited_to") %>
+        <% } %>
         <% if !self.url.is_empty() || self.can_edit { %>
         <%+ self.field("url") %>
+        <% } %>
+        <% if self.kind.is_event() { %>
+        <% if !self.ticket_url.is_empty() || self.can_edit { %>
+        <%+ self.field("ticket_url") %>
+        <% } %>
+        <% if !self.cost.is_empty() || self.can_edit { %>
+        <%+ self.field("cost") %>
+        <% } %>
         <% } %>
 
         <div class="mb-4">
@@ -140,7 +153,7 @@
       <p class="mb-4 text-sm text-neutral-mid">Part of <a class="text-primary-action underline" href="<%= &self.part_of_path %>"><%= &self.part_of_name %></a></p>
       <% } %>
 
-      <% if !self.location_name.is_empty() || !self.regions_description.is_empty() || !self.location_description.is_empty() || !self.address.is_empty() || !self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty() || self.entirely_online || self.can_edit || (self.kind.is_event() && self.region_geojson.is_some()) { %>
+      <% if !self.location_name.is_empty() || !self.regions_description.is_empty() || !self.location_description.is_empty() || !self.address.is_empty() || !self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty() || self.entirely_online || self.also_online || self.can_edit || (self.kind.is_event() && self.region_geojson.is_some()) { %>
       <div class="border border-linework rounded-sm bg-primary-light mb-4">
         <dl>
           <dt class="ribbon-project bg-primary-dark text-white">Where</dt>
@@ -157,6 +170,9 @@
             <%+ self.field("state") %>
             <%+ self.field("zip") %>
             <%+ self.field("country") %>
+            <% } %>
+            <% if self.kind.is_event() && self.also_online { %>
+            <p class="mb-2">and online</p>
             <% } %>
             <% if self.has_point { %>
             <button class="btn btn-primary btn-thin btn-icon" hx-get="/-detail/<%= &self.target_id %>/map" hx-target="body" hx-swap="beforeend">
@@ -195,7 +211,7 @@
       <div class="border border-linework rounded-sm bg-primary-light mb-4<% if !has_guidance && self.how_to_join.is_empty() { %> edit-only<% } %>">
         <dl>
           <dt class="ribbon-project bg-primary-dark text-white">How to Get Started</dt>
-          <dd class="p-4">
+          <dd class="p-4 get-started">
             <% match &self.guidance { GetStartedGuidance::Custom(html) => { %>
             <div class="mb-3"><%- html %></div>
             <% } GetStartedGuidance::LinkedPlatform(form) => { %>
@@ -241,6 +257,21 @@
       <%/* Facebook promotion answers — private, editors only (never public) */%>
       <% if self.can_edit && self.kind.is_event() { %>
       <%+ crate::component::detail_page_edit::FacebookEventDisplay { target_id: self.target_id.clone(), facebook_event: self.facebook_event.clone(), refused: None } %>
+      <% } %>
+
+      <%/* The project's hosted forms, and what was sent — private, editors only */%>
+      <% if let Some(forms) = self.forms.as_ref().filter(|forms| forms.is_worth_showing()) { %>
+      <div class="edit-only border border-indigo-300 rounded-sm bg-indigo-50 mb-4">
+        <dl>
+          <dt class="flex items-center gap-2 px-4 py-2 bg-indigo-700 text-white font-semibold tracking-wide rounded-t-sm">
+            Forms <span class="text-xs font-normal opacity-90">(private)</span>
+          </dt>
+          <dd class="p-4 space-y-3">
+            <p class="text-xs text-indigo-800">The forms SciStarter hosts for this project, and what people sent through them. Visible to editors only.</p>
+            <%+ forms.clone() %>
+          </dd>
+        </dl>
+      </div>
       <% } %>
 
       <%/* More Info accordion (project only) */%>

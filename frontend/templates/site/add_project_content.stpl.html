@@ -65,11 +65,12 @@
 
         <%+ self.activities %>
 
-        <details class="add-section">
+        <%# Open when its email was refused, so the field can be seen and fixed. %>
+        <details class="add-section"<% if error.is_some_and(|e| e.is_about("contact_email")) { %> open<% } %>>
           <%+ SectionSummary::new(SectionIcon::Contact, "Organizer contact") %>
           <div class="add-section-body">
             <%+ FloatingField::new(FieldKind::Text, "contact_name", "Contact name", self.values.contact_name.as_str()).autocomplete("name") %>
-            <%+ FloatingField::new(FieldKind::Email, "contact_email", "Email", self.values.contact_email.as_str()).autocomplete("email") %>
+            <%+ FloatingField::new(FieldKind::Email, "contact_email", "Email", self.values.contact_email.as_str()).autocomplete("email").errors(error) %>
             <%+ FloatingField::new(FieldKind::Text, "contact_affiliation", "Affiliation", self.values.contact_affiliation.as_str()).autocomplete("organization") %>
             <%+ FloatingField::new(FieldKind::Tel, "contact_phone", "Phone", self.values.contact_phone.as_str()).autocomplete("tel") %>
             <%+ FloatingField::new(FieldKind::Text, "contact_address", "Mailing address", self.values.contact_address.as_str()).autocomplete("street-address") %>

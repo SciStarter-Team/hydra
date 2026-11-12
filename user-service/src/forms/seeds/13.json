@@ -1,0 +1,2369 @@
+{
+  "intro": "## Submit Your Data to Sourdough for Science\n\nThank you for participating in Sourdough for Science. Your measurements will help solve the mystery of bread, by quantifying how different flours contribute to the growth of each \"microbial zoo\" and how those microbes contribute to the taste and texture of bread.",
+  "aside": "![container with bacteria, yeast and flour and a baked loaf of bread](/-static/img/forms/sourdough-for-science.jpg)\n\n*Lauren Nichols, Neil McCoy*\n\nPresented by the North Carolina Museum of Natural Sciences and North Carolina State University.",
+  "fields": [
+    {
+      "key": "heading-about-you",
+      "label": "More about you",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "flour_type",
+      "label": "Flour type",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Bleached all purpose", "label": "Bleached all purpose"},
+          {"value": "Unbleached all purpose", "label": "Unbleached all purpose"},
+          {"value": "Whole wheat", "label": "Whole wheat"},
+          {"value": "Rye", "label": "Rye"},
+          {"value": "Spelt", "label": "Spelt"},
+          {"value": "Emmer", "label": "Emmer"},
+          {"value": "Einkorn", "label": "Einkorn"},
+          {"value": "Kamut/Khorasan", "label": "Kamut/Khorasan"},
+          {"value": "Buckwheat", "label": "Buckwheat"},
+          {"value": "Teff", "label": "Teff"},
+          {"value": "Millet", "label": "Millet"},
+          {"value": "Sorgham", "label": "Sorgham"},
+          {"value": "Amaranth", "label": "Amaranth"},
+          {"value": "Coconut", "label": "Coconut"},
+          {"value": "Almond", "label": "Almond"},
+          {"value": "Corn meal", "label": "Corn meal"},
+          {"value": "Rice", "label": "Rice"},
+          {"value": "Other -> Specify", "label": "Other -> Specify"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "flour_type_other",
+      "label": "Other flour type",
+      "visible_if": {
+        "field": "flour_type",
+        "equals": "Other -> Specify"
+      },
+      "kind": {
+        "type": "text",
+        "placeholder": "Other flour type"
+      }
+    },
+    {
+      "key": "other_changes",
+      "label": "Use 2-3 words to describe any other conditions you changed compared to our original instructions. If you changed multiple conditions, list them, separated with a semicolon (Ex. Kept outdoors; Added grapes)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "hypothesis",
+      "label": "Your hypothesis",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "flour_brand",
+      "label": "What brand of flour did you use?",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-where",
+      "label": "Where?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "where",
+      "label": "Location",
+      "help": "Based on the available information, this is your observation site's point on the map. If it's not correct, you can click to move the marker to the correct spot.",
+      "required": true,
+      "kind": {
+        "type": "location"
+      }
+    },
+    {
+      "key": "mapped",
+      "label": "Can you see your observation site on this map?",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Yes", "label": "Yes"},
+          {"value": "No", "label": "No"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "heading-day-0",
+      "label": "Day 0 (start date)",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_0",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_0",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_0_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "radius",
+      "label": "Radius of jar (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-0-mixed",
+      "label": "After adding and mixing color and flour",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_0",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "ph_mixed_0",
+      "label": "pH",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_0",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_0",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-1",
+      "label": "Day 1",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_1",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_1",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_1_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-1-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_1",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_1",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_1",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-1-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_1",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-2",
+      "label": "Day 2",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_2",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_2",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_2_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-2-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_2",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_2",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_2",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-2-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_2",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-3",
+      "label": "Day 3",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_3",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_3",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_3_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-3-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_3",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_3",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_3",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-3-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_3",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-4",
+      "label": "Day 4",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_4",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_4",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_4_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-4-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_4",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_4",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_4",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-4-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_4",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-5",
+      "label": "Day 5",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_5",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_5",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_5_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-5-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_5",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_5",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_5",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-5-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_5",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-6",
+      "label": "Day 6",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_6",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_6",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_6_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-6-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_6",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_6",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_6",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-6-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_6",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-7",
+      "label": "Day 7",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_7",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_7",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_7_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-7-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_7",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_7",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_7",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-7-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_7",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-8",
+      "label": "Day 8",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_8",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_8",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_8_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-8-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_8",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_8",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_8",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-8-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_8",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-9",
+      "label": "Day 9",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_9",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_9",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_9_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-9-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_9",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_9",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_9",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-9-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_9",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-10",
+      "label": "Day 10",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_10",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_10",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_10_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-10-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_10",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_10",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_10",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-10-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_10",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-11",
+      "label": "Day 11",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_11",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_11",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_11_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-11-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_11",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_11",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_11",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-11-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_11",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-12",
+      "label": "Day 12",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_12",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_12",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_12_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-12-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_12",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_12",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_12",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-12-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_12",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-13",
+      "label": "Day 13",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_13",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_13",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_13_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-13-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_13",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_13",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_13",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-13-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_13",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-14",
+      "label": "Day 14",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_14",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_14",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_14_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-14-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_14",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_14",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_14",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-14-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_14",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-day-15",
+      "label": "Day 15",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date_15",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "temp_15",
+      "label": "Temperature of room",
+      "default": "0",
+      "kind": {
+        "type": "number"
+      }
+    },
+    {
+      "key": "temp_15_units",
+      "label": "Celsius or Fahrenheit",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "c", "label": "degrees C"},
+          {"value": "f", "label": "degrees F"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-day-15-before",
+      "label": "Before mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "height_before_15",
+      "label": "Height (in cm)",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "aroma_15",
+      "label": "Aroma",
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Veggie: Grass", "label": "Veggie: Grass"},
+          {"value": "Veggie: Vegetal", "label": "Veggie: Vegetal"},
+          {"value": "Veggie: Unripe fruits", "label": "Veggie: Unripe fruits"},
+          {"value": "Veggie: Leaves", "label": "Veggie: Leaves"},
+          {"value": "Veggie: Chickpea", "label": "Veggie: Chickpea"},
+          {"value": "Veggie: Root vegetables", "label": "Veggie: Root vegetables"},
+          {"value": "Grain/Cereal: Rice", "label": "Grain/Cereal: Rice"},
+          {"value": "Grain/Cereal: Corn", "label": "Grain/Cereal: Corn"},
+          {"value": "Grain/Cereal: Bread", "label": "Grain/Cereal: Bread"},
+          {"value": "Grain/Cereal: Grain field", "label": "Grain/Cereal: Grain field"},
+          {"value": "Grain/Cereal: Hay", "label": "Grain/Cereal: Hay"},
+          {"value": "Grain/Cereal: Whole grain", "label": "Grain/Cereal: Whole grain"},
+          {"value": "Grain/Cereal: Porridge", "label": "Grain/Cereal: Porridge"},
+          {"value": "Nutty: Hazelnut", "label": "Nutty: Hazelnut"},
+          {"value": "Nutty: Peanut", "label": "Nutty: Peanut"},
+          {"value": "Earthy: Soil", "label": "Earthy: Soil"},
+          {"value": "Earthy: Moist wood", "label": "Earthy: Moist wood"},
+          {"value": "Earthy: Mouldy", "label": "Earthy: Mouldy"},
+          {"value": "Toasted: Burned", "label": "Toasted: Burned"},
+          {"value": "Toasted: Caramel", "label": "Toasted: Caramel"},
+          {"value": "Toasted: Toasted bread", "label": "Toasted: Toasted bread"},
+          {"value": "Toasted: Smoked", "label": "Toasted: Smoked"},
+          {"value": "Ocean: Fishy", "label": "Ocean: Fishy"},
+          {"value": "Ocean: Minerals", "label": "Ocean: Minerals"},
+          {"value": "Ocean: Seaweed", "label": "Ocean: Seaweed"},
+          {"value": "Bodily smells: Sweaty feet", "label": "Bodily smells: Sweaty feet"},
+          {"value": "Bodily smells: Butyric acid", "label": "Bodily smells: Butyric acid"},
+          {"value": "Bodily smells: Vomit", "label": "Bodily smells: Vomit"},
+          {"value": "Bodily smells: Fart", "label": "Bodily smells: Fart"},
+          {"value": "Bodily smells: Urine", "label": "Bodily smells: Urine"},
+          {"value": "Animal: Animal feed", "label": "Animal: Animal feed"},
+          {"value": "Animal: Animal stable", "label": "Animal: Animal stable"},
+          {"value": "Animal: Manure", "label": "Animal: Manure"},
+          {"value": "Animal: Farm", "label": "Animal: Farm"},
+          {"value": "Fermented dairy: Lactic acid", "label": "Fermented dairy: Lactic acid"},
+          {"value": "Fermented dairy: Yoghurt", "label": "Fermented dairy: Yoghurt"},
+          {"value": "Fermented dairy: Matured hard cheese", "label": "Fermented dairy: Matured hard cheese"},
+          {"value": "Fermented dairy: Butter milk", "label": "Fermented dairy: Butter milk"},
+          {"value": "Fermented dairy: Sour cream", "label": "Fermented dairy: Sour cream"},
+          {"value": "Fermented: Alcoholic", "label": "Fermented: Alcoholic"},
+          {"value": "Fermented: Yeasty", "label": "Fermented: Yeasty"},
+          {"value": "Fermented: Beer", "label": "Fermented: Beer"},
+          {"value": "Fermented: Rice wine", "label": "Fermented: Rice wine"},
+          {"value": "Sour: Vinegar", "label": "Sour: Vinegar"},
+          {"value": "Sour: Pickled vegetables", "label": "Sour: Pickled vegetables"},
+          {"value": "Sour: Lemon", "label": "Sour: Lemon"},
+          {"value": "Sour: Capers", "label": "Sour: Capers"},
+          {"value": "Sour: Silage/fermented grass", "label": "Sour: Silage/fermented grass"},
+          {"value": "Fruity: Apple", "label": "Fruity: Apple"},
+          {"value": "Fruity: Pineapple", "label": "Fruity: Pineapple"},
+          {"value": "Fruity: Banana", "label": "Fruity: Banana"},
+          {"value": "Fruity: Berries", "label": "Fruity: Berries"},
+          {"value": "Fruity: Tropical fruits", "label": "Fruity: Tropical fruits"},
+          {"value": "Chemical: Ammonia", "label": "Chemical: Ammonia"},
+          {"value": "Chemical: Plastic", "label": "Chemical: Plastic"},
+          {"value": "Chemical: Synthetic", "label": "Chemical: Synthetic"},
+          {"value": "Chemical: Paint", "label": "Chemical: Paint"},
+          {"value": "Chemical: Glue", "label": "Chemical: Glue"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "visual_15",
+      "label": "Other visual observations",
+      "help": "(liquid? color?)",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-day-15-after",
+      "label": "After mixing",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ph_mixed_15",
+      "label": "pH after mixing",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-photo",
+      "label": "Upload a photo",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "experiment_photo",
+      "label": "Upload a photo of your completed data sheet (Even when you are very careful, typos can sneak through. Its good scientific practice to keep hard copies of the original data sheet.)",
+      "required": true,
+      "kind": {
+        "type": "photo",
+        "multiple": false
+      }
+    },
+    {
+      "key": "other_photos",
+      "label": "Want to share more pictures of your starter? Upload as many as you like here. Just make sure that you give each file a descriptive name with your username so that we can link it back to your data",
+      "kind": {
+        "type": "photo",
+        "multiple": true
+      }
+    }
+  ],
+  "map": null
+}

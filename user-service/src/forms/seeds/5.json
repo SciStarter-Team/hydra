@@ -1,0 +1,510 @@
+{
+  "intro": "## Submit Your Data to Project Squirrel\n\nThank you for participating in Project Squirrel to help understand urban nature. We hope you will continue to report data about squirrels and tell your friends about Project Squirrel.",
+  "aside": "![gray squirrel in a tree](/-static/img/forms/project_squirrel.jpg)\n\n*Project Squirrel*\n\nPresented by the University of Illinois Chicago, the Hefner Museum of Natural History, and the Chicago Academy of Science.",
+  "fields": [
+    {
+      "key": "heading-how-many",
+      "label": "How many? Which species?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "note-how-many",
+      "label": "",
+      "kind": {
+        "type": "markdown",
+        "text": "If none, please leave at 0."
+      }
+    },
+    {
+      "key": "gray_squirrel",
+      "label": "How many Gray Squirrels?",
+      "help": "**How to identify Gray Squirrels**\n\n![gray squirrel on the ground](/-static/img/forms/grey_squirrel.jpg)\n\n- Gray backs and side\n- White or gray bellies\n- White-fringed tails\n\nGray squirrels may have a hint of rust on their backs and sides. Any black squirrel you might see is probably a variety of the gray squirrel.",
+      "default": "0",
+      "kind": {
+        "type": "number",
+        "min": 0,
+        "max": 50,
+        "integer": true
+      }
+    },
+    {
+      "key": "red_squirrel",
+      "label": "How many Red Squirrels?",
+      "help": "**How to identify Red Squirrels**\n\n![red squirrel in a tree](/-static/img/forms/w_631px-Tamiasciurus_hudsonicus_CT.jpg \"photo by Simon Pierre Barrette, https://commons.wikimedia.org/wiki/User:Cephas\")\n\n- Reddish to reddis-gray backs and sides\n- White around the eyes\n- White or cream bellies",
+      "default": "0",
+      "kind": {
+        "type": "number",
+        "min": 0,
+        "max": 50,
+        "integer": true
+      }
+    },
+    {
+      "key": "fox_squirrel",
+      "label": "How many Fox Squirrels?",
+      "help": "**How to identify Fox Squirrels**\n\n![fox squirrel in a tree](/-static/img/forms/fox_squirrel.jpg)\n\n- Orange or rust backs and sides\n- Orange bellies\n- Black-fringed tails",
+      "default": "0",
+      "kind": {
+        "type": "number",
+        "min": 0,
+        "max": 50,
+        "integer": true
+      }
+    },
+    {
+      "key": "heading-photo",
+      "label": "Squirrel Photo",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "note-photo-rights",
+      "label": "",
+      "kind": {
+        "type": "markdown",
+        "text": "By uploading this photo, you agree that you have the right to share it, and that we have the right to use it, including publishing it."
+      }
+    },
+    {
+      "key": "science_photo",
+      "label": "Upload a squirrel photo",
+      "kind": {
+        "type": "photo",
+        "multiple": false
+      }
+    },
+    {
+      "key": "heading-where",
+      "label": "Where?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "mapped",
+      "label": "Can you see your observation site on this map?",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Yes", "label": "Yes"},
+          {"value": "No", "label": "No"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "where",
+      "label": "Location",
+      "help": "Based on the available information, this is your observation site's point on the map. If it's not correct, you can click to move the marker to the correct spot.",
+      "required": true,
+      "kind": {
+        "type": "location"
+      }
+    },
+    {
+      "key": "observation_here",
+      "label": "Have you ever submitted data for this observation site before?",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Yes", "label": "Yes"},
+          {"value": "No", "label": "No"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "observation_elsewhere",
+      "label": "Have you already submitted data for a different observation site?",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Yes", "label": "Yes"},
+          {"value": "No", "label": "No"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "heading-when",
+      "label": "When?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date",
+      "label": "Date of observation",
+      "required": true,
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "squirrel_time",
+      "label": "Time of observation",
+      "kind": {
+        "type": "time",
+        "min": "05:30",
+        "max": "18:30",
+        "step_minutes": 15
+      }
+    },
+    {
+      "key": "heading-location-type",
+      "label": "What type of location?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "location_type",
+      "label": "Location type",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "house_duplex", "label": "Single Family House or Duplex"},
+          {"value": "apartment", "label": "Multiple Family Dwelling (e.g. Apartment Building)"},
+          {"value": "highrise", "label": "Highrise Building"},
+          {"value": "park", "label": "Neighborhood Park"},
+          {"value": "forest_preserve", "label": "Forest or Nature Preserve"},
+          {"value": "zoo", "label": "Zoo, Arboretum or Botanical Garden"},
+          {"value": "commercial", "label": "Commercial Establishment"},
+          {"value": "school", "label": "School, College or University Campus"},
+          {"value": "vacant_lot", "label": "Vacant Lot"},
+          {"value": "cemetary", "label": "Cemetery"},
+          {"value": "farmland", "label": "Farmland"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-trees",
+      "label": "What trees are present?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "nut_trees",
+      "label": "Nut-bearing (like walnut, oak)",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "1", "label": "Present"},
+          {"value": "0", "label": "Absent"},
+          {"value": "2", "label": "Not Sure"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "seed_trees",
+      "label": "Seed-bearing (like maple, locust)",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "1", "label": "Present"},
+          {"value": "0", "label": "Absent"},
+          {"value": "2", "label": "Not Sure"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "fruit_trees",
+      "label": "Fruit-bearing (like crabapple, ginkgo)",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "1", "label": "Present"},
+          {"value": "0", "label": "Absent"},
+          {"value": "2", "label": "Not Sure"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "tiny_seed_trees",
+      "label": "Tiny-seeded (like cottonwood, ash)",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "1", "label": "Present"},
+          {"value": "0", "label": "Absent"},
+          {"value": "2", "label": "Not Sure"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "conifer_trees",
+      "label": "Coniferous (like pine, spruce, fir)",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "1", "label": "Present"},
+          {"value": "0", "label": "Absent"},
+          {"value": "2", "label": "Not Sure"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-food",
+      "label": "How often do you see squirrels getting food from the following?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "bird_feeder",
+      "label": "Bird feeders",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "never", "label": "Never"},
+          {"value": "seldom", "label": "Seldom"},
+          {"value": "often", "label": "Often"},
+          {"value": "regularly", "label": "Regularly"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "human_handout",
+      "label": "Human handouts",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "never", "label": "Never"},
+          {"value": "seldom", "label": "Seldom"},
+          {"value": "often", "label": "Often"},
+          {"value": "regularly", "label": "Regularly"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "garbage",
+      "label": "Garbage",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "never", "label": "Never"},
+          {"value": "seldom", "label": "Seldom"},
+          {"value": "often", "label": "Often"},
+          {"value": "regularly", "label": "Regularly"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "from_trees",
+      "label": "Trees/plants",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "never", "label": "Never"},
+          {"value": "seldom", "label": "Seldom"},
+          {"value": "often", "label": "Often"},
+          {"value": "regularly", "label": "Regularly"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "other_food",
+      "label": "Other",
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "never", "label": "Never"},
+          {"value": "seldom", "label": "Seldom"},
+          {"value": "often", "label": "Often"},
+          {"value": "regularly", "label": "Regularly"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "other_feeding_explain",
+      "label": "Other (please specify)",
+      "remember": true,
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "heading-abundance",
+      "label": "Compared to this time last year, are squirrels more abundant, less, or the same?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "population_change",
+      "label": "Squirrel Abundance",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "increased", "label": "increased"},
+          {"value": "decreased", "label": "decreased"},
+          {"value": "same", "label": "same"},
+          {"value": "not sure", "label": "not sure"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "heading-predators",
+      "label": "How often are dogs, cats, and other predators seen at the site?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "note-predators",
+      "label": "",
+      "kind": {
+        "type": "markdown",
+        "text": "This includes dogs and cats that live near the site, strays, animals that visit the site on a walk, and others."
+      }
+    },
+    {
+      "key": "dog",
+      "label": "Dogs",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "never", "label": "Never"},
+          {"value": "seldom", "label": "Low"},
+          {"value": "often", "label": "Medium"},
+          {"value": "regularly", "label": "High"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "cat",
+      "label": "Cats",
+      "required": true,
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "never", "label": "Never"},
+          {"value": "seldom", "label": "Low"},
+          {"value": "often", "label": "Medium"},
+          {"value": "regularly", "label": "High"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "coyote",
+      "label": "Coyotes",
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "never", "label": "Never"},
+          {"value": "seldom", "label": "Low"},
+          {"value": "often", "label": "Medium"},
+          {"value": "regularly", "label": "High"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "hawk",
+      "label": "Hawks",
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "never", "label": "Never"},
+          {"value": "seldom", "label": "Low"},
+          {"value": "often", "label": "Medium"},
+          {"value": "regularly", "label": "High"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "poison",
+      "label": "Poisoned grain",
+      "remember": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "never", "label": "Never"},
+          {"value": "seldom", "label": "Low"},
+          {"value": "often", "label": "Medium"},
+          {"value": "regularly", "label": "High"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "heading-comments",
+      "label": "Any other comments, data, or observations?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "comments",
+      "label": "Comments",
+      "remember": true,
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    }
+  ],
+  "map": {
+    "intro": "[Project Squirrel](/project-squirrel) is a citizen science project designed to further understand urban squirrel biology.",
+    "popup_fields": [
+      "science_photo",
+      "gray_squirrel",
+      "fox_squirrel",
+      "red_squirrel"
+    ]
+  }
+}

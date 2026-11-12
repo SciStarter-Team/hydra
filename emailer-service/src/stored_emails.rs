@@ -21,6 +21,121 @@ struct StoredEmailRow {
 }
 
 // ============================================================================
+// Sending a Stored Email
+// ============================================================================
+
+/// A stored email made ready to send: its body rendered from the editor's
+/// delta, and its settings read the way every send of it reads them, whether
+/// a trigger sends it or something asks for it by name.
+pub struct ReadyEmail {
+    pub slug: String,
+    pub subject: String,
+    pub template_html: String,
+    pub datasets: Vec<String>,
+    pub reply_to: Option<Vec<String>>,
+    pub no_unsubscribe: bool,
+}
+
+impl ReadyEmail {
+    /// The stored email whose id is `stored_email_id`, if there is one.
+    pub async fn by_id(stored_email_id: &str) -> Result<Option<ReadyEmail>> {
+        let row = sqlx::query!(
+            r#"SELECT slug, subject, body_delta, datasets, reply_to_noreply, no_unsubscribe
+               FROM stored_emails WHERE stored_email_id = ?"#,
+            stored_email_id
+        )
+        .fetch_optional(db())
+        .await?;
+
+        row.map(|row| {
+            ReadyEmail::new(
+                row.slug,
+                row.subject,
+                &row.body_delta,
+                &row.datasets,
+                row.reply_to_noreply,
+                row.no_unsubscribe,
+            )
+        })
+        .transpose()
+    }
+
+    /// The stored email whose slug is `slug`, if there is one.
+    pub async fn by_slug(slug: &str) -> Result<Option<ReadyEmail>> {
+        let row = sqlx::query!(
+            r#"SELECT slug, subject, body_delta, datasets, reply_to_noreply, no_unsubscribe
+               FROM stored_emails WHERE slug = ?"#,
+            slug
+        )
+        .fetch_optional(db())
+        .await?;
+
+        row.map(|row| {
+            ReadyEmail::new(
+                row.slug,
+                row.subject,
+                &row.body_delta,
+                &row.datasets,
+                row.reply_to_noreply,
+                row.no_unsubscribe,
+            )
+        })
+        .transpose()
+    }
+
+    fn new(
+        slug: String,
+        subject: String,
+        body_delta: &str,
+        datasets: &str,
+        reply_to_noreply: bool,
+        no_unsubscribe: bool,
+    ) -> Result<ReadyEmail> {
+        Ok(ReadyEmail {
+            slug,
+            subject,
+            template_html: common::quill::delta_to_html(body_delta)?,
+            datasets: serde_json::from_str(datasets).unwrap_or_default(),
+            reply_to: noreply_reply_to(reply_to_noreply),
+            // Whether the email offers to unsubscribe is the stored email's
+            // own setting, so that every send of it agrees.
+            no_unsubscribe,
+        })
+    }
+}
+
+/// Send the stored email a request names to the user it names, now: an email
+/// tied to something other than an event every user can raise, such as the
+/// thanks a particular form sends for someone's first submission.
+pub async fn handle_send_stored_email(req: &Request) -> Result<SendEmailResponse, Error> {
+    let request: SendStoredEmailRequest = flexbuffers::from_slice(&req.message.payload)?;
+
+    let Some(email) = ReadyEmail::by_slug(&request.slug).await? else {
+        return Err(anyhow::anyhow!(
+            "No stored email is named {:?}",
+            request.slug
+        ));
+    };
+
+    let mut additional_data = request.additional_data.unwrap_or_default();
+    additional_data.push(("user_id".to_string(), request.user_id.to_string()));
+
+    let sending_id = crate::sends::send_email(
+        email.template_html,
+        email.subject,
+        vec![EmailRecipient::UserId(request.user_id)],
+        email.datasets,
+        Some(additional_data),
+        email.reply_to,
+        email.no_unsubscribe,
+        Some(email.slug),
+    )
+    .await?;
+
+    Ok(SendEmailResponse { sending_id })
+}
+
+// ============================================================================
 // List Stored Emails
 // ============================================================================
 

@@ -16,6 +16,7 @@ use std::sync::Arc;
 use crate::component::{Component, Head, StandardLayout, html_escape};
 use crate::local_time::{TimeFormat, local_time};
 use crate::middleware::authorization::Authenticated;
+use crate::project::location::ANYWHERE;
 
 // Shared fragment templates
 #[derive(TemplateOnce)]
@@ -740,6 +741,8 @@ struct CsmEvent {
     begin: String,
     end: String,
     entirely_online: bool,
+    /// Held anywhere in the world: online, or in person wherever people are.
+    anywhere: bool,
     signature: bool,
     address: String,
     city: String,
@@ -750,6 +753,9 @@ impl CsmEvent {
     fn location_display(&self) -> String {
         if self.entirely_online {
             return "Online".to_string();
+        }
+        if self.anywhere {
+            return "Anywhere".to_string();
         }
         let mut parts = Vec::new();
         if !self.address.is_empty() {
@@ -800,6 +806,36 @@ fn get_april_range() -> (String, String) {
 /// 100 miles in meters — radius for spatial location search
 const LOCATION_RADIUS_METERS: f64 = 160934.0;
 
+/// Push the condition for an event near `(lat, lng)`, as orrery decides it:
+/// its point within [`LOCATION_RADIUS_METERS`], or its regions covering the
+/// searcher, or -- when it has neither to measure -- that it can be joined
+/// online, entirely or as well as on site. An event held anywhere in the
+/// world is near everyone, whatever place it carries.
+fn push_near(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: f64, lng: f64) {
+    let push_searcher = |qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>| {
+        qb.push("MakePoint(");
+        qb.push_bind(lng);
+        qb.push(", ");
+        qb.push_bind(lat);
+        qb.push(", 4326)");
+    };
+
+    qb.push("((ev.point IS NOT NULL AND ST_Distance(ev.point, ");
+    push_searcher(qb);
+    qb.push(", 1) < ");
+    qb.push_bind(LOCATION_RADIUS_METERS);
+    qb.push(") OR (ev.regions IS NOT NULL AND ST_Intersects(");
+    push_searcher(qb);
+    qb.push(
+        ", ST_MakeValid(ev.regions)) = 1) \
+         OR (ev.point IS NULL AND ev.regions IS NULL \
+             AND (ev.entirely_online = 1 OR ev.also_online = 1)) \
+         OR ev.location_type = ",
+    );
+    qb.push_bind(ANYWHERE);
+    qb.push(")");
+}
+
 #[handler]
 pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response, anyhow::Error> {
     let page = query.page.unwrap_or(1).max(1);
@@ -847,8 +883,10 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
         qb.push(" AND ei.begin <= ");
         qb.push_bind(april_end.to_string());
 
+        // Whatever can be joined online, an event held in person and online
+        // too among it.
         if online_only {
-            qb.push(" AND ev.entirely_online = 1");
+            qb.push(" AND (ev.entirely_online = 1 OR ev.also_online = 1)");
         }
         if signature_only {
             let (list, value) = signature_type;
@@ -866,14 +904,8 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
             qb.push_bind(keywords_like.to_string());
         }
         if has_location {
-            // Include events near the location OR online events
-            qb.push(" AND (ev.entirely_online = 1 OR (ev.point IS NOT NULL AND ST_Distance(ev.point, MakePoint(");
-            qb.push_bind(lng);
-            qb.push(", ");
-            qb.push_bind(lat);
-            qb.push(", 4326), 1) <= ");
-            qb.push_bind(LOCATION_RADIUS_METERS);
-            qb.push("))");
+            qb.push(" AND ");
+            push_near(qb, lat, lng);
         }
     }
 
@@ -904,7 +936,11 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
     // Results query
     let mut results_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
         "SELECT e.slug, ev.name, MIN(ei.begin), MIN(ei.end), \
-         ev.entirely_online, \
+         ev.entirely_online, ev.location_type = ",
+    );
+    results_qb.push_bind(ANYWHERE);
+    results_qb.push(
+        ", \
          EXISTS (SELECT 1 FROM choice_assignments a \
                  WHERE a.target = ev.event_id AND a.list = ",
     );
@@ -943,6 +979,7 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
             String,
             bool,
             bool,
+            bool,
             String,
             String,
             String,
@@ -958,10 +995,11 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
             begin: r.2,
             end: r.3,
             entirely_online: r.4,
-            signature: r.5,
-            address: r.6,
-            city: r.7,
-            state: r.8,
+            anywhere: r.5,
+            signature: r.6,
+            address: r.7,
+            city: r.8,
+            state: r.9,
         })
         .collect();
 
@@ -1128,4 +1166,139 @@ pub fn routes() -> impl Endpoint {
         .at("/", get(csm_home))
         .at("/participate", get(csm_participate))
         .at("/report", get(csm_report).post(csm_report_submit))
+}
+
+#[cfg(test)]
+mod tests {
+    use assert2::check;
+    use sqlx::SqlitePool;
+    use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
+    /// The searcher, and a point about 111 km due north, inside the radius,
+    /// and one about 222 km north, outside it.
+    const LAT: f64 = -35.0;
+    const LNG: f64 = -175.0;
+    const INSIDE: &str = "POINT(-175 -34)";
+    const OUTSIDE: &str = "POINT(-175 -33)";
+
+    /// A box around the searcher, and one well away from them.
+    const AROUND: &str = "MULTIPOLYGON(((-176 -36, -174 -36, -174 -34, -176 -34, -176 -36)))";
+    const AWAY: &str = "MULTIPOLYGON(((10 10, 11 10, 11 11, 10 11, 10 10)))";
+
+    /// A scratch database holding one event per row of `events`: its name,
+    /// regions, point, whether it is entirely online and whether also online.
+    async fn database(events: &[(&str, Option<&str>, Option<&str>, bool, bool)]) -> SqlitePool {
+        // SAFETY: mod_spatialite is a trusted extension, the same one the
+        // application loads.
+        let options = unsafe { SqliteConnectOptions::new().extension("mod_spatialite") };
+
+        // One connection, because every connection to ":memory:" is a
+        // database of its own.
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options.filename(":memory:"))
+            .await
+            .unwrap();
+
+        for statement in [
+            "SELECT InitSpatialMetadata(1)",
+            "CREATE TABLE events (name TEXT, regions BLOB, point BLOB, \
+             entirely_online INTEGER, also_online INTEGER, \
+             location_type TEXT NOT NULL DEFAULT '')",
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+
+        for (name, regions, point, entirely_online, also_online) in events {
+            sqlx::query(
+                "INSERT INTO events (name, regions, point, entirely_online, also_online) \
+                 VALUES (?, GeomFromText(?, 4326), GeomFromText(?, 4326), ?, ?)",
+            )
+            .bind(name)
+            .bind(regions)
+            .bind(point)
+            .bind(entirely_online)
+            .bind(also_online)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        pool
+    }
+
+    /// The events near the searcher, by name.
+    async fn near(pool: &SqlitePool) -> Vec<String> {
+        let mut qb = sqlx::QueryBuilder::new("SELECT ev.name FROM events ev WHERE ");
+        super::push_near(&mut qb, LAT, LNG);
+        qb.push(" ORDER BY ev.name");
+
+        qb.build_query_scalar().fetch_all(pool).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn an_event_is_near_by_its_point_or_its_regions() {
+        let pool = database(&[
+            ("close point", None, Some(INSIDE), false, false),
+            ("far point", None, Some(OUTSIDE), false, false),
+            ("covering", Some(AROUND), None, false, false),
+            ("elsewhere", Some(AWAY), None, false, false),
+            ("nowhere", None, None, false, false),
+        ])
+        .await;
+
+        check!(near(&pool).await == ["close point", "covering"]);
+    }
+
+    #[tokio::test]
+    async fn an_event_online_counts_as_near_only_without_a_place() {
+        let pool = database(&[
+            ("online", None, None, true, false),
+            ("hybrid", None, None, false, true),
+            ("far online", None, Some(OUTSIDE), true, false),
+            ("far hybrid", None, Some(OUTSIDE), false, true),
+            ("close hybrid", None, Some(INSIDE), false, true),
+        ])
+        .await;
+
+        check!(near(&pool).await == ["close hybrid", "hybrid", "online"]);
+    }
+
+    #[tokio::test]
+    async fn an_event_held_anywhere_is_near_wherever_its_place() {
+        let pool = database(&[
+            ("anywhere", None, None, false, false),
+            ("anywhere far", None, Some(OUTSIDE), false, false),
+            ("anywhere elsewhere", Some(AWAY), None, false, false),
+            ("far point", None, Some(OUTSIDE), false, false),
+        ])
+        .await;
+        sqlx::query("UPDATE events SET location_type = ? WHERE name LIKE 'anywhere%'")
+            .bind(super::ANYWHERE)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        check!(near(&pool).await == ["anywhere", "anywhere elsewhere", "anywhere far"]);
+    }
+
+    #[test]
+    fn an_event_held_anywhere_is_listed_so_unless_online() {
+        let event = |entirely_online, anywhere| super::CsmEvent {
+            slug: String::new(),
+            name: String::new(),
+            begin: String::new(),
+            end: String::new(),
+            entirely_online,
+            anywhere,
+            signature: false,
+            address: "1 Main St".to_string(),
+            city: String::new(),
+            state: String::new(),
+        };
+
+        check!(event(false, true).location_display() == "Anywhere");
+        check!(event(true, true).location_display() == "Online");
+        check!(event(false, false).location_display() == "1 Main St");
+    }
 }

@@ -12,7 +12,6 @@ pub enum PageContentKind {
     Wysiwyg,
     PageBuilder,
     PageBuilderTemplate,
-    Form,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

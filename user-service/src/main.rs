@@ -23,6 +23,7 @@ pub mod certificates;
 pub mod communities;
 pub mod constant_contact;
 pub mod email_verification;
+pub mod forms;
 pub mod foundations;
 pub mod geocode;
 pub mod girlscouts;
@@ -35,6 +36,7 @@ pub mod moore;
 pub mod people_finder;
 pub mod permissions;
 pub mod places;
+pub mod primary_since;
 pub mod profile;
 pub mod project_joins;
 pub mod recipient_search;
@@ -1688,15 +1690,22 @@ async fn userbadges_synchronize() {
     }
 }
 
-/// Mirror orrery's join records into the `project_joins` operational
-/// store. Only kind 1 rows ("clicked to join") are joins; kind 0 rows
-/// are explicit page visits and are skipped. Inactive joins are
-/// removed. Starting bookmarks at the epoch backfills the full orrery
-/// history on first run.
+/// Mirror orrery's confirmed joins into the `project_joins` operational
+/// store, as [`JoinSource::LegacyOrrery`] copies dated when orrery made
+/// them. Orrery keeps one row per person and project, whose kind moves
+/// between prospective (0, a visit), confirmed (1) and did not participate
+/// (2), so the copy exists exactly while that row is confirmed and active.
+/// Starting bookmarks at the epoch backfills the full orrery history on
+/// first run.
+///
+/// [`JoinSource::LegacyOrrery`]: common::message::user::JoinSource::LegacyOrrery
 async fn joins_synchronize() {
+    use common::{message::user::JoinSource, timestring::TimeString};
+
     #[derive(serde::Deserialize)]
     struct JoinDataImport {
         id: i64,
+        when: String,
         user_ulid: String,
         entity_ulid: String,
         active: bool,
@@ -1766,29 +1775,21 @@ async fn joins_synchronize() {
         let mut stopped_early = false;
 
         for join in joins {
-            let result = if join.kind != 1 {
-                // Kind 0 rows are page visits, not joins; skip but
-                // advance past them.
-                Ok(())
-            } else if join.active {
-                sqlx::query!(
-                    r#"INSERT OR IGNORE INTO "project_joins" ("user_id", "project_id")
-                       VALUES (?, ?)"#,
-                    join.user_ulid,
-                    join.entity_ulid,
-                )
-                .execute(db)
-                .await
-                .map(|_| ())
+            let result = if join.kind == 1 && join.active {
+                match TimeString::try_from(join.when.clone()) {
+                    Ok(when) => project_joins::store_join(
+                        db,
+                        &join.user_ulid,
+                        &join.entity_ulid,
+                        &when,
+                        JoinSource::LegacyOrrery,
+                    )
+                    .await
+                    .map(|_| ()),
+                    Err(e) => Err(anyhow::anyhow!("unreadable time {:?}: {e}", join.when)),
+                }
             } else {
-                sqlx::query!(
-                    r#"DELETE FROM "project_joins" WHERE "user_id" = ? AND "project_id" = ?"#,
-                    join.user_ulid,
-                    join.entity_ulid,
-                )
-                .execute(db)
-                .await
-                .map(|_| ())
+                project_joins::retract_legacy_join(db, &join.user_ulid, &join.entity_ulid).await
             };
 
             if let Err(e) = result {
@@ -3381,6 +3382,10 @@ async fn main() {
         return;
     }
 
+    primary_since::note(db())
+        .await
+        .expect("Unable to note when hydra became the primary server");
+
     let cleanup_task = spawn(cleanup());
 
     let analyze_task = spawn(analyze_tables());
@@ -3407,6 +3412,7 @@ async fn main() {
     let _ambassador_connections_sync_task = spawn(ambassador_connections_synchronize());
     let _link_tokens_sync_task = spawn(link_tokens_synchronize());
     let _signup_tag_grants_sync_task = spawn(signup_tag_grants_synchronize());
+    let _forms_sync_task = spawn(forms::mirror::synchronize());
 
     let _constant_contact_task = spawn(constant_contact::sweep_periodically());
 
@@ -3624,6 +3630,36 @@ async fn main() {
         "count_by_projects",
         project_joins::count_by_projects
     ));
+
+    let forms_group = service.group("user.forms");
+    toplevel.spawn(handler!(forms_group, "get", forms::get));
+    toplevel.spawn(handler!(forms_group, "list", forms::list));
+    toplevel.spawn(handler!(forms_group, "for_project", forms::for_project));
+    toplevel.spawn(handler!(forms_group, "owned_by", forms::owned_by));
+    toplevel.spawn(handler!(forms_group, "save", forms::save));
+    toplevel.spawn(handler!(forms_group, "delete", forms::delete));
+    toplevel.spawn(handler!(forms_group, "submit", forms::submissions::submit));
+    toplevel.spawn(handler!(
+        forms_group,
+        "remembered",
+        forms::submissions::remembered
+    ));
+    toplevel.spawn(handler!(
+        forms_group,
+        "submissions",
+        forms::submissions::list
+    ));
+    toplevel.spawn(handler!(
+        forms_group,
+        "evaluate",
+        forms::submissions::evaluate
+    ));
+    toplevel.spawn(handler!(
+        forms_group,
+        "delete_submission",
+        forms::submissions::delete
+    ));
+    toplevel.spawn(handler!(forms_group, "map", forms::submissions::map));
 
     let permissions = service.group("user.permissions");
     toplevel.spawn(handler!(

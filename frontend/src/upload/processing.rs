@@ -50,7 +50,7 @@ impl ProcessedFile {
         self
     }
 
-    pub fn to_metadata(&self, uploaded_by: Ulid, access: FileAccess) -> FileMetadata {
+    pub fn to_metadata(&self, uploaded_by: Option<Ulid>, access: FileAccess) -> FileMetadata {
         FileMetadata {
             file_id: self.file_id,
             original_filename: self.original_filename.clone(),

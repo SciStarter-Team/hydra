@@ -44,6 +44,8 @@ pub enum TrackedAction {
     Visit,
     /// Asked to follow it out, but it has no website to go to.
     VisitMissing,
+    /// Said they already take part in a project ("add to my dashboard").
+    AddDashboard,
     Approve,
     Reject,
 }
@@ -57,6 +59,7 @@ impl TrackedAction {
             TrackedAction::Vote => "vote",
             TrackedAction::Visit => "visit",
             TrackedAction::VisitMissing => "visit-missing",
+            TrackedAction::AddDashboard => "add-dashboard",
             TrackedAction::Approve => "approve",
             TrackedAction::Reject => "reject",
         }

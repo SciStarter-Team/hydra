@@ -297,7 +297,7 @@ impl Schedule {
                 // Compute timing display string
                 let timing_display = compute_timing_display(
                     &entity_kind,
-                    Some(row.project_timing.as_str()),
+                    row.project_timing.as_deref(),
                     row.next_instance_begin.as_deref(),
                     row.next_instance_end.as_deref(),
                     row.last_instance_begin.as_deref(),

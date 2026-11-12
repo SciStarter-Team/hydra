@@ -31,7 +31,7 @@
 
       <details class="mt-2"<% if error.is_some() { %> open<% } %>>
         <summary class="btn btn-secondary btn-xs cursor-pointer">Change</summary>
-        <form class="mt-2 p-3 border border-sky-300 rounded-sm bg-white flex flex-col gap-3"
+        <form novalidate class="mt-2 p-3 border border-sky-300 rounded-sm bg-white flex flex-col gap-3"
               hx-put="/-detail/<%= &self.target_id %>/facebook"
               hx-target="#event-facebook"
               hx-swap="outerHTML">

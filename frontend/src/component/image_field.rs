@@ -19,7 +19,13 @@ pub struct ImageField {
     /// for a photo of the submitters themselves have no one to credit.
     pub credit: Option<String>,
     pub layout: ImageLayout,
+    /// Whether the form's error is about the image link, which marks it.
+    pub invalid: bool,
 }
+
+/// The id of the guidance on the image under a [`ImageLayout::Cover`]
+/// field's cover, which its upload control and link field are described by.
+pub const IMAGE_HELP_ID: &str = "image-help";
 
 /// How an [`ImageField`] presents itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -29,8 +35,9 @@ pub enum ImageLayout {
     #[default]
     Inline,
     /// A banner-shaped upload area leading the form that shows the image
-    /// itself once there is one, with the URL and credit fields collapsed
-    /// under it.
+    /// itself once there is one, with guidance on the image (a JPEG or PNG,
+    /// its size and shape) under it, and the URL and credit fields collapsed
+    /// under that.
     Cover,
 }
 
@@ -65,6 +72,15 @@ pub struct ImageUrlInput<'a> {
     pub value: &'a str,
     pub layout: ImageLayout,
     pub oob: bool,
+    /// Whether the form's error is about this input, which marks it
+    /// `aria-invalid` and described by the error.
+    pub invalid: bool,
+}
+
+impl ImageUrlInput<'_> {
+    /// The name the image's address is submitted under, and so the field a
+    /// form's error about it names.
+    pub const NAME: &'static str = "image";
 }
 
 /// The response to an upload: a status line for the upload control, plus

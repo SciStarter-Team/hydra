@@ -2719,6 +2719,10 @@ impl ProjectField {
         )
         .execute(db())
         .await?;
+
+        // A global project's geometry places it in no region.
+        crate::region::refresh_project(&project_id_str).await?;
+
         Ok(())
     }
 

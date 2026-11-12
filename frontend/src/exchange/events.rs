@@ -30,7 +30,7 @@ use sailfish::TemplateOnce;
 
 use super::handlers::{
     EVENTS, PageSelector, SearchScope, create_template_exchange, push_choice_conditions,
-    push_hidden_exclusion, push_membership, push_named_regions,
+    push_hidden_exclusion, push_membership, push_named_regions, with_global,
 };
 use super::{ExchangeInfo, SearchParams, TemplateExchange};
 use crate::local_time::{TimeFormat, local_time, local_time_range};
@@ -178,7 +178,12 @@ fn push_conditions(
 
     push_hidden_exclusion(query_builder, &EVENTS, exchange.exchange_id, scope);
     push_membership(query_builder, &EVENTS, exchange, params.global);
-    push_named_regions(query_builder, &EVENTS, &scope.regions);
+    push_named_regions(
+        query_builder,
+        &EVENTS,
+        &scope.regions,
+        with_global(exchange, params),
+    );
     push_choice_conditions(query_builder, &EVENTS, params);
 
     if !params.past {

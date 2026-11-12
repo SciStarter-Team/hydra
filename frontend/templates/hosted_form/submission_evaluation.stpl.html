@@ -1,0 +1,21 @@
+<%# The people running a form's judgement of a submission, and their note on
+    it, as a form to change them; the answer to saving it is this again. %>
+<form class="hf-card-evaluation"
+      hx-post="/-form/<%= self.form_id|disp %>/submissions/<%= self.submission_id|disp %>/evaluation"
+      hx-target="this" hx-swap="outerHTML">
+  <label>
+    <span>Evaluation</span>
+    <select name="evaluation">
+      <option value=""<% if self.evaluation.is_none() { %> selected<% } %>>Not yet evaluated</option>
+      <% for verdict in Verdict::ALL { %>
+      <option value="<%= verdict.as_str() %>"<% if self.evaluation == Some(verdict) { %> selected<% } %>><%= verdict.label() %></option>
+      <% } %>
+    </select>
+  </label>
+  <label>
+    <span>Comment</span>
+    <textarea name="comment" rows="2"><%= self.comment %></textarea>
+  </label>
+  <button type="submit" class="btn btn-secondary">Save</button>
+  <% if self.saved { %><span class="hf-card-saved" role="status">Saved ✓</span><% } %>
+</form>

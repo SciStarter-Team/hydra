@@ -10,6 +10,7 @@ use crate::{
     project::{
         ProjectStatus,
         linked_platform::{push_zooniverse_affiliate_filter, zooniverse_affiliates},
+        location::ANYWHERE,
         push_listing_rule,
     },
 };
@@ -607,6 +608,9 @@ pub struct FinderResult {
     pub event_begin: Option<String>,
     pub is_completed: bool,
     pub geo_json: Option<String>,
+    /// The group an event is limited to; empty when it's open to everyone,
+    /// and always for projects.
+    pub limited_to: String,
 }
 
 impl FinderResult {
@@ -903,9 +907,11 @@ fn apply_event_filters<'a>(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, query: &'a
 
     let location_type = query.location_type.as_deref().unwrap_or("either");
     match location_type {
+        // Whatever can be joined online, a hybrid event among it.
         "remote" => {
-            qb.push(" AND ev.entirely_online = 1");
+            qb.push(" AND (ev.entirely_online = 1 OR ev.also_online = 1)");
         }
+        // Whatever is held somewhere, a hybrid event among it.
         "onsite" => {
             qb.push(" AND ev.entirely_online = 0");
         }
@@ -1020,7 +1026,7 @@ async fn search_all(
     if kinds.projects() {
         qb.push(
             "SELECT e.slug, 'Project' AS entity_type, p.name AS title, p.description, p.image, \
-             p.goal, p.task, p.status, \
+             p.goal, p.task, p.status, '' AS limited_to, \
              CASE WHEN p.entirely_online = 1 THEN 'Online' \
                   WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
                   WHEN p.location_name != '' THEN p.location_name \
@@ -1044,7 +1050,7 @@ async fn search_all(
     if kinds.events() {
         qb.push(
             "SELECT e.slug, 'Event' AS entity_type, ev.name AS title, ev.description, ev.image, \
-             '' AS goal, '' AS task, '' AS status, \
+             '' AS goal, '' AS task, '' AS status, ev.limited_to, \
              CASE WHEN ev.entirely_online = 1 THEN 'Online' \
                   WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
                   WHEN ev.location_name != '' THEN ev.location_name \
@@ -1081,6 +1087,7 @@ async fn search_all(
             String,         // goal
             String,         // task
             String,         // status
+            String,         // limited_to
             String,         // location_display
             Option<String>, // event_begin
             Option<String>, // geo_json
@@ -1100,10 +1107,11 @@ async fn search_all(
             goal: row.5,
             task: row.6,
             is_completed: row.7 == "Complete",
-            location_display: row.8,
-            event_begin: row.9,
+            limited_to: row.8,
+            location_display: row.9,
+            event_begin: row.10,
             distance_km: None,
-            geo_json: row.10,
+            geo_json: row.11,
         })
         .collect();
 
@@ -1144,7 +1152,7 @@ async fn search_text_only(
     // Build UNION ALL query. Name matches come first; within them, events
     // rank by date as everywhere else; ties go to text relevance.
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
-        "SELECT slug, entity_type, title, description, image, goal, task, status, \
+        "SELECT slug, entity_type, title, description, image, goal, task, status, limited_to, \
          location_display, event_begin, geo_json, comparison_value FROM (",
     );
 
@@ -1152,7 +1160,7 @@ async fn search_text_only(
     if kinds.projects() {
         qb.push(
             "SELECT f.slug, 'Project' AS entity_type, f.title, p.description, p.image, \
-             p.goal, p.task, p.status, \
+             p.goal, p.task, p.status, '' AS limited_to, \
              CASE WHEN p.entirely_online = 1 THEN 'Online' \
                   WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
                   WHEN p.location_name != '' THEN p.location_name \
@@ -1183,7 +1191,7 @@ async fn search_text_only(
     if kinds.events() {
         qb.push(
             "SELECT f.slug, 'Event' AS entity_type, f.title, ev.description, ev.image, \
-             '' AS goal, '' AS task, '' AS status, \
+             '' AS goal, '' AS task, '' AS status, ev.limited_to, \
              CASE WHEN ev.entirely_online = 1 THEN 'Online' \
                   WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
                   WHEN ev.location_name != '' THEN ev.location_name \
@@ -1225,6 +1233,7 @@ async fn search_text_only(
             String,         // goal
             String,         // task
             String,         // status
+            String,         // limited_to
             String,         // location_display
             Option<String>, // event_begin
             Option<String>, // geo_json
@@ -1244,10 +1253,11 @@ async fn search_text_only(
             goal: row.5,
             task: row.6,
             is_completed: row.7 == "Complete",
-            location_display: row.8,
-            event_begin: row.9,
+            limited_to: row.8,
+            location_display: row.9,
+            event_begin: row.10,
             distance_km: None,
-            geo_json: row.10,
+            geo_json: row.11,
         })
         .collect();
 
@@ -1292,7 +1302,7 @@ async fn search_with_location(
     // visitor asked for nearby results; name matches break its ties (online
     // projects all count as 200 km away), then text relevance.
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
-        "SELECT slug, entity_type, title, description, image, goal, task, status, \
+        "SELECT slug, entity_type, title, description, image, goal, task, status, limited_to, \
          location_display, event_begin, distance_km, geo_json, comparison_value FROM (",
     );
 
@@ -1300,7 +1310,7 @@ async fn search_with_location(
     if kinds.projects() {
         qb.push(
             "SELECT f.slug, 'Project' AS entity_type, f.title, p.description, p.image, \
-         p.goal, p.task, p.status, \
+         p.goal, p.task, p.status, '' AS limited_to, \
          CASE WHEN p.entirely_online = 1 THEN 'Online' \
               WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
               WHEN p.location_name != '' THEN p.location_name \
@@ -1336,7 +1346,7 @@ async fn search_with_location(
     if kinds.events() {
         qb.push(
             "SELECT f.slug, 'Event' AS entity_type, f.title, ev.description, ev.image, \
-         '' AS goal, '' AS task, '' AS status, \
+         '' AS goal, '' AS task, '' AS status, ev.limited_to, \
          CASE WHEN ev.entirely_online = 1 THEN 'Online' \
               WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
               WHEN ev.location_name != '' THEN ev.location_name \
@@ -1380,6 +1390,7 @@ async fn search_with_location(
             String,         // goal
             String,         // task
             String,         // status
+            String,         // limited_to
             String,         // location_display
             Option<String>, // event_begin
             Option<f64>,    // distance_km
@@ -1400,10 +1411,11 @@ async fn search_with_location(
             goal: row.5,
             task: row.6,
             is_completed: row.7 == "Complete",
-            location_display: row.8,
-            event_begin: row.9,
-            distance_km: row.10,
-            geo_json: row.11,
+            limited_to: row.8,
+            location_display: row.9,
+            event_begin: row.10,
+            distance_km: row.11,
+            geo_json: row.12,
         })
         .collect();
 
@@ -1419,16 +1431,32 @@ fn build_project_count_location<'a>(fq: &'a FinderQuery) -> sqlx::QueryBuilder<s
     qb
 }
 
+/// Push the condition an event must meet to take part in a search by
+/// location: it has a place to measure to, can be joined online, or is held
+/// anywhere in the world. An event joined online as well as on site counts
+/// even without a place, as it does on orrery, and so does one held
+/// anywhere, which ranks as an online one does ([`push_event_comparison`]).
+fn push_event_is_located(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>) {
+    qb.push(
+        "(ev.point IS NOT NULL OR ev.regions IS NOT NULL \
+         OR ev.entirely_online = 1 OR ev.also_online = 1 OR ev.location_type = ",
+    );
+    qb.push_bind(ANYWHERE);
+    qb.push(")");
+}
+
 /// Count events matching location-only + filters
 fn build_event_count_location<'a>(fq: &'a FinderQuery) -> sqlx::QueryBuilder<sqlx::Sqlite> {
     let mut qb = sqlx::QueryBuilder::new(
-        "SELECT COUNT(*) FROM entities e JOIN events ev ON e.target = ev.event_id WHERE e.kind = 'Event' AND e.publish = 1 AND (ev.point IS NOT NULL OR ev.regions IS NOT NULL OR ev.entirely_online = 1)",
+        "SELECT COUNT(*) FROM entities e JOIN events ev ON e.target = ev.event_id \
+         WHERE e.kind = 'Event' AND e.publish = 1 AND ",
     );
+    push_event_is_located(&mut qb);
     apply_event_filters(&mut qb, fq);
     qb
 }
 
-/// The 13-column row shape produced by the location-ranked project/event
+/// The 14-column row shape produced by the location-ranked project/event
 /// subqueries. Shared so the finder's location-only search and the home-page
 /// [`nearby_entities`] list decode identically.
 type LocationRow = (
@@ -1440,6 +1468,7 @@ type LocationRow = (
     String,         // goal
     String,         // task
     String,         // status
+    String,         // limited_to
     String,         // location_display
     Option<String>, // event_begin
     Option<f64>,    // distance_km
@@ -1458,10 +1487,11 @@ fn location_row_to_result(row: LocationRow) -> FinderResult {
         goal: row.5,
         task: row.6,
         is_completed: row.7 == "Complete",
-        location_display: row.8,
-        event_begin: row.9,
-        distance_km: row.10,
-        geo_json: row.11,
+        limited_to: row.8,
+        location_display: row.9,
+        event_begin: row.10,
+        distance_km: row.11,
+        geo_json: row.12,
     }
 }
 
@@ -1583,9 +1613,20 @@ fn push_project_comparison(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: f64, 
     ));
 }
 
+/// How far away, in kilometres, an event that can be joined online counts as
+/// when ranking by nearness.
+const ONLINE_EVENT_KM: f64 = 100.0;
+
 /// Push an event's `comparison_value`: [`push_event_delay`]'s ten kilometres
 /// per day until the instance the window selected, plus its distance -- to a
-/// footprint, else to its point, with an online event counted as 100 km away.
+/// footprint, else to its point, with an online event, and one held anywhere
+/// in the world whatever place it carries, counted as [`ONLINE_EVENT_KM`]
+/// away, and one also joined online counted as no farther. As orrery's
+/// `event_distance` does.
+///
+/// The cap leaves every other event alone because nothing is farther than
+/// [`WHOLE_WORLD_KM`]: each arm of the distance is either that or a distance
+/// over the Earth's surface, which is at most half its circumference.
 fn push_event_comparison(
     qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>,
     lat: f64,
@@ -1595,8 +1636,10 @@ fn push_event_comparison(
     let measurable = measurable_footprint(LocatedTable::Events);
 
     push_event_delay(qb, window);
+    qb.push(" + MIN(CASE WHEN ev.entirely_online = 1 OR ev.location_type = ");
+    qb.push_bind(ANYWHERE);
     qb.push(format!(
-        " + CASE WHEN ev.entirely_online = 1 THEN 100.0 \
+        " THEN {ONLINE_EVENT_KM:.1} \
                 WHEN {measurable} THEN COALESCE(ST_Distance(ST_MakeValid(ev.regions), "
     ));
     push_search_point(qb, lat, lng);
@@ -1607,8 +1650,9 @@ fn push_event_comparison(
     push_search_point(qb, lat, lng);
     qb.push(format!(
         ", 1) / 1000.0, {WHOLE_WORLD_KM:.1}) \
-                WHEN ev.regions IS NOT NULL THEN {WHOLE_WORLD_KM:.1} \
-                ELSE 0.0 END * 1.0 AS comparison_value"
+                ELSE {WHOLE_WORLD_KM:.1} END, \
+                CASE WHEN ev.also_online = 1 THEN {ONLINE_EVENT_KM:.1} \
+                ELSE {WHOLE_WORLD_KM:.1} END) * 1.0 AS comparison_value"
     ));
 }
 
@@ -1620,7 +1664,7 @@ fn push_event_comparison(
 fn push_project_location_subquery(qb: &mut sqlx::QueryBuilder<sqlx::Sqlite>, lat: f64, lng: f64) {
     qb.push(
         "SELECT e.slug, 'Project' AS entity_type, p.name AS title, p.description, p.image, \
-         p.goal, p.task, p.status, \
+         p.goal, p.task, p.status, '' AS limited_to, \
          CASE WHEN p.entirely_online = 1 THEN 'Online' \
               WHEN p.city != '' AND p.state != '' THEN p.city || ', ' || p.state \
               WHEN p.location_name != '' THEN p.location_name \
@@ -1653,7 +1697,7 @@ fn push_event_location_subquery(
 ) {
     qb.push(
         "SELECT e.slug, 'Event' AS entity_type, ev.name AS title, ev.description, ev.image, \
-         '' AS goal, '' AS task, '' AS status, \
+         '' AS goal, '' AS task, '' AS status, ev.limited_to, \
          CASE WHEN ev.entirely_online = 1 THEN 'Online' \
               WHEN ev.city != '' AND ev.state != '' THEN ev.city || ', ' || ev.state \
               WHEN ev.location_name != '' THEN ev.location_name \
@@ -1672,9 +1716,9 @@ fn push_event_location_subquery(
     qb.push(
         " \
          FROM entities e JOIN events ev ON e.target = ev.event_id \
-         WHERE e.kind = 'Event' AND e.publish = 1 \
-         AND (ev.point IS NOT NULL OR ev.regions IS NOT NULL OR ev.entirely_online = 1)",
+         WHERE e.kind = 'Event' AND e.publish = 1 AND ",
     );
+    push_event_is_located(qb);
 }
 
 /// Push the full location-ranked projects∪events body — both subqueries with
@@ -2024,11 +2068,13 @@ pub async fn handle_finder(
 
 #[cfg(test)]
 mod tests {
+    use assert2::check;
+
     use super::{
         EVENT_KIND, EventWindow, EventWindowStart, FinderQuery, LocatedTable, MiscFilter,
         PROJECT_KIND, SearchKinds, SingleKindFilters, WHOLE_WORLD_KM, apply_event_filters,
         default_location_query, make_snippet, push_distance_km, push_event_comparison,
-        push_project_comparison,
+        push_event_is_located, push_project_comparison,
     };
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 
@@ -2076,7 +2122,8 @@ mod tests {
         for statement in [
             "SELECT InitSpatialMetadata(1)",
             "CREATE TABLE projects (name TEXT, entirely_online INTEGER, regions BLOB, point BLOB)",
-            "CREATE TABLE events (event_id TEXT, name TEXT, entirely_online INTEGER, regions BLOB, point BLOB)",
+            "CREATE TABLE events (event_id TEXT, name TEXT, entirely_online INTEGER, regions BLOB, point BLOB, \
+             also_online INTEGER NOT NULL DEFAULT 0, location_type TEXT NOT NULL DEFAULT '')",
             "CREATE TABLE event_instances (event_id TEXT, begin TEXT, \"end\" TEXT)",
         ] {
             sqlx::query(statement).execute(&pool).await.unwrap();
@@ -2098,7 +2145,8 @@ mod tests {
             )
             .bind(name),
             LocatedTable::Events => sqlx::query(
-                "INSERT INTO events VALUES (?, ?, 0, GeomFromText(?, 4326), GeomFromText(?, 4326))",
+                "INSERT INTO events (event_id, name, entirely_online, regions, point) \
+                 VALUES (?, ?, 0, GeomFromText(?, 4326), GeomFromText(?, 4326))",
             )
             .bind(name)
             .bind(name),
@@ -2167,12 +2215,15 @@ mod tests {
     /// SQLite modifiers relative to now -- and stored the way real instances
     /// are, with a `T` and a `Z` around the time of day.
     async fn add_event(pool: &SqlitePool, name: &str, begin: &str, end: &str) {
-        sqlx::query("INSERT INTO events VALUES (?, ?, 0, NULL, NULL)")
-            .bind(name)
-            .bind(name)
-            .execute(pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "INSERT INTO events (event_id, name, entirely_online, regions, point) \
+             VALUES (?, ?, 0, NULL, NULL)",
+        )
+        .bind(name)
+        .bind(name)
+        .execute(pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "INSERT INTO event_instances VALUES (?, \
@@ -2616,6 +2667,140 @@ mod tests {
                 assert_eq!(comparison, WHOLE_WORLD_KM, "{table:?} {name}");
             }
         }
+    }
+
+    /// Make the event named `name` one also joined online.
+    async fn also_online(pool: &SqlitePool, name: &str) {
+        sqlx::query("UPDATE events SET also_online = 1 WHERE name = ?")
+            .bind(name)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    /// Mark the event `name` as held anywhere in the world.
+    async fn anywhere(pool: &SqlitePool, name: &str) {
+        sqlx::query("UPDATE events SET location_type = ? WHERE name = ?")
+            .bind(super::ANYWHERE)
+            .bind(name)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    /// The events that take part in a search by location, by name.
+    async fn located(pool: &SqlitePool) -> Vec<String> {
+        let mut qb = sqlx::QueryBuilder::new("SELECT ev.name FROM events ev WHERE ");
+        push_event_is_located(&mut qb);
+        qb.push(" ORDER BY ev.name");
+
+        qb.build_query_scalar().fetch_all(pool).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn an_event_held_anywhere_ranks_as_an_online_one_wherever_its_place() {
+        let pool = database().await;
+        add(&pool, LocatedTable::Events, "anywhere", None, None).await;
+        add(
+            &pool,
+            LocatedTable::Events,
+            "anywhere with a point",
+            None,
+            Some(POINT_NORTH),
+        )
+        .await;
+        add(&pool, LocatedTable::Events, "nowhere", None, None).await;
+        anywhere(&pool, "anywhere").await;
+        anywhere(&pool, "anywhere with a point").await;
+
+        check!(located(&pool).await == ["anywhere", "anywhere with a point"]);
+
+        let rows = ranked(&pool, LocatedTable::Events).await;
+        for name in ["anywhere", "anywhere with a point"] {
+            let (_, _, comparison) = row(&rows, name);
+            check!(*comparison == super::ONLINE_EVENT_KM, "{name}");
+        }
+    }
+
+    #[tokio::test]
+    async fn an_event_also_online_is_no_farther_than_an_online_one() {
+        let pool = database().await;
+
+        // About 55 km north of the searcher, and half a world away.
+        let near = "POINT(-175 -34.5)";
+        let far = "POINT(5 35)";
+        for name in ["near hybrid", "near"] {
+            add(&pool, LocatedTable::Events, name, None, Some(near)).await;
+        }
+        for name in ["far hybrid", "far"] {
+            add(&pool, LocatedTable::Events, name, None, Some(far)).await;
+        }
+        also_online(&pool, "near hybrid").await;
+        also_online(&pool, "far hybrid").await;
+
+        let rows = ranked(&pool, LocatedTable::Events).await;
+
+        // Where it is stays where it is; only its rank is capped.
+        let (_, near_distance, near_comparison) = row(&rows, "near hybrid");
+        check!((54.0..57.0).contains(&near_distance.unwrap()));
+        check!(*near_comparison == near_distance.unwrap());
+
+        let (_, far_distance, far_comparison) = row(&rows, "far hybrid");
+        check!(far_distance.unwrap() > 10_000.0);
+        check!(*far_comparison == super::ONLINE_EVENT_KM);
+
+        check!(row(&rows, "near").2 == near_distance.unwrap());
+        check!(row(&rows, "far").2 == far_distance.unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_hybrid_event_is_both_online_and_on_site() {
+        let pool = database().await;
+        add(
+            &pool,
+            LocatedTable::Events,
+            "hybrid",
+            None,
+            Some(POINT_NORTH),
+        )
+        .await;
+        add(
+            &pool,
+            LocatedTable::Events,
+            "on site",
+            None,
+            Some(POINT_NORTH),
+        )
+        .await;
+        add(&pool, LocatedTable::Events, "online", None, None).await;
+        also_online(&pool, "hybrid").await;
+        sqlx::query("UPDATE events SET entirely_online = 1 WHERE name = 'online'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let filtered = |location_type: &str| FinderQuery {
+            location_type: Some(location_type.to_string()),
+            ..event_query(None, None, true)
+        };
+
+        check!(matching(&pool, &filtered("remote")).await == ["hybrid", "online"]);
+        check!(matching(&pool, &filtered("onsite")).await == ["hybrid", "on site"]);
+    }
+
+    #[tokio::test]
+    async fn a_hybrid_event_without_a_place_is_found_as_an_online_one() {
+        let pool = database().await;
+        add(&pool, LocatedTable::Events, "hybrid", None, None).await;
+        add(&pool, LocatedTable::Events, "nowhere", None, None).await;
+        also_online(&pool, "hybrid").await;
+
+        check!(located(&pool).await == ["hybrid"]);
+
+        let rows = ranked(&pool, LocatedTable::Events).await;
+        let (_, distance, comparison) = row(&rows, "hybrid");
+        check!(*distance == None);
+        check!(*comparison == super::ONLINE_EVENT_KM);
     }
 
     #[test]

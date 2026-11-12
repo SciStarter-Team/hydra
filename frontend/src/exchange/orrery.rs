@@ -37,6 +37,12 @@ pub struct OrreryExchange {
     pub excluded_origins: Vec<String>,
     pub searches: Vec<OrrerySearch>,
     pub squelches: Vec<OrrerySquelch>,
+
+    /// The add forms' notice for submissions through this exchange, as
+    /// [`ExchangeSettings::submission_notice`] holds it. Defaulted so that
+    /// an orrery which does not send it yet still syncs.
+    #[serde(default)]
+    pub submission_notice: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -53,15 +59,31 @@ pub struct OrrerySquelch {
     pub elevate: bool,
 }
 
+/// The tags in orrery's encoding of a tag list, `||bird||count||`, as they
+/// are spelled there. Empty entries are not tags.
+pub fn orrery_tags(encoded: &str) -> impl Iterator<Item = &str> {
+    encoded
+        .split("||")
+        .map(|tag| tag.trim_matches('|').trim())
+        .filter(|tag| !tag.is_empty())
+}
+
+/// The tag orrery's Reject button adds to a submission its exchange turned
+/// down (orrery's `exchange::REJECTED_TAG`). Hidden, as every tag beginning
+/// with `_` is.
+pub const REJECTED_TAG: &str = "_exchange-rejected";
+
 /// Whether something orrery holds is waiting for the exchange it was
 /// submitted through to approve it -- that is, whether hydra should file it
 /// as not yet reviewed.
 ///
 /// Orrery's approval queue is everything submitted through an exchange that
 /// is still unpublished and that the exchange has not rejected, rejection
-/// being recorded as a `|reject|` tag.
+/// being recorded as the [`REJECTED_TAG`] tag.
 pub fn awaiting_approval(exchange: Option<&str>, publish: bool, tags: &str) -> bool {
-    exchange.is_some() && !publish && !tags.contains("|reject|")
+    exchange.is_some()
+        && !publish
+        && !orrery_tags(tags).any(|tag| common::message::user::normalize_tag(tag) == REJECTED_TAG)
 }
 
 /// Who is recorded as having done what this sync does: hidden a project
@@ -163,6 +185,7 @@ pub fn adopt(
         include_tags: orrery.include_tags.clone(),
         include_origins: orrery.include_origins.clone(),
         search,
+        submission_notice: orrery.submission_notice.clone(),
     };
 
     let predefined_searches = orrery
@@ -300,6 +323,7 @@ pub async fn apply(orrery: &OrreryExchange) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert2::check;
     use std::collections::BTreeMap;
 
     const NZ: &str = "01M2MR8QB0GR6KAPXE7ZNSP63Y";
@@ -330,6 +354,7 @@ mod tests {
                 note: "Australia only".into(),
                 elevate: true,
             }],
+            submission_notice: "Reviewed within 2 business days.".into(),
         }
     }
 
@@ -347,6 +372,10 @@ mod tests {
         assert_eq!(exchange.settings.excluded_origins, ["CitSci.org"]);
         assert_eq!(exchange.settings.include_tags, ["nz"]);
         assert!(exchange.settings.allow_project_voting);
+        assert_eq!(
+            exchange.settings.submission_notice,
+            "Reviewed within 2 business days."
+        );
 
         let search = &exchange.predefined_searches[0];
         assert_eq!(search.search_id, search_id(7));
@@ -380,6 +409,44 @@ mod tests {
         assert!(!exchange.settings.allow_project_voting);
         assert_eq!(exchange.settings.custom_css.as_deref(), Some("body {}"));
         assert_eq!(exchange.settings.search, "bird|fish");
+    }
+
+    #[test]
+    fn the_submission_notice_is_orrerys() {
+        let mut held = adopt(&orrery(), None, "2026-10-01 00:00:00").unwrap();
+        held.settings.submission_notice = "stale".into();
+
+        let mut cleared = orrery();
+        cleared.submission_notice.clear();
+
+        let exchange = adopt(&cleared, Some(&held), "2026-10-08 00:00:00").unwrap();
+
+        assert_eq!(exchange.settings.submission_notice, "");
+    }
+
+    #[test]
+    fn an_orrery_that_does_not_send_a_submission_notice_still_syncs() {
+        let snapshot = serde_json::json!([{
+            "id": 35,
+            "ulid": NZ,
+            "name": "SciStarter Australia",
+            "region_id": 1,
+            "exclude_scistarter": false,
+            "search": "",
+            "restricted_add": false,
+            "global_by_default": true,
+            "owner": null,
+            "staff": [],
+            "include_tags": [],
+            "include_origins": [],
+            "excluded_origins": [],
+            "searches": [],
+            "squelches": [],
+        }]);
+
+        let exchanges: Vec<OrreryExchange> = serde_json::from_value(snapshot).unwrap();
+
+        assert_eq!(exchanges[0].submission_notice, "");
     }
 
     #[test]
@@ -459,11 +526,29 @@ mod tests {
     fn only_unpublished_unrejected_exchange_submissions_await_approval() {
         assert!(awaiting_approval(Some(NZ), false, "||bird||"));
         assert!(!awaiting_approval(Some(NZ), true, "||bird||"), "published");
-        assert!(!awaiting_approval(Some(NZ), false, "|reject|"), "rejected");
+        assert!(
+            !awaiting_approval(Some(NZ), false, "||bird||_exchange-rejected||"),
+            "rejected"
+        );
+        assert!(
+            !awaiting_approval(Some(NZ), false, "|| #_Exchange-Rejected ||"),
+            "rejected, in another spelling of the same tag"
+        );
+        assert!(
+            awaiting_approval(Some(NZ), false, "||not_exchange-rejected||"),
+            "a tag that only contains the marker is not the marker"
+        );
         assert!(
             !awaiting_approval(None, false, ""),
             "not through an exchange"
         );
+    }
+
+    #[test]
+    fn orrery_tag_lists_decode_to_their_tags() {
+        check!(orrery_tags("||bird||count||").collect::<Vec<_>>() == ["bird", "count"]);
+        check!(orrery_tags("").count() == 0);
+        check!(orrery_tags("||||").count() == 0);
     }
 
     #[test]

@@ -1,6 +1,8 @@
 <% use crate::component::floating_field::{Control, FieldIcon}; %>
 <% let control = self.kind.control(); %>
 <% let described_by = self.description_ids(); %>
+<%# A field with a limit keeps its character count current as it's typed into. %>
+<% let count_on_input = self.limit.map(|limit| format!(r#" hx-on:input="var count = document.getElementById('{}'), length = Array.from(this.value).length; count.textContent = length + ' / {limit}'; count.classList.toggle('pill-counter-over', length > {limit})""#, self.counter_id())).unwrap_or_default(); %>
 <%# The blank placeholder is what `:placeholder-shown` keys the label's
     resting (placeholder-sized) position on; see components/add-form.css. %>
 <div class="pill-field<% if matches!(control, Control::TextArea { .. }) { %> pill-field-multiline<% } %>">
@@ -12,9 +14,14 @@
   <label class="pill-body">
     <span class="pill-label"><%= self.label %><% if self.required { %><span class="pill-required" aria-hidden="true"> *</span><% } %></span>
     <% match control { Control::Input(input_type) => { %>
-      <input type="<%= input_type %>" name="<%= self.name %>" value="<%= self.value %>" placeholder=" "<% if let Some(id) = &self.id { %> id="<%= id %>"<% } %><% if self.required { %> required<% } %><% if let Some(token) = self.autocomplete { %> autocomplete="<%= token %>"<% } %><% if self.invalid { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %>>
+      <input type="<%= input_type %>" name="<%= self.name %>" value="<%= self.value %>" placeholder=" "<% if let Some(id) = &self.id { %> id="<%= id %>"<% } %><% if self.required { %> required<% } %><% if let Some(token) = self.autocomplete { %> autocomplete="<%= token %>"<% } %><% if self.invalid { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %><%- count_on_input %>>
     <% } Control::TextArea { rows } => { %>
-      <textarea name="<%= self.name %>" rows="<%= rows %>" placeholder=" "<% if let Some(id) = &self.id { %> id="<%= id %>"<% } %><% if self.required { %> required<% } %><% if self.invalid { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %>><%= self.value %></textarea>
+      <textarea name="<%= self.name %>" rows="<%= rows %>" placeholder=" "<% if let Some(id) = &self.id { %> id="<%= id %>"<% } %><% if self.required { %> required<% } %><% if self.invalid { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %><%- count_on_input %>><%= self.value %></textarea>
     <% } } %>
   </label>
+  <% if let Some(limit) = self.limit { %>
+  <%# Read with the field's other guidance when it's focused, rather than
+      announced at every keystroke. %>
+  <span id="<%= self.counter_id() %>" class="pill-counter<% if self.length() > limit { %> pill-counter-over<% } %>"><%= self.length() %> / <%= limit %></span>
+  <% } %>
 </div>

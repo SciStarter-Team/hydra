@@ -300,6 +300,14 @@
                     <h2><a href="<%= result.link() %>">
                       <%= result.title %>
                     </a></h2>
+                    <%# Who it's for, first, so nobody outside the group plans
+                        to come. %>
+                    <% if !result.limited_to.is_empty() { %>
+                      <p class="ef-limited">
+                        <span class="font-bold uppercase text-sm tracking-wide">Who can attend</span>
+                        <strong><%= result.limited_to %></strong>
+                      </p>
+                    <% } %>
                     <% if !result.location_display.is_empty() { %>
                       <p>
                         <%= result.location_display %>

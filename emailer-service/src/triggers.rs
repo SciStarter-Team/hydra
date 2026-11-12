@@ -12,6 +12,7 @@ use ulid::Ulid;
 
 use crate::scheduled::schedule_send;
 use crate::sends::send_email;
+use crate::stored_emails::ReadyEmail;
 
 // ============================================================================
 // Database Row Structs
@@ -782,16 +783,15 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
             }
         };
 
-        // Get the stored email content
-        let stored_email_id_str = trigger.stored_email_id.to_string();
-        let stored_email_row = sqlx::query!(
-            r#"SELECT slug, subject, body_delta, datasets, reply_to_noreply, no_unsubscribe FROM stored_emails WHERE stored_email_id = ?"#,
-            stored_email_id_str
-        )
-        .fetch_optional(db())
-        .await?;
-
-        let Some(stored_email) = stored_email_row else {
+        let Some(ReadyEmail {
+            slug,
+            subject,
+            template_html,
+            datasets,
+            reply_to,
+            no_unsubscribe,
+        }) = ReadyEmail::by_id(&trigger.stored_email_id.to_string()).await?
+        else {
             tracing::error!(
                 trigger_id = %trigger.trigger_id,
                 stored_email_id = %trigger.stored_email_id,
@@ -799,19 +799,6 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
             );
             continue;
         };
-
-        let datasets: Vec<String> =
-            serde_json::from_str(&stored_email.datasets).unwrap_or_default();
-
-        // Convert body_delta to HTML
-        let template_html = common::quill::delta_to_html(&stored_email.body_delta)?;
-
-        let reply_to = common::message::email::noreply_reply_to(stored_email.reply_to_noreply);
-
-        // Whether the email offers to unsubscribe is the stored email's own
-        // setting, so that it is sent the same way by this trigger as by a
-        // send from the admin.
-        let no_unsubscribe = stored_email.no_unsubscribe;
 
         // Build additional data with user_id
         let mut additional_data = request.additional_data.clone().unwrap_or_default();
@@ -827,13 +814,13 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
 
                 let _sending_id = send_email(
                     template_html,
-                    stored_email.subject,
+                    subject,
                     recipients,
                     datasets,
                     Some(additional_data),
                     reply_to,
                     no_unsubscribe,
-                    Some(stored_email.slug),
+                    Some(slug),
                 )
                 .await?;
 
@@ -851,13 +838,13 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
                     binding_hook(&trigger_id_str),
                     TimeString::from(due),
                     template_html,
-                    stored_email.subject,
+                    subject,
                     datasets,
                     Some(additional_data),
                     pin_triggering_user(&recipients_json, address.as_deref()),
                     reply_to,
                     no_unsubscribe,
-                    Some(stored_email.slug),
+                    Some(slug),
                 )
                 .await?;
 

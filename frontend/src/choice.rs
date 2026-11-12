@@ -199,6 +199,54 @@ impl OrreryList {
     }
 }
 
+/// A value of one of orrery's lists, by orrery's id for it: the identity
+/// the copy keys on, which holds wherever the copy puts the value here and
+/// whatever it is named.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OrreryValue {
+    pub from: OrreryList,
+    pub id: i64,
+}
+
+impl OrreryValue {
+    /// The event type saying an event is held online. The add-event form
+    /// picks it from its "in person or online?" question instead of
+    /// offering it, so the two can't disagree.
+    pub const EVENT_ONLINE: OrreryValue = OrreryValue {
+        from: OrreryList::EventType,
+        id: 405,
+    };
+
+    /// The catch-all event type, which the add-event form offers after the
+    /// formats it lists alphabetically.
+    pub const EVENT_OTHER: OrreryValue = OrreryValue {
+        from: OrreryList::EventType,
+        id: 208,
+    };
+
+    /// Whether `value` is this one.
+    pub fn is(self, value: &ChoiceValue) -> bool {
+        value.orrery_id == Some(self.id) && self.from.lists().contains(&value.list)
+    }
+
+    /// This value as copied here, from whichever list the copy put it in,
+    /// unless the copy has none with its id.
+    pub async fn find(self) -> Result<Option<ChoiceValue>, Error> {
+        let lists = serde_json::to_string(self.from.lists())?;
+
+        Ok(sqlx::query_as!(
+            ChoiceValue,
+            r#"SELECT "list" AS "list: ChoiceList", "slug", "name", "position", "orrery_id"
+               FROM choice_values
+               WHERE "list" IN (SELECT "value" FROM json_each(?)) AND "orrery_id" = ?"#,
+            lists,
+            self.id
+        )
+        .fetch_optional(db())
+        .await?)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ChoiceValue {
     pub list: ChoiceList,
@@ -576,6 +624,16 @@ impl ChoiceCheckboxes {
             picked,
             limit,
         ))
+    }
+
+    /// Whether there are no values to pick.
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    /// The form field the boxes are submitted as.
+    pub fn field(&self) -> &str {
+        &self.field
     }
 
     /// The boxes as a fieldset under `legend`.

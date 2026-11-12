@@ -18,7 +18,8 @@ use common::{
     message::{
         log::{ParticipationByUsersRequest, ParticipationByUsersResponse},
         user::{
-            JoinCountsByUsersRequest, JoinCountsByUsersResponse, TagCohortMember, TagCohortRequest,
+            JoinCount, JoinCountsByUsersRequest, JoinCountsByUsersResponse, TagCohortMember,
+            TagCohortRequest,
         },
     },
     service::request,
@@ -102,7 +103,11 @@ pub async fn report(Path(slug): Path<String>) -> Result<Response, anyhow::Error>
         },
     )
     .await?;
-    let joins: HashMap<String, i64> = joins.counts.into_iter().collect();
+    let primary_since = joins
+        .primary_since
+        .map(jiff::Timestamp::try_from)
+        .transpose()?;
+    let joins: HashMap<String, JoinCount> = joins.counts.into_iter().collect();
 
     let participation: ParticipationByUsersResponse = request(
         "log.participation_by_users",
@@ -119,6 +124,14 @@ pub async fn report(Path(slug): Path<String>) -> Result<Response, anyhow::Error>
     }
 
     let mut csv = String::from("email,first_name,last_name,total_joins");
+    // Only a build that knows when hydra became primary can say which joins
+    // came after, so only such a build has the column.
+    if let Some(since) = primary_since {
+        csv.push_str(&format!(
+            ",joins_since_{}",
+            since.to_zoned(jiff::tz::TimeZone::UTC).date()
+        ));
+    }
     for project in &projects {
         csv.push(',');
         csv.push_str(&csv_field(&project.name));
@@ -128,13 +141,18 @@ pub async fn report(Path(slug): Path<String>) -> Result<Response, anyhow::Error>
     for follower in &followers {
         let user_id = follower.user_id.to_string();
 
+        let follower_joins = joins.get(&user_id).copied().unwrap_or_default();
+
         csv.push_str(&format!(
             "{},{},{},{}",
             csv_field(&follower.email),
             csv_field(&follower.first_name),
             csv_field(&follower.last_name),
-            joins.get(&user_id).copied().unwrap_or(0),
+            follower_joins.total,
         ));
+        if primary_since.is_some() {
+            csv.push_str(&format!(",{}", follower_joins.since_primary.unwrap_or(0)));
+        }
 
         for project in &projects {
             let count = by_person

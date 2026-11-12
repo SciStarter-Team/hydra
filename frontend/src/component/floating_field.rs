@@ -22,6 +22,7 @@ pub struct FloatingField {
     autocomplete: Option<&'static str>,
     description_id: Option<&'static str>,
     invalid: bool,
+    limit: Option<usize>,
 }
 
 impl FloatingField {
@@ -42,6 +43,7 @@ impl FloatingField {
             autocomplete: None,
             description_id: None,
             invalid: false,
+            limit: None,
         }
     }
 
@@ -76,6 +78,26 @@ impl FloatingField {
         self
     }
 
+    /// Count the value's characters (code points) against `limit`, at the
+    /// right inside the field's box, turning red past it. The field doesn't
+    /// cut the value short: the form refuses one over the limit, and a pasted
+    /// value can then be trimmed by hand.
+    pub fn limit(mut self, limit: usize) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+
+    /// The count of the value's characters, against the field's limit.
+    fn length(&self) -> usize {
+        self.value.chars().count()
+    }
+
+    /// The id of the field's character count, from the control's id or, for
+    /// a field without one, its name.
+    fn counter_id(&self) -> String {
+        format!("{}-count", self.id.as_deref().unwrap_or(&self.name))
+    }
+
     /// Mark the field invalid when `error` is about it.
     pub fn errors(mut self, error: Option<&FormError>) -> Self {
         self.invalid = error.is_some_and(|e| e.is_about(&self.name));
@@ -83,12 +105,15 @@ impl FloatingField {
     }
 
     /// The ids the control's `aria-describedby` lists: the form's error
-    /// message when that is about this field, then its guidance.
+    /// message when that is about this field, then its guidance, then its
+    /// character count.
     fn description_ids(&self) -> String {
-        let error = self.invalid.then_some(FormError::ELEMENT_ID);
+        let error = self.invalid.then_some(FormError::ELEMENT_ID.to_string());
+        let counter = self.limit.map(|_| self.counter_id());
         error
             .into_iter()
-            .chain(self.description_id)
+            .chain(self.description_id.map(str::to_string))
+            .chain(counter)
             .collect::<Vec<_>>()
             .join(" ")
     }
@@ -181,6 +206,8 @@ pub struct FormErrorNotice<'a> {
 
 #[cfg(test)]
 mod tests {
+    use assert2::check;
+
     use super::*;
 
     /// A field the form's error is about is marked invalid and described by
@@ -203,6 +230,28 @@ mod tests {
             .unwrap();
         assert!(!other.contains("aria-invalid"));
         assert!(!other.contains("aria-describedby"));
+    }
+
+    #[test]
+    fn a_limited_field_counts_its_characters_after_its_guidance() {
+        let field = |value: &str| {
+            FloatingField::new(FieldKind::Text, "name", "Name", value)
+                .id("event-name")
+                .described_by("name-help")
+                .limit(5)
+                .render_once()
+                .unwrap()
+        };
+
+        // Counted in code points, not bytes or UTF-16 units.
+        let html = field("Café");
+        check!(html.contains(r#"<span id="event-name-count" class="pill-counter">4 / 5</span>"#));
+        check!(html.contains(r#"aria-describedby="name-help event-name-count""#));
+        check!(html.contains("hx-on:input="));
+
+        let html = field("Cafés!");
+        check!(html.contains(r#"class="pill-counter pill-counter-over">6 / 5</span>"#));
+        check!(html.contains(r#"value="Cafés!""#));
     }
 
     #[test]

@@ -634,7 +634,23 @@ impl Entity {
                     return Err(poem::Error::from_status(StatusCode::NOT_FOUND));
                 }
             }
-            EntityKind::Form => todo!(),
+            EntityKind::Form => {
+                let form_id = self.target.as_ulid().ok_or_else(|| {
+                    poem::Error::from_string(
+                        "Form entity has no ULID target",
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                    )
+                })?;
+
+                crate::hosted_form::page::entity_response(
+                    form_id,
+                    self.canonical_path(),
+                    user_info.clone(),
+                    session,
+                    req,
+                )
+                .await?
+            }
             EntityKind::Project => {
                 let target_id = self.target.as_ulid().ok_or_else(|| {
                     poem::Error::from_string(

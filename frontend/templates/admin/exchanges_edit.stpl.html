@@ -47,6 +47,12 @@
                 <label for="restricted_add" class="<%= label %>">Only the exchange's staff can add projects</label>
             </div>
 
+            <div>
+                <label for="submission_notice" class="<%= label %>">Note on the add forms</label>
+                <textarea name="submission_notice" id="submission_notice" rows="4" class="<%= input %>"><%= &settings.submission_notice %></textarea>
+                <p class="<%= hint %>">Plain text shown at the top of the add forms to someone submitting through this exchange, saying how their submission will be handled. Leave it empty for the standard sentence, which names the exchange as the reviewer.</p>
+            </div>
+
             <fieldset class="space-y-6 border-t border-gray-200 pt-6">
                 <legend class="text-base font-medium text-gray-900">Which projects it lists</legend>
 

@@ -12,6 +12,21 @@
 const YES: &str = "yes";
 const NO: &str = "no";
 
+/// The controls the answers are submitted from, here and in orrery: whether
+/// the event has a Facebook event, its link, and whether SciStarter should
+/// create one.
+pub const HAS_FIELD: &str = "facebook_event";
+pub const URL_FIELD: &str = "facebook_event_url";
+pub const REQUESTED_FIELD: &str = "facebook_event_requested";
+
+/// What is wrong with the answers as a submission, and which of their
+/// controls it is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Problem {
+    pub field: &'static str,
+    pub message: &'static str,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum FacebookEvent {
     /// The organizer hasn't said whether the event has a Facebook event.
@@ -95,30 +110,44 @@ impl FacebookEvent {
         }
     }
 
-    /// What's wrong with the answers as a submission, if anything: an
-    /// organizer who says the event has a Facebook event has to link it.
-    pub fn problem(&self) -> Option<&'static str> {
+    /// What's wrong with the answers as a submission, if anything: both
+    /// yes-or-no questions need an answer, and an organizer who says the
+    /// event has a Facebook event has to link it. The same rules and words
+    /// as orrery's add form (`problem` in its `ss-event-facebook`).
+    pub fn problem(&self) -> Option<Problem> {
+        let problem = |field, message| Some(Problem { field, message });
+
         match self {
+            FacebookEvent::Unanswered => problem(
+                HAS_FIELD,
+                "Please say whether your event has a Facebook event page.",
+            ),
+            FacebookEvent::Missing {
+                create_requested: None,
+            } => problem(
+                REQUESTED_FIELD,
+                "Please say whether you'd like SciStarter to create a Facebook event for you.",
+            ),
             FacebookEvent::Exists { url: None } => {
-                Some("Please share the link to your Facebook event.")
+                problem(URL_FIELD, "Please share the link to your Facebook event.")
             }
-            FacebookEvent::Exists { url: Some(url) } if !is_web_link(url) => {
-                Some("Please enter the full link to your Facebook event, starting with https://.")
+            FacebookEvent::Exists { url: Some(url) }
+                if !crate::web_address::is_web_address(url) =>
+            {
+                problem(
+                    URL_FIELD,
+                    "Please enter the full link to your Facebook event, starting with https://.",
+                )
             }
             _ => None,
         }
     }
 }
 
-/// Whether `url` is an http(s) link with no spaces in it, which is what
-/// orrery's form asks of the same answer.
-fn is_web_link(url: &str) -> bool {
-    (url.starts_with("https://") || url.starts_with("http://"))
-        && !url.contains(char::is_whitespace)
-}
-
 #[cfg(test)]
 mod tests {
+    use assert2::check;
+
     use super::*;
 
     #[test]
@@ -188,26 +217,40 @@ mod tests {
         }
     }
 
+    /// The field of the problem with `answers`, if there is one.
+    fn problem_field(answers: FacebookEvent) -> Option<&'static str> {
+        answers.problem().map(|problem| problem.field)
+    }
+
     #[test]
     fn a_facebook_event_needs_a_web_link() {
-        assert!(FacebookEvent::Exists { url: None }.problem().is_some());
-        assert!(
-            FacebookEvent::from_answers("yes", "facebook.com/events/1", "")
-                .problem()
-                .is_some()
+        check!(problem_field(FacebookEvent::Exists { url: None }) == Some(URL_FIELD));
+        for url in ["facebook.com/events/1", "https:www.facebook.com/events/1"] {
+            check!(problem_field(FacebookEvent::from_answers("yes", url, "")) == Some(URL_FIELD));
+        }
+        check!(
+            problem_field(FacebookEvent::from_answers(
+                "yes",
+                "https://www.facebook.com/events/1/",
+                ""
+            )) == None
         );
-        assert!(
-            FacebookEvent::from_answers("yes", "https://www.facebook.com/events/1/", "")
-                .problem()
-                .is_none()
-        );
-        assert!(FacebookEvent::Unanswered.problem().is_none());
-        assert!(
-            FacebookEvent::Missing {
+    }
+
+    #[test]
+    fn both_questions_need_an_answer() {
+        check!(problem_field(FacebookEvent::Unanswered) == Some(HAS_FIELD));
+        check!(
+            problem_field(FacebookEvent::Missing {
                 create_requested: None
-            }
-            .problem()
-            .is_none()
+            }) == Some(REQUESTED_FIELD)
         );
+        for requested in [true, false] {
+            check!(
+                problem_field(FacebookEvent::Missing {
+                    create_requested: Some(requested)
+                }) == None
+            );
+        }
     }
 }

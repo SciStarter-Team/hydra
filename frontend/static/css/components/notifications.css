@@ -79,6 +79,13 @@
     overflow-wrap: anywhere;
 }
 
+/* Both are paragraphs, whose site-wide bottom margin would push the text
+   up off the middle of the box; the box's padding is all the room they get. */
+.ss-notification__title,
+.ss-notification__message {
+    margin: 0;
+}
+
 /* A title is optional; when there is one, the message sits under it. */
 .ss-notification__title + .ss-notification__message {
     margin-top: 0.125rem;

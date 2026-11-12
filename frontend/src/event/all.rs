@@ -64,6 +64,9 @@ pub struct EventAll {
     pub part_of: Option<Ulid>,
     pub location_type: String,
     pub entirely_online: bool,
+    /// Whether an event held at its address can also be joined online, at
+    /// its `url`. Never set alongside `entirely_online`.
+    pub also_online: bool,
     pub location_name: String,
     pub location_description: String,
     pub address: String,
@@ -83,6 +86,14 @@ pub struct EventAll {
     pub audience: BTreeSet<String>,
 
     pub ticketing_begins: Option<TimeString>,
+    /// Where people get tickets or register, if that isn't the event's own
+    /// link.
+    pub ticket_url: String,
+    /// What it costs to attend, in the organizer's words.
+    pub cost: String,
+    /// The group the event is limited to, in the organizer's words ("Library
+    /// cardholders"); empty when it's open to everyone.
+    pub limited_to: String,
     pub outcomes_label: Option<String>,
     pub outcomes_link: Option<String>,
     pub circuit_id: Option<String>,
@@ -163,6 +174,8 @@ impl LoadStorePeered for EventAll {
         let facebook_event = self.facebook_event.has();
         let facebook_event_url = self.facebook_event.url();
         let facebook_event_requested = self.facebook_event.create_requested();
+        // An event joined only online is not also joined online besides.
+        let also_online = self.also_online && !self.entirely_online;
 
         let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
 
@@ -202,7 +215,11 @@ impl LoadStorePeered for EventAll {
               "reviewed",
               "facebook_event",
               "facebook_event_url",
-              "facebook_event_requested"
+              "facebook_event_requested",
+              "also_online",
+              "ticket_url",
+              "cost",
+              "limited_to"
             )
             values (
               ?1,
@@ -253,7 +270,11 @@ impl LoadStorePeered for EventAll {
               ?32,
               ?33,
               ?34,
-              ?35
+              ?35,
+              ?36,
+              ?37,
+              ?38,
+              ?39
             )"#,
             event_id,
             self.created,
@@ -290,6 +311,10 @@ impl LoadStorePeered for EventAll {
             facebook_event,
             facebook_event_url,
             facebook_event_requested,
+            also_online,
+            self.ticket_url,
+            self.cost,
+            self.limited_to,
         )
         .execute(&mut tx)
         .await?;
@@ -486,7 +511,8 @@ impl LoadStorePeered for EventAll {
                 exchange, reviewed as "reviewed: bool",
                 facebook_event as "facebook_event: bool",
                 facebook_event_url,
-                facebook_event_requested as "facebook_event_requested: bool"
+                facebook_event_requested as "facebook_event_requested: bool",
+                also_online as "also_online: bool", ticket_url, cost, limited_to
             FROM events WHERE event_id = ?"#,
             event_id_str
         )
@@ -614,6 +640,7 @@ impl LoadStorePeered for EventAll {
                 .transpose()?,
             location_type: event_row.location_type,
             entirely_online: event_row.entirely_online,
+            also_online: event_row.also_online,
             location_name: event_row.location_name,
             location_description: event_row.location_description,
             address: event_row.address,
@@ -633,6 +660,9 @@ impl LoadStorePeered for EventAll {
                 .map(|s| TimeString::try_from(s))
                 .transpose()
                 .map_err(|e| anyhow::anyhow!("Invalid ticketing_begins TimeString: {}", e))?,
+            ticket_url: event_row.ticket_url,
+            cost: event_row.cost,
+            limited_to: event_row.limited_to,
             outcomes_label: event_row.outcomes_label,
             outcomes_link: event_row.outcomes_link,
             circuit_id: event_row.circuit_id,

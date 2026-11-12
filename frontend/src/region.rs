@@ -41,7 +41,40 @@ pub const MIN_OVERLAP: f64 = 0.005;
 /// footprint the caches did not cover before -- fills them without anybody
 /// running anything.
 pub fn rule() -> String {
-    format!("{MIN_OVERLAP}; projects, events")
+    format!("{MIN_OVERLAP}; projects, events; global has no footprint")
+}
+
+/// A project's or event's stored location: what it says about where it
+/// happens, and the shapes it carries, as SpatiaLite blobs.
+#[derive(Debug, Default)]
+struct Placement {
+    location_type: String,
+    coverage: Option<Vec<u8>>,
+    point: Option<Vec<u8>>,
+}
+
+impl Placement {
+    /// The coverage and point that place it in regions, or `None` when
+    /// nothing does.
+    ///
+    /// Something that can be done anywhere is in no region in particular,
+    /// whatever shapes it still carries: a point left over from before it
+    /// went global, or a coverage drawn around the whole world. Counting
+    /// those put iNaturalist in South Australia and eBird in Western
+    /// Australia, so an exchange listed them as local with its "include
+    /// global" box unticked. An exchange reaches global projects through
+    /// that box instead. Orrery's `RegionFootprint` follows the same rule.
+    fn footprint(self) -> Option<(Option<Vec<u8>>, Option<Vec<u8>>)> {
+        if self.location_type == crate::project::location::ANYWHERE {
+            return None;
+        }
+
+        if self.coverage.is_none() && self.point.is_none() {
+            return None;
+        }
+
+        Some((self.coverage, self.point))
+    }
 }
 
 /// What has a footprint the caches record.
@@ -54,35 +87,43 @@ enum Footprint {
 impl Footprint {
     const ALL: [Footprint; 2] = [Footprint::Project, Footprint::Event];
 
-    /// The coverage and point of the one with this id, as SpatiaLite blobs,
-    /// or `None` when there is none.
-    async fn geometry(
-        self,
-        tx: &mut Immediate,
-        id: &str,
-    ) -> Result<Option<(Option<Vec<u8>>, Option<Vec<u8>>)>, Error> {
+    /// Where the one with this id is placed, or `None` when there is no such
+    /// one.
+    async fn placement(self, tx: &mut Immediate, id: &str) -> Result<Option<Placement>, Error> {
         Ok(match self {
             Footprint::Project => sqlx::query!(
                 r#"
-                select "regions" as "regions: Vec<u8>", "point" as "point: Vec<u8>"
+                select "location_type",
+                       "regions" as "regions: Vec<u8>",
+                       "point" as "point: Vec<u8>"
                 from projects where "project_id" = ?
                 "#,
                 id
             )
             .fetch_optional(&mut *tx)
             .await?
-            .map(|row| (row.regions, row.point)),
+            .map(|row| Placement {
+                location_type: row.location_type,
+                coverage: row.regions,
+                point: row.point,
+            }),
 
             Footprint::Event => sqlx::query!(
                 r#"
-                select "regions" as "regions: Vec<u8>", "point" as "point: Vec<u8>"
+                select "location_type",
+                       "regions" as "regions: Vec<u8>",
+                       "point" as "point: Vec<u8>"
                 from events where "event_id" = ?
                 "#,
                 id
             )
             .fetch_optional(&mut *tx)
             .await?
-            .map(|row| (row.regions, row.point)),
+            .map(|row| Placement {
+                location_type: row.location_type,
+                coverage: row.regions,
+                point: row.point,
+            }),
         })
     }
 
@@ -125,7 +166,11 @@ impl Footprint {
         Ok(())
     }
 
-    /// Everything of this kind with a footprint, by id.
+    /// Everything of this kind that carries any shape, by id.
+    ///
+    /// Broader than what has a footprint: a global one carrying a shape is
+    /// visited too, so that the rebuild clears whatever it was cached under
+    /// before [`Placement::footprint`] stopped counting it.
     async fn with_footprints(self) -> Result<Vec<String>, Error> {
         Ok(match self {
             Footprint::Project => {
@@ -156,8 +201,8 @@ impl Footprint {
         })
     }
 
-    /// Drop the cached rows of whatever of this kind no longer has a
-    /// footprint, or no longer exists, which a rebuild would not otherwise
+    /// Drop the cached rows of whatever of this kind no longer carries any
+    /// shape, or no longer exists, which a rebuild would not otherwise
     /// visit.
     async fn prune(self) -> Result<(), Error> {
         match self {
@@ -207,9 +252,11 @@ impl Footprint {
 /// measures one footprint against the region list rather than the region
 /// list against the catalogue.
 ///
-/// Three places write a project's geometry, and all three call this:
-/// `ProjectAll::save_to_database` for a whole-project save, the `Point` and
-/// `Regions` field savers for a single edited field, and
+/// Three places write what a project's footprint is made of -- its
+/// geometry, and the `location_type` that decides whether the geometry
+/// counts -- and all three call this: `ProjectAll::save_to_database` for a
+/// whole-project save, the `Point`, `Regions` and `LocationType` field
+/// savers for a single edited field, and
 /// `geocode::geocode_and_update_project_point` for a point derived from an
 /// address. A fourth writer would need to call it too.
 pub async fn refresh_project(project_id: &str) -> Result<(), Error> {
@@ -219,10 +266,10 @@ pub async fn refresh_project(project_id: &str) -> Result<(), Error> {
 /// Recompute which regions one event falls in, as [`refresh_project`] does
 /// for a project.
 ///
-/// The writers of an event's geometry mirror a project's, and all of them
+/// The writers of an event's footprint mirror a project's, and all of them
 /// call this: `EventAll::save_to_database`, including the point it derives
-/// from the event's area, the `Point` and `Regions` field savers, and
-/// `geocode::geocode_and_update_event_point`.
+/// from the event's area, the `Point`, `Regions` and `LocationType` field
+/// savers, and `geocode::geocode_and_update_event_point`.
 pub async fn refresh_event(event_id: &str) -> Result<(), Error> {
     refresh(Footprint::Event, event_id).await
 }
@@ -243,7 +290,9 @@ async fn refresh(kind: Footprint, id: &str) -> Result<(), Error> {
 /// everything rather than paying a commit each, while both paths run the
 /// same statement.
 async fn refresh_in(tx: &mut Immediate, kind: Footprint, id: &str) -> Result<(), Error> {
-    let region_ids = match kind.geometry(tx, id).await? {
+    let footprint = kind.placement(tx, id).await?.and_then(Placement::footprint);
+
+    let region_ids = match footprint {
         Some((coverage, point)) => matching_regions(tx, coverage, point).await?,
         None => Vec::new(),
     };
@@ -265,10 +314,6 @@ async fn matching_regions(
     coverage: Option<Vec<u8>>,
     point: Option<Vec<u8>>,
 ) -> Result<Vec<i64>, Error> {
-    if coverage.is_none() && point.is_none() {
-        return Ok(Vec::new());
-    }
-
     Ok(sqlx::query_scalar!(
         r#"
         with footprint as (
@@ -455,4 +500,47 @@ pub async fn ids_for_names(names: &[String]) -> Result<Vec<(i64, String)>, Error
     }
 
     Ok(found)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::project::location::{ANYWHERE, AT_AN_ADDRESS, IN_A_RANGE};
+    use assert2::check;
+
+    fn placement(location_type: &str, coverage: bool, point: bool) -> Placement {
+        Placement {
+            location_type: location_type.to_string(),
+            coverage: coverage.then(|| vec![1]),
+            point: point.then(|| vec![2]),
+        }
+    }
+
+    #[test]
+    fn a_global_placement_has_no_footprint_whatever_shapes_it_carries() {
+        for (coverage, point) in [(true, true), (true, false), (false, true), (false, false)] {
+            check!(placement(ANYWHERE, coverage, point).footprint().is_none());
+        }
+    }
+
+    #[test]
+    fn a_placed_one_keeps_its_shapes_as_its_footprint() {
+        for location_type in [IN_A_RANGE, AT_AN_ADDRESS, "Online", ""] {
+            check!(
+                placement(location_type, true, false).footprint() == Some((Some(vec![1]), None))
+            );
+            check!(
+                placement(location_type, false, true).footprint() == Some((None, Some(vec![2])))
+            );
+            check!(
+                placement(location_type, true, true).footprint()
+                    == Some((Some(vec![1]), Some(vec![2])))
+            );
+        }
+    }
+
+    #[test]
+    fn without_shapes_there_is_no_footprint() {
+        check!(placement(IN_A_RANGE, false, false).footprint().is_none());
+    }
 }

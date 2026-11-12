@@ -280,7 +280,18 @@ pub async fn record_event_ulid(
 #[derive(Debug, Deserialize)]
 struct ConnectQuery {
     #[serde(rename = "allow-anonymous")]
-    allow_anonymous: Option<bool>,
+    allow_anonymous: Option<String>,
+}
+
+impl ConnectQuery {
+    /// Whether a visitor who isn't signed in may go on to the project: as
+    /// orrery reads `allow-anonymous`, any value but an empty one says so,
+    /// `t` as much as `true`.
+    fn allows_anonymous(&self) -> bool {
+        self.allow_anonymous
+            .as_deref()
+            .is_some_and(|value| !value.is_empty())
+    }
 }
 
 /// Helper function for connect logic
@@ -378,7 +389,7 @@ pub async fn connect_opaque(
     Query(query): Query<ConnectQuery>,
     Authenticated(user_info): Authenticated,
 ) -> Result<Response, Error> {
-    do_connect_opaque(slug, 0, query.allow_anonymous.unwrap_or(false), user_info).await
+    do_connect_opaque(slug, 0, query.allows_anonymous(), user_info).await
 }
 
 /// Redirect to project with opaque_id (with index)
@@ -389,7 +400,7 @@ pub async fn connect_opaque_with_idx(
     Query(query): Query<ConnectQuery>,
     Authenticated(user_info): Authenticated,
 ) -> Result<Response, Error> {
-    do_connect_opaque(slug, idx, query.allow_anonymous.unwrap_or(false), user_info).await
+    do_connect_opaque(slug, idx, query.allows_anonymous(), user_info).await
 }
 
 /// Record participation event via opaque user ID
@@ -843,4 +854,26 @@ fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
                 None
             }
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use assert2::check;
+
+    use super::*;
+
+    fn query(allow_anonymous: Option<&str>) -> ConnectQuery {
+        ConnectQuery {
+            allow_anonymous: allow_anonymous.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn any_value_of_allow_anonymous_but_an_empty_one_allows_it() {
+        check!(query(Some("t")).allows_anonymous());
+        check!(query(Some("true")).allows_anonymous());
+        check!(query(Some("1")).allows_anonymous());
+        check!(!query(Some("")).allows_anonymous());
+        check!(!query(None).allows_anonymous());
+    }
 }

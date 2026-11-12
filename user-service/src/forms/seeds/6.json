@@ -1,0 +1,223 @@
+{
+  "intro": "## Submit Your Data to ZomBee Watch\n\n[ZomBee Watch](/zombee-watch) is a citizen science project that needs your help to learn if and where honey bees are being taken over by the zombie fly. This project is kind of gross but honey bees are so important that we thought it was worth it!\n\nTo do this project, you'll need to collect and observe a bee, following instructions found at [scistarter.org/zombee-watch](/zombee-watch).\n\nThis project might take one day (if you don't find any bees) or up to 30 days if you do find a bee. That's typically how long it will take for a pesky zombie fly to spring to life from it's poor host, the honey bee. In any case, review and print this form, then come back to SciStarter.org/form/zombee-watch when you are ready to enter all of your data and upload pictures.",
+  "aside": "![honeybee visiting a flower](/-static/img/forms/bee_usda.jpg)\n\n*Image Credit: USDA*\n\nZomBee Watch is sponsored by the San Francisco State University Department of Biology, the San Francisco State University Center for Computing for Life Sciences and the Natural History Museum of LA County.\n\n![honeybee samples in jars](/-static/img/forms/zombee-watch-bee-samples.jpg)\n\n*Four samples containing affected honey bees*\n\n![dead honeybee with parasitic phorid fly larvae](/-static/img/forms/zombee-watch-phorid-larvae.jpg)\n\n*Two zombie fly maggots leaving their host*\n\n![dead honeybee with parasitic phorid fly pupae](/-static/img/forms/zombee-watch-phorid-pupae.jpg)\n\n*Zombie fly pupae from an infected honey bee*\n\n![emerged zombee fly adults with their former honeybee host](/-static/img/forms/zombee-watch-emerged-phorids.jpg)\n\n*Four adult zombie flies and their former host*",
+  "fields": [
+    {
+      "key": "heading-sample",
+      "label": "Describe your ZomBee Watch sample",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "sample_name",
+      "label": "Name your bee sample. Even if you didn't find one!",
+      "help": "(This name will help you later if you submit more than one sample to ZomBee Watch.)",
+      "required": true,
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "method",
+      "label": "How did you collect the bee(s)?",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "t", "label": "Light Trap"},
+          {"value": "l", "label": "Stranded, near a light"},
+          {"value": "d", "label": "Stranded, not near a light"}
+        ],
+        "widget": "select"
+      }
+    },
+    {
+      "key": "where",
+      "label": "Location",
+      "help": "Based on the available information, this is study's point on the map. If it's not correct, you can click to move the marker to the correct spot.",
+      "required": true,
+      "kind": {
+        "type": "location"
+      }
+    },
+    {
+      "key": "mapped",
+      "label": "Is this the right location?",
+      "help": "If not, you can drag the marker to the correct spot.",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Yes", "label": "Yes"},
+          {"value": "No", "label": "No"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "heading-bee",
+      "label": "Did you collect any bees?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "note-bee",
+      "label": "",
+      "kind": {
+        "type": "markdown",
+        "text": "If you did not collect any bees, enter today's date, enter \"0\" for the \"Number of bees collected,\" then scroll down and click \"Submit data.\" You're done. Thank you!"
+      }
+    },
+    {
+      "key": "bee_submission_date",
+      "label": "Date",
+      "required": true,
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "bee_count",
+      "label": "Number of bees collected",
+      "required": true,
+      "default": "0",
+      "kind": {
+        "type": "number",
+        "min": 0,
+        "max": 30,
+        "integer": true
+      }
+    },
+    {
+      "key": "bee_comments",
+      "label": "Any other comments, data, or observations?",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "bee_photo",
+      "label": "Upload a photo of the bee sample",
+      "required": true,
+      "kind": {
+        "type": "photo",
+        "multiple": false
+      }
+    },
+    {
+      "key": "heading-pupae",
+      "label": "Did you see any maggots or pupae?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "note-pupae",
+      "label": "",
+      "kind": {
+        "type": "markdown",
+        "text": "Look for zombie fly maggots or pupae after 5-14 days. If the bees were infected, maggots should have escaped and some or all of them have changed into pupae. If you have found no maggots or pupae, enter \"0.\""
+      }
+    },
+    {
+      "key": "pupae_submission_date",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "pupae_count",
+      "label": "Number of maggots or pupae",
+      "default": "0",
+      "kind": {
+        "type": "number",
+        "min": 0,
+        "max": 20,
+        "integer": true
+      }
+    },
+    {
+      "key": "pupae_comments",
+      "label": "Any other comments, data, or observations?",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "pupae_photo",
+      "label": "Upload a photo of escaped maggots or pupae",
+      "kind": {
+        "type": "photo",
+        "multiple": false
+      }
+    },
+    {
+      "key": "heading-zombie_fly",
+      "label": "Did you see any zombie flies?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "note-zombie_fly",
+      "label": "",
+      "kind": {
+        "type": "markdown",
+        "text": "Look for adult zombie flies after 14-30 days. If there were none, enter \"0.\""
+      }
+    },
+    {
+      "key": "zombie_fly_submission_date",
+      "label": "Date",
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "zombie_fly_count",
+      "label": "Number of adult zombie flies",
+      "default": "0",
+      "kind": {
+        "type": "number",
+        "min": 0,
+        "max": 20,
+        "integer": true
+      }
+    },
+    {
+      "key": "zombie_fly_comments",
+      "label": "Any other comments, data, or observations?",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "zombie_fly_photo",
+      "label": "Upload a photo of adult Zombie Flies",
+      "kind": {
+        "type": "photo",
+        "multiple": false
+      }
+    }
+  ],
+  "map": {
+    "intro": "[ZomBee Watch](/zombee-watch) is a citizen science project that needs your help to learn if and where honey bees are being taken over by the zombie fly.",
+    "popup_fields": [
+      "bee_submission_date",
+      "bee_count",
+      "pupae_submission_date",
+      "pupae_count",
+      "zombie_fly_submission_date",
+      "zombie_fly_count"
+    ]
+  }
+}

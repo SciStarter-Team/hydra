@@ -71,6 +71,8 @@ pub fn routes() -> impl Endpoint {
         // Events
         .nest("/events", events::routes())
         .nest("/choice-lists", choice_lists::routes())
+        // Hosted forms
+        .nest("/forms", crate::hosted_form::admin::routes())
         // Analytics
         .nest("/analytics", analytics::routes())
         // Files & Links

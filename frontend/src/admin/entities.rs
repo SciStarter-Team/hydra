@@ -774,10 +774,6 @@ async fn create_target_input_template(
             };
             (None, None, None, Some(widget))
         }
-        EntityKind::Form => {
-            let widget = create_pagecontent_widget(current_value, PageContentKind::Form).await;
-            (None, None, Some(widget), None)
-        }
         _ => (None, None, None, None),
     };
 
@@ -928,12 +924,16 @@ async fn create_entity_with_info(entity: &Entity) -> Result<EntityWithInfo, anyh
         }
         (EntityKind::Redirect, EntityTarget::Url(url)) => Some(url.to_string()),
         (EntityKind::WordPress, EntityTarget::String(s)) => Some(format!("WordPress: {}", s)),
+        (EntityKind::Form, EntityTarget::Ulid(form_id)) => Some(
+            crate::hosted_form::load(common::message::form::FormLookup::Id(*form_id))
+                .await?
+                .map_or_else(|| "Form not found".to_string(), |form| form.name),
+        ),
         (
             EntityKind::RawHtml
             | EntityKind::DressedHtml
             | EntityKind::Wysiwyg
-            | EntityKind::PageBuilder
-            | EntityKind::Form,
+            | EntityKind::PageBuilder,
             _,
         ) => Some("Static content".to_string()),
         (_, EntityTarget::Nil) => None,

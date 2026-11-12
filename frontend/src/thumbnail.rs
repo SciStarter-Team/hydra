@@ -76,7 +76,6 @@ fn has_image_extension(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ulid::Ulid;
 
     fn upload(name: Option<&str>, access: FileAccess) -> FileMetadata {
         FileMetadata {
@@ -84,7 +83,7 @@ mod tests {
             original_filename: name.map(str::to_string),
             content_type: None,
             size: 0,
-            uploaded_by: Ulid::nil(),
+            uploaded_by: None,
             access,
             variant: None,
             force_download: false,

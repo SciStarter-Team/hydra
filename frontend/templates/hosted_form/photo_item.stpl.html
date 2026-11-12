@@ -1,0 +1,5 @@
+<div class="hf-photo">
+  <input type="hidden" name="<%= self.name %>" value="<%= self.url %>">
+  <img src="<%= self.url %>" alt="A photo you uploaded">
+  <button type="button" class="hf-photo-remove" hx-on:click="this.closest('.hf-photo').remove()">Remove</button>
+</div>

@@ -1,0 +1,56 @@
+<%# One submission: who made it and when, where, its answers, and the people
+    running the form's judgement of it. %>
+<li class="hf-card" id="submission-<%= self.submission_id|disp %>">
+  <header class="hf-card-header">
+    <time><%= self.when %></time>
+    <% if let Some(submitter) = self.submitter { %>
+    <span class="hf-card-submitter">
+      by <code><%= submitter|disp %></code>
+      <% if let Some(email) = &self.email { %>(<a href="mailto:<%= email %>"><%= email %></a>)<% } %>
+    </span>
+    <% } else { %>
+    <span class="hf-card-submitter">by someone not signed in</span>
+    <% } %>
+  </header>
+
+  <dl class="hf-card-answers">
+    <% for (label, answer) in &self.answers { %>
+    <dt><%= label %></dt>
+    <% match answer { Display::Words(text) => { %>
+    <dd><%= text %></dd>
+    <% } Display::Photos(urls) => { %>
+    <dd class="hf-card-photos">
+      <% for url in urls { %>
+      <a href="<%= url %>" target="_blank" rel="noopener"><img src="<%= url %>" alt="A photo sent with this submission" loading="lazy"></a>
+      <% } %>
+    </dd>
+    <% } } %>
+    <% } %>
+    <% for (key, answer) in &self.other { %>
+    <dt><%= key.as_str() %> <span class="hf-card-note">(no longer asked)</span></dt>
+    <dd><%= answer %></dd>
+    <% } %>
+    <% if !self.location.is_empty() { %>
+    <dt>Place picked</dt>
+    <dd><%= self.location %></dd>
+    <% } %>
+    <% if !self.ip_location.is_empty() { %>
+    <dt>Place by network address</dt>
+    <dd><%= self.ip_location %></dd>
+    <% } %>
+    <% if let Some(ip_address) = &self.ip_address { %>
+    <dt>Network address</dt>
+    <dd><code><%= ip_address %></code></dd>
+    <% } %>
+  </dl>
+
+  <%+ self.evaluation %>
+
+  <details class="hf-card-delete">
+    <summary>Delete</summary>
+    <p>A deleted submission is gone for good.</p>
+    <button type="button" class="btn hf-danger"
+            hx-delete="/-form/<%= self.form_id|disp %>/submissions/<%= self.submission_id|disp %>"
+            hx-target="closest .hf-card" hx-swap="delete">Permanently delete this submission</button>
+  </details>
+</li>

@@ -1,22 +1,50 @@
-// Shared location section for the add forms: an "in person or virtual?" mode
-// select, a Photon-backed place type-ahead (via /add/place-search), and the
-// conditionally revealed region editor. Shows only the fields for the selected
-// mode; disabled fieldsets keep their controls out of the submission. The
-// "region" mode isn't offered in the dropdown — a link inside the in-person
-// pane switches to it (and back). Auto-inits every [data-location-picker].
+// Shared location section for the add forms: an "in person or online?" toggle
+// of radio buttons, a Photon-backed place type-ahead (via /add/place-search),
+// and the conditionally revealed region editor. Shows only the fields for the
+// selected mode; disabled fieldsets keep their controls out of the
+// submission. A fieldset's data-mode lists the modes it serves; "anywhere"
+// (in person, wherever each participant is) has no pane of its own. "region" and
+// "anywhere" aren't on the toggle: links inside the in-person pane switch to
+// them (and back), and the In person radio, still checked, submits them.
+// Auto-inits every [data-location-picker].
 (function () {
   function init(root) {
     if (root.__locationPickerInit) return;
     root.__locationPickerInit = true;
 
-    var select = root.querySelector('select[name="location_mode"]');
+    var radios = root.querySelectorAll('input[name="location_mode"]');
+    var inPerson = root.querySelector("input[data-in-person]");
+
+    function currentMode() {
+      var checked = root.querySelector('input[name="location_mode"]:checked');
+      return checked ? checked.value : "";
+    }
+
+    // Region and anywhere are kinds of in person: the In person radio stays
+    // checked, submitting them.
+    function setMode(mode) {
+      if (mode === "in_person" || mode === "region" || mode === "anywhere") {
+        if (!inPerson) return;
+        inPerson.value = mode;
+        inPerson.checked = true;
+      } else {
+        radios.forEach(function (radio) {
+          if (radio.value === mode) radio.checked = true;
+        });
+      }
+      apply();
+    }
 
     function apply() {
-      var mode = select ? select.value : "in_person";
+      var mode = currentMode();
       root.querySelectorAll(".location-fields").forEach(function (fs) {
-        var active = fs.getAttribute("data-mode") === mode;
+        var active = fs.getAttribute("data-mode").split(" ").indexOf(mode) >= 0;
         fs.hidden = !active;
         fs.disabled = !active;
+      });
+      // A control shown in only one of the modes sharing its pane.
+      root.querySelectorAll("[data-only-mode]").forEach(function (el) {
+        el.hidden = el.getAttribute("data-only-mode") !== mode;
       });
       // The region map is initialized while hidden, so it renders at zero size
       // until its pane is shown — fix it up once the region pane is visible.
@@ -31,27 +59,37 @@
       applyUrlText(mode);
     }
 
-    // The link/URL field is present in every mode; only its labeling shifts
-    // to "join link" phrasing for virtual.
+    // The link/URL field is present in every mode; for an online event it is
+    // the join link, and required.
     var urlField = root.querySelector("[data-url-field]");
     function applyUrlText(mode) {
       if (!urlField) return;
       var online = mode === "online";
       var label = urlField.querySelector(".url-label");
       var help = urlField.querySelector(".url-help");
+      var mark = urlField.querySelector(".url-required");
+      var input = urlField.querySelector('input[name="url"]');
       if (label) label.textContent = urlField.getAttribute(online ? "data-online-label" : "data-default-label");
       if (help) help.textContent = urlField.getAttribute(online ? "data-online-help" : "data-default-help");
+      if (mark) mark.hidden = !online;
+      if (input) input.required = online;
     }
 
-    if (select) select.addEventListener("change", apply);
+    // Choosing In person on the toggle means a single place, whichever kind
+    // of in person was chosen before another mode.
+    radios.forEach(function (radio) {
+      radio.addEventListener("change", function () {
+        if (radio === inPerson) inPerson.value = "in_person";
+        apply();
+      });
+    });
 
-    // "Happens across a wider area?" / "Back to a single place" links switch
-    // between the in-person pane and the region editor.
+    // "Happens across a wider area?", "Can people take part anywhere in the
+    // world?" and "Back to a single place" links switch between the kinds of
+    // in person.
     root.querySelectorAll("[data-mode-link]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        if (!select) return;
-        select.value = btn.getAttribute("data-mode-link");
-        apply();
+        setMode(btn.getAttribute("data-mode-link"));
       });
     });
 
@@ -83,7 +121,7 @@
     };
     var status = wrap.querySelector("[data-place-status]");
     var summary = root.querySelector("[data-place-summary]");
-    var summaryEdit = root.querySelector(".place-summary-edit");
+    var summaryAction = root.querySelector("[data-place-summary-action]");
     var timer = null;
     var seq = 0;
     // The suggestions on offer, and which one the arrow keys have reached
@@ -96,9 +134,10 @@
     }
 
     // One-line rendering of the structured address, shown on the collapsed
-    // disclosure so a picked place can be checked without opening it. The only
-    // copy of this rule: the values are unsubmitted form input, so the server
-    // renders the plain label and this fills it in.
+    // disclosure so a picked place can be checked without opening it, with the
+    // disclosure's link then reading "Edit". The only copy of this rule: the
+    // values are unsubmitted form input, so the server renders the plain label
+    // and this fills it in.
     function syncSummary() {
       if (!summary) return;
       var value = function (key) {
@@ -109,8 +148,9 @@
         .filter(Boolean)
         .join(", ");
       var line = [value("location_name"), place].filter(Boolean).join(" \u00b7 ");
-      summary.textContent = line || "Venue & address details";
-      if (summaryEdit) summaryEdit.hidden = !line;
+      summary.textContent = line;
+      summary.hidden = !line;
+      if (summaryAction) summaryAction.textContent = line ? "Edit" : "Venue & address details";
     }
 
     function close() {

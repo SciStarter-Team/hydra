@@ -25,6 +25,9 @@ pub struct SubmissionExchange {
     /// The number its add links carry as `?exchange=`.
     pub path_id: i64,
     pub name: String,
+    /// What the add forms say about how the exchange handles a submission,
+    /// as [`ExchangeSettings::submission_notice`] has it.
+    pub notice: String,
 }
 
 impl SubmissionExchange {
@@ -38,16 +41,23 @@ impl SubmissionExchange {
         };
 
         let found = sqlx::query!(
-            "SELECT exchange_id, name FROM exchanges WHERE path_id = ?",
+            "SELECT exchange_id, name, settings FROM exchanges WHERE path_id = ?",
             path_id
         )
         .fetch_optional(db())
         .await?;
 
-        Ok(found.map(|row| SubmissionExchange {
+        let Some(row) = found else {
+            return Ok(None);
+        };
+
+        let settings: ExchangeSettings = serde_json::from_str(&row.settings)?;
+
+        Ok(Some(SubmissionExchange {
             exchange_id: row.exchange_id,
             path_id,
             name: row.name,
+            notice: settings.submission_notice,
         }))
     }
 }
@@ -195,6 +205,12 @@ pub struct ExchangeSettings {
     /// projects unconditionally, so it starts out true.
     #[serde(default = "global_by_default")]
     pub global_by_default: bool,
+
+    /// What the add forms tell someone submitting through this exchange
+    /// about how their submission will be handled, as plain text. Empty
+    /// means the standard sentence naming the exchange as the reviewer.
+    #[serde(default)]
+    pub submission_notice: String,
 }
 
 fn global_by_default() -> bool {
@@ -216,6 +232,7 @@ impl Default for ExchangeSettings {
             include_origins: Vec::new(),
             search: String::new(),
             global_by_default: global_by_default(),
+            submission_notice: String::new(),
         }
     }
 }

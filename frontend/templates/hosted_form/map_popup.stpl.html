@@ -1,0 +1,20 @@
+<div class="hf-popup">
+  <p class="hf-popup-day"><%= self.day() %></p>
+  <% let rows = self.rows(); %>
+  <% if !rows.is_empty() { %>
+  <dl>
+    <% for (label, row) in &rows { %>
+    <dt><%= label %></dt>
+    <% match row { Display::Words(text) => { %>
+    <dd><%= text %></dd>
+    <% } Display::Photos(urls) => { %>
+    <dd class="hf-popup-photos">
+      <% for url in urls { %>
+      <a href="<%= url %>" target="_blank" rel="noopener"><img src="<%= url %>" alt="A photo sent with this contribution" loading="lazy"></a>
+      <% } %>
+    </dd>
+    <% } } %>
+    <% } %>
+  </dl>
+  <% } %>
+</div>

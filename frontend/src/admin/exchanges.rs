@@ -106,6 +106,8 @@ struct ExchangeUpdateForm {
     #[serde(default)]
     global_by_default: bool,
     #[serde(default)]
+    submission_notice: String,
+    #[serde(default)]
     exclude_scistarter: bool,
     #[serde(default)]
     search: String,
@@ -375,6 +377,7 @@ async fn exchange_update(
     exchange.settings.region_id = form.region_id.trim().parse().ok();
     exchange.settings.restricted_add = form.restricted_add;
     exchange.settings.global_by_default = form.global_by_default;
+    exchange.settings.submission_notice = form.submission_notice.trim().to_string();
     exchange.settings.exclude_scistarter = form.exclude_scistarter;
     exchange.settings.search = form.search.trim().to_string();
     exchange.settings.include_tags = lines_of(&form.include_tags);

@@ -1,0 +1,375 @@
+{
+  "intro": "## Submit Your Data to Ant Picnic\n\nThank you for participating in [Ant Picnic](/ant-picnic)! Your data are an important contribution to our understanding of ant diet preference around the world.",
+  "aside": "![logo for ant picnic](/-static/img/forms/ant-picnic-lesson.jpg)\n\n*Rob Dunn Lab*",
+  "fields": [
+    {
+      "key": "heading-your-information",
+      "label": "Your Information",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "school",
+      "label": "Your school or organization",
+      "required": true,
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-where",
+      "label": "Where?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "where",
+      "label": "Location",
+      "help": "Based on the available information, this is study's point on the map. If it's not correct, you can click to move the marker to the correct spot.",
+      "required": true,
+      "kind": {
+        "type": "location"
+      }
+    },
+    {
+      "key": "mapped",
+      "label": "Is this the right location?",
+      "help": "If not, you can drag the marker to the correct spot.",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Yes", "label": "Yes"},
+          {"value": "No", "label": "No"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "heading-when",
+      "label": "When?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "date",
+      "label": "Date",
+      "required": true,
+      "kind": {
+        "type": "date",
+        "not_in_future": true
+      }
+    },
+    {
+      "key": "start_time",
+      "label": "Start Time",
+      "help": "(when you put the bait cards out)",
+      "required": true,
+      "kind": {
+        "type": "time"
+      }
+    },
+    {
+      "key": "end_time",
+      "label": "End Time",
+      "help": "(when you collected the bait cards)",
+      "required": true,
+      "kind": {
+        "type": "time",
+        "not_before": "start_time"
+      }
+    },
+    {
+      "key": "heading-weather",
+      "label": "Weather Conditions",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "temperature",
+      "label": "Temperature",
+      "required": true,
+      "default": "0",
+      "kind": {
+        "type": "number",
+        "min": -100,
+        "max": 130
+      }
+    },
+    {
+      "key": "degree_type",
+      "label": "Degrees F or C",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "F", "label": "F"},
+          {"value": "C", "label": "C"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "cloud",
+      "label": "Weather Description",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Sunny", "label": "Sunny"},
+          {"value": "Partly Cloudy", "label": "Partly Cloudy"},
+          {"value": "Cloudy", "label": "Cloudy"},
+          {"value": "Other", "label": "Other"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "cloud_other",
+      "label": "Explain Other",
+      "visible_if": {
+        "field": "cloud",
+        "equals": "Other"
+      },
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "wind",
+      "label": "Wind",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Calm", "label": "Calm"},
+          {"value": "Light Wind", "label": "Light Wind"},
+          {"value": "Windy", "label": "Windy"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "heading-site",
+      "label": "Experiment Site",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "site_description",
+      "label": "Describe the area where you set up your experiment",
+      "help": "(at the base of a tree, on pavement, grass, etc.)",
+      "required": true,
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "ant_attractions",
+      "label": "Is there anything nearby that may attract ants?",
+      "help": "(trash cans, fruit trees, picnic tables, etc.)",
+      "required": true,
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    },
+    {
+      "key": "shade",
+      "label": "Is your experiment site in the shade?",
+      "help": "(not counting cloud cover)",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "No", "label": "No"},
+          {"value": "Partially", "label": "Partially"},
+          {"value": "Yes", "label": "Yes"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "heading-ant-data",
+      "label": "Ant Data",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "note-ant-data",
+      "label": "",
+      "kind": {
+        "type": "markdown",
+        "text": "Enter the total number of ants per bait type"
+      }
+    },
+    {
+      "key": "amino_acids_pre",
+      "label": "Amino Acids: pre-collection ant count",
+      "kind": {
+        "type": "number",
+        "min": 0
+      }
+    },
+    {
+      "key": "amino_acids_final",
+      "label": "Amino Acids: final ant count",
+      "required": true,
+      "kind": {
+        "type": "number",
+        "min": 0
+      }
+    },
+    {
+      "key": "cookies_pre",
+      "label": "Cookie: pre-collection ant count",
+      "kind": {
+        "type": "number",
+        "min": 0
+      }
+    },
+    {
+      "key": "cookies_final",
+      "label": "Cookie: final ant count",
+      "required": true,
+      "kind": {
+        "type": "number",
+        "min": 0
+      }
+    },
+    {
+      "key": "olive_oil_pre",
+      "label": "Olive Oil: pre-collection ant count",
+      "kind": {
+        "type": "number",
+        "min": 0
+      }
+    },
+    {
+      "key": "olive_oil_final",
+      "label": "Olive Oil: final ant count",
+      "required": true,
+      "kind": {
+        "type": "number",
+        "min": 0
+      }
+    },
+    {
+      "key": "salt_water_pre",
+      "label": "Salt: pre-collection ant count",
+      "kind": {
+        "type": "number",
+        "min": 0
+      }
+    },
+    {
+      "key": "salt_water_final",
+      "label": "Salt: final ant count",
+      "required": true,
+      "kind": {
+        "type": "number",
+        "min": 0
+      }
+    },
+    {
+      "key": "sugar_water_pre",
+      "label": "Sugar: pre-collection ant count",
+      "kind": {
+        "type": "number",
+        "min": 0
+      }
+    },
+    {
+      "key": "sugar_water_final",
+      "label": "Sugar: final ant count",
+      "required": true,
+      "kind": {
+        "type": "number",
+        "min": 0
+      }
+    },
+    {
+      "key": "plain_water_pre",
+      "label": "Water: pre-collection ant count",
+      "kind": {
+        "type": "number",
+        "min": 0
+      }
+    },
+    {
+      "key": "plain_water_final",
+      "label": "Water: final ant count",
+      "required": true,
+      "kind": {
+        "type": "number",
+        "min": 0
+      }
+    },
+    {
+      "key": "heading-photo",
+      "label": "Ant Picnic Photo",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "note-photo",
+      "label": "",
+      "kind": {
+        "type": "markdown",
+        "text": "Upload a picture of your Ant Picnic experiment. Please note, that you can only upload one picture (if you took individual pictures of all 6 baits, please combine them into a single picture before uploading).\n\nBy uploading this photo, you agree that you have the right to share it, and that we have the right to use it, including publishing it."
+      }
+    },
+    {
+      "key": "science_photo",
+      "label": "Upload a photo of your Ant Picnic experiment.",
+      "kind": {
+        "type": "photo",
+        "multiple": false
+      }
+    },
+    {
+      "key": "science_caption",
+      "label": "Add a caption to your Ant Picnic photo",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-comments",
+      "label": "Comments",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "comments",
+      "label": "Any other comments or observations?",
+      "kind": {
+        "type": "text",
+        "multiline": true
+      }
+    }
+  ],
+  "map": {
+    "intro": "[Ant Picnic](/ant-picnic) is a citizen science project that helps inform scientists about global food preferences of ants.",
+    "popup_fields": [
+      "school",
+      "date",
+      "amino_acids_final",
+      "cookies_final",
+      "olive_oil_final",
+      "salt_water_final",
+      "sugar_water_final",
+      "plain_water_final"
+    ]
+  }
+}

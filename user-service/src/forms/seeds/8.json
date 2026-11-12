@@ -1,0 +1,192 @@
+{
+  "intro": "## Submit Your Data to Stream Selfie",
+  "aside": "![citizen science volunteers taking a stream selfie](/-static/img/forms/stream_selfie.jpg)\n\n*IWLA*\n\n![logo for the Izaak Walton League](/-static/img/forms/logo_iwla_266.jpg)\n\n[Stream Selfie](/stream-selfie) is presented by [The Izaak Walton League](http://www.iwla.org/), a national nonprofit conservation group working to involve more Americans in conservation and outdoor recreation.\n\nExample stream selfies. Select a photo to enlarge it.\n\n[![example of a stream selfie](/-static/img/forms/stream-selfie-example-1a.jpg)](/-static/img/forms/stream-selfie-example-1a.jpg)\n[![example of a stream selfie](/-static/img/forms/stream-selfie-example-1b.jpg)](/-static/img/forms/stream-selfie-example-1b.jpg)\n[![example of a stream selfie](/-static/img/forms/stream-selfie-example-2a.jpg)](/-static/img/forms/stream-selfie-example-2a.jpg)\n[![example of a stream selfie](/-static/img/forms/stream-selfie-example-2b.jpg)](/-static/img/forms/stream-selfie-example-2b.jpg)",
+  "fields": [
+    {
+      "key": "note-consent",
+      "label": "",
+      "kind": {
+        "type": "markdown",
+        "text": "By signing up or signing in and submitting this form, you assert that you have a right to share this or these photos and that The Izaak Walton League and SciStarter have the right to use them. You also agree to receive clean water emails from The Izaak Walton League of America, and you agree to SciStarter's Terms of Use."
+      }
+    },
+    {
+      "key": "heading-photo",
+      "label": "Stream Photo",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "note-photo",
+      "label": "",
+      "kind": {
+        "type": "markdown",
+        "text": "Upload a photo of the stream and landscape with or without YOU in it!\n\nPlease remember this photo will be marked on a map by the location of the stream and can be viewed by the public."
+      }
+    },
+    {
+      "key": "science_photo",
+      "label": "Upload a stream selfie photo",
+      "required": true,
+      "kind": {
+        "type": "photo",
+        "multiple": false
+      }
+    },
+    {
+      "key": "science_caption",
+      "label": "Add a caption to your Stream Selfie",
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "heading-where",
+      "label": "Where is this stream?",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "name",
+      "label": "What is the name for this stream?",
+      "kind": {
+        "type": "text",
+        "placeholder": "e.g., Collier Creek"
+      }
+    },
+    {
+      "key": "stream_unknown",
+      "label": "I don't know the name of this stream (or it doesn't have a name).",
+      "kind": {
+        "type": "boolean",
+        "style": "checkbox"
+      }
+    },
+    {
+      "key": "mapped",
+      "label": "Can you see your observation site on this map?",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Yes", "label": "Yes"},
+          {"value": "No", "label": "No"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "where",
+      "label": "Location",
+      "help": "Based on the available information, this is your observation site's point on the map. If it's not correct, you can click to move the marker to the correct spot.",
+      "required": true,
+      "kind": {
+        "type": "location"
+      }
+    },
+    {
+      "key": "heading-more",
+      "label": "More about this stream",
+      "kind": {
+        "type": "heading"
+      }
+    },
+    {
+      "key": "ownership",
+      "label": "Land Ownership",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Public", "label": "Public"},
+          {"value": "Private", "label": "Private"},
+          {"value": "Don't know", "label": "Don't know"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "trash",
+      "label": "Trash present in or near the stream?",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "None", "label": "None"},
+          {"value": "Minimal", "label": "Minimal"},
+          {"value": "Moderate", "label": "Moderate"},
+          {"value": "Lots", "label": "Lots"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "continuous",
+      "label": "Does this stream flow continuously all year?",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Yes", "label": "Yes"},
+          {"value": "No", "label": "No"},
+          {"value": "Unsure", "label": "Unsure"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "existing_site",
+      "label": "Is this an existing site you monitor?",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Yes", "label": "Yes"},
+          {"value": "No", "label": "No"},
+          {"value": "N/A", "label": "Not applicable"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "membership",
+      "label": "Are you doing this as part of an organization or chapter?",
+      "required": true,
+      "kind": {
+        "type": "choice",
+        "options": [
+          {"value": "Yes", "label": "Yes"},
+          {"value": "No", "label": "No"}
+        ],
+        "widget": "buttons"
+      }
+    },
+    {
+      "key": "organization",
+      "label": "Which organization or chapter?",
+      "visible_if": {
+        "field": "membership",
+        "equals": "Yes"
+      },
+      "kind": {
+        "type": "text"
+      }
+    },
+    {
+      "key": "why_matters",
+      "label": "This stream matters to me because...",
+      "kind": {
+        "type": "text"
+      }
+    }
+  ],
+  "map": {
+    "intro": "[Stream Selfie](/stream-selfie) is a citizen science water project designed to identify potential water monitoring sites for volunteers to adopt. It is also designed to create an inventory of volunteer monitoring sites across the United States.",
+    "popup_fields": [
+      "science_photo",
+      "science_caption"
+    ]
+  }
+}

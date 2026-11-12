@@ -55,6 +55,15 @@ impl EmailRecipient {
     }
 }
 
+/// Send a stored email, by its slug, to one user now
+/// (`emailer.stored.send`, answered with a [`SendEmailResponse`]).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SendStoredEmailRequest {
+    pub slug: String,
+    pub user_id: Ulid,
+    pub additional_data: Option<Vec<(String, String)>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendEmailResponse {
     pub sending_id: Ulid,

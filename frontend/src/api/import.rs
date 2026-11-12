@@ -39,8 +39,8 @@ pub struct ImportEvent {
     pub location: Option<ImportEventLocation>,
     pub tags: Vec<String>,
 
-    /// The names of the event's types, exactly as the event type list has
-    /// them, or a name in [`SUPERSEDED_EVENT_TYPES`].
+    /// The names of the event's types, as the event type list has them or
+    /// as [`SUPERSEDED_EVENT_TYPES`] does, in any case.
     pub event_types: Vec<String>,
 }
 
@@ -59,8 +59,8 @@ const SUPERSEDED_EVENT_TYPES: &[(&str, ChoiceList, &[&str])] = &[(
 )];
 
 /// What the scanner's event type names stand for, as orrery reads them: an
-/// event type is named exactly as it is called, in whichever of the lists of
-/// event types it is.
+/// event type is named as it is called, in any case, in whichever of the
+/// lists of event types it is.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct ScannerChoices {
     /// What the event is to pick from each list the names say anything
@@ -79,7 +79,7 @@ impl ScannerChoices {
             if let Some(value) = ChoiceList::EVENT_TYPES
                 .iter()
                 .flat_map(|list| lists.get(*list))
-                .find(|value| value.name == *name)
+                .find(|value| same_name(&value.name, name))
             {
                 event_types
                     .entry(value.list)
@@ -87,13 +87,17 @@ impl ScannerChoices {
                     .insert(value.slug.clone());
             } else if let Some((_, list, superseding)) = SUPERSEDED_EVENT_TYPES
                 .iter()
-                .find(|(superseded, _, _)| superseded == name)
+                .find(|(superseded, _, _)| same_name(superseded, name))
             {
                 elsewhere.entry(*list).or_default().extend(
                     lists
                         .get(*list)
                         .iter()
-                        .filter(|value| superseding.contains(&value.name.as_str()))
+                        .filter(|value| {
+                            superseding
+                                .iter()
+                                .any(|superseding| same_name(&value.name, superseding))
+                        })
                         .map(|value| value.slug.clone()),
                 );
             } else {
@@ -123,6 +127,12 @@ impl ScannerChoices {
             }
         }
     }
+}
+
+/// Whether two event type names name the same thing, which they do whatever
+/// their case.
+fn same_name(a: &str, b: &str) -> bool {
+    a.to_lowercase() == b.to_lowercase()
 }
 
 /// Convert a datetime string to a TimeString.
@@ -436,12 +446,27 @@ mod tests {
             ..Default::default()
         };
 
-        // Names are matched exactly, as orrery matches them.
-        let read = ScannerChoices::read(&lists(), &names(&["bioblitz", "Gardening"]), "e");
+        let read = ScannerChoices::read(&lists(), &names(&["Gardening", "kid friendly"]), "e");
         check!(read == ScannerChoices::default());
         read.apply(&mut event);
 
         check!(event.venues == slugs(&["library"]));
         check!(event.audience == slugs(&["adults"]));
+    }
+
+    #[test]
+    fn names_match_whatever_their_case() {
+        let mut event = EventAll {
+            venues: slugs(&["library"]),
+            audience: slugs(&["adults"]),
+            ..Default::default()
+        };
+
+        let read = ScannerChoices::read(&lists(), &names(&["bioblitz", "KID-FRIENDLY"]), "e");
+        read.apply(&mut event);
+
+        check!(event.formats == slugs(&["bioblitz"]));
+        check!(event.venues.is_empty());
+        check!(event.audience == slugs(&["elementary-school-6-10-years", "families"]));
     }
 }

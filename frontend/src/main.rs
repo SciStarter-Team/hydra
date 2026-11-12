@@ -33,6 +33,7 @@ pub mod girlscouts;
 pub mod gourl;
 pub mod health;
 pub mod home;
+pub mod hosted_form;
 pub mod i18n;
 pub mod invitation;
 pub mod lazy_cache;
@@ -72,6 +73,7 @@ pub mod training;
 pub mod ui;
 pub mod upload;
 pub mod verify_email;
+pub mod web_address;
 pub mod webinar;
 pub mod wiki;
 pub mod wordpress;
@@ -319,6 +321,7 @@ fn user_facing() -> impl Endpoint {
         .nest("/evolveme", evolveme::routes())
         .nest("/exchange", exchange::routes())
         .nest("/-search", search::routes())
+        .nest("/-form", hosted_form::routes())
         .nest("/-concierge", concierge::routes())
         .at("/finder", get(search::handle_finder))
         .at("/p/finder", get(search::legacy_api::handle))
@@ -748,7 +751,11 @@ async fn main() -> Result<(), Error> {
     let _update_expired_statuses = tokio::spawn(sync::update_expired_statuses());
     let _ala_import = tokio::spawn(project::ala::import_periodically());
     let _inat_linking = tokio::spawn(project::inaturalist::link_periodically());
+    let _form_pages = tokio::spawn(hosted_form::entities::reconcile_periodically());
     let _periodic_maintenance = tokio::spawn(periodic_maintenance());
+    let _project_last_changes =
+        tokio::spawn(page_change::refresh_project_last_changes_periodically());
+    let _last_change_backfill = tokio::spawn(sync::backfill_last_changes());
 
     // Start NATS service
     let nats = common::shared::nats();
@@ -982,6 +989,201 @@ mod sync {
             log_activity(TimeString::from(updated), update, None, target, edit).await
         } else {
             log_activity(TimeString::from(changed), housekeeping, None, target, edit).await
+        }
+    }
+
+    /// One page of what one of orrery's `/staff/sync/` endpoints holds,
+    /// from just past the cursor `since`, `last_id` on.
+    async fn fetch_sync_page<T: serde::de::DeserializeOwned>(
+        client: &reqwest::Client,
+        url: &str,
+        since: &str,
+        last_id: i32,
+    ) -> Result<Vec<T>, anyhow::Error> {
+        use anyhow::Context;
+
+        let response = client
+            .get(url)
+            .bearer_auth(env!("SYNC_TOKEN"))
+            .query(&[("since", since), ("last_id", &last_id.to_string())])
+            .send()
+            .await
+            .context("Request error")?
+            .error_for_status()
+            .context("HTTP error")?;
+
+        let text = response
+            .text()
+            .await
+            .context("Failed to read response body")?;
+
+        serde_json::from_str(&text)
+            .with_context(|| format!("JSON parsing error\nResponse body: {text}"))
+    }
+
+    /// When the backfill of earlier updates last ran to completion on this
+    /// instance; see [`backfill_last_changes`].
+    const LAST_CHANGE_BACKFILL: &str = "last-change-backfill";
+
+    /// Record in the activity log when each project and event orrery holds
+    /// was really updated, where the log has no record of it.
+    ///
+    /// The log is where a page's last update is read from -- the detail
+    /// page's "Last Updated", the sitemap, the order an exchange lists
+    /// projects in -- but [`log_synced_change`] only began logging synced
+    /// updates in October 2026, so a record orrery last updated before then,
+    /// and has not updated since, reads as never updated after it was
+    /// created. This pages through everything orrery holds and, for each
+    /// record whose `updated` is later than the last change logged against
+    /// it, logs that update at orrery's time, as the sync would have had it
+    /// seen the update happen.
+    ///
+    /// It writes no record, and a second pass logs nothing the first did, so
+    /// it is safe to run again. One instance runs it, by election; the one
+    /// that finishes remembers having done so.
+    pub async fn backfill_last_changes() {
+        use common::elect;
+
+        match misc::get::<String>(LAST_CHANGE_BACKFILL).await {
+            Ok(Some(_)) => return,
+            Ok(None) => {}
+            Err(err) => {
+                tracing::error!("Could not tell whether the last changes were backfilled: {err}");
+                return;
+            }
+        }
+
+        let elected = elect::elect_instance(
+            "TASK_CLAIMS",
+            LAST_CHANGE_BACKFILL,
+            &Ulid::new().to_string(),
+            Duration::from_secs(7 * 24 * 60 * 60),
+        )
+        .await;
+
+        match elected {
+            Ok(true) => {}
+            Ok(false) => return,
+            Err(err) => {
+                tracing::error!("Backfilling last changes: the election failed: {err:#}");
+                return;
+            }
+        }
+
+        loop {
+            match backfill_last_changes_pass().await {
+                Ok((projects, events)) => {
+                    tracing::info!(
+                        "Backfilled the last update of {projects} projects and {events} events"
+                    );
+
+                    if let Err(err) =
+                        misc::set(LAST_CHANGE_BACKFILL, Timestamp::now().to_string()).await
+                    {
+                        tracing::error!("Could not record the last-change backfill: {err}");
+                    }
+
+                    return;
+                }
+                Err(err) => {
+                    tracing::error!("Backfilling last changes failed, retrying: {err:#}");
+                    sleep(Duration::from_secs(60)).await;
+                }
+            }
+        }
+    }
+
+    /// One pass of [`backfill_last_changes`], reporting how many projects
+    /// and events it logged an update for.
+    async fn backfill_last_changes_pass() -> Result<(usize, usize), anyhow::Error> {
+        let client = reqwest::Client::new();
+
+        let projects = backfill_from::<ProjectData>(
+            &client,
+            "https://scistarter.org/staff/sync/projects",
+            PageChange::ProjectEdit,
+            |data| {
+                let target = data.id.parse().ok()?;
+                let cursor = (
+                    data.changed.unwrap_or(data.updated),
+                    data.legacy_v2_project_id,
+                );
+                Some((target, Some(data.updated), cursor))
+            },
+        )
+        .await?;
+
+        let events = backfill_from::<EventData>(
+            &client,
+            "https://scistarter.org/staff/sync/events",
+            PageChange::EventEdit,
+            |data| {
+                let target = data.event_id.parse().ok()?;
+                let changed = data
+                    .changed
+                    .or(data.event_last_edited)
+                    .unwrap_or_else(Timestamp::now);
+                Some((target, data.event_last_edited, (changed, data.legacy_id)))
+            },
+        )
+        .await?;
+
+        Ok((projects, events))
+    }
+
+    /// Page through everything the sync endpoint `url` holds, from the
+    /// beginning, and log `update` against each record whose update the log
+    /// has no record of. `read` gives a record's id, when it was really
+    /// updated, if orrery knows, and its place in the paging cursor, the way
+    /// the sync reads them; a record it cannot read is passed over.
+    async fn backfill_from<T: serde::de::DeserializeOwned>(
+        client: &reqwest::Client,
+        url: &str,
+        update: PageChange,
+        read: impl Fn(&T) -> Option<(Ulid, Option<Timestamp>, (Timestamp, i32))>,
+    ) -> Result<usize, anyhow::Error> {
+        let mut cursor = (bookmark_time(None), 0);
+        let mut logged = 0;
+
+        loop {
+            let page: Vec<T> =
+                fetch_sync_page(client, url, &cursor.0.to_string(), cursor.1).await?;
+
+            let records: Vec<_> = page.iter().filter_map(&read).collect();
+            let next = records.iter().map(|(_, _, place)| *place).max();
+
+            let updates: Vec<(Ulid, Timestamp)> = records
+                .into_iter()
+                .filter_map(|(target, updated, _)| Some((target, updated?)))
+                .collect();
+
+            let logged_already = crate::page_change::last_changes(
+                updates.iter().map(|(target, _)| *target).collect(),
+            )
+            .await?;
+
+            for (target, updated) in updates {
+                let known = logged_already
+                    .get(&target)
+                    .and_then(|when| Timestamp::try_from(when.clone()).ok());
+
+                if known.is_none_or(|when| updated > when) {
+                    log_activity(
+                        TimeString::from(updated),
+                        update,
+                        None,
+                        target,
+                        "earlier update (from orrery)".to_string(),
+                    )
+                    .await?;
+                    logged += 1;
+                }
+            }
+
+            match next {
+                Some(next) if next > cursor => cursor = next,
+                _ => return Ok(logged),
+            }
         }
     }
 
@@ -1344,42 +1546,17 @@ mod sync {
 
             tracing::info!("Retrieving projects since {} {}...", &last_update, last_id);
 
-            let projects: Vec<ProjectData> = match client
-                .get("https://scistarter.org/staff/sync/projects")
-                .bearer_auth(env!("SYNC_TOKEN"))
-                .query(&[("since", &last_update), ("last_id", &last_id.to_string())])
-                .send()
-                .await
+            let projects: Vec<ProjectData> = match fetch_sync_page(
+                &client,
+                "https://scistarter.org/staff/sync/projects",
+                &last_update,
+                last_id,
+            )
+            .await
             {
-                Ok(response) => match response.error_for_status() {
-                    Ok(resp) => {
-                        let response_text = match resp.text().await {
-                            Ok(text) => text,
-                            Err(e) => {
-                                eprintln!("Failed to read response body: {}", e);
-                                sleep(Duration::from_secs(60)).await;
-                                continue;
-                            }
-                        };
-
-                        match serde_json::from_str(&response_text) {
-                            Ok(projects) => projects,
-                            Err(e) => {
-                                eprintln!("JSON parsing error: {}", e);
-                                eprintln!("Response body: {}", response_text);
-                                sleep(Duration::from_secs(60)).await;
-                                continue;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("HTTP error: {}", e);
-                        sleep(Duration::from_secs(60)).await;
-                        continue;
-                    }
-                },
-                Err(e) => {
-                    eprintln!("Request error: {}", e);
+                Ok(projects) => projects,
+                Err(err) => {
+                    eprintln!("{err:#}");
                     sleep(Duration::from_secs(60)).await;
                     continue;
                 }
@@ -1481,12 +1658,8 @@ mod sync {
                 proj.extra = data.extra;
                 proj.draft = data.draft;
                 proj.name = data.name;
-                proj.tags = data
-                    .tags
-                    .split("||")
-                    .filter_map(|s| {
-                        InsensitiveString::from(s.trim_matches('|').trim()).empty_as_none()
-                    })
+                proj.tags = crate::exchange::orrery::orrery_tags(&data.tags)
+                    .map(InsensitiveString::from)
                     .collect();
                 proj.participation_degree = match data.participation_degree.as_str() {
                     "Collegial" => ProjectParticipationDegree::Collegial,
@@ -1913,6 +2086,10 @@ mod sync {
         part_of: Option<String>, // Option<Ulid>,
         location_type: String,
         entirely_online: bool,
+        /// Whether the event, held at its address, can also be joined online.
+        /// Absent from an orrery that predates hybrid events.
+        #[serde(default)]
+        also_online: bool,
         location_name: String,
         location_description: String,
         address: String,
@@ -1932,6 +2109,16 @@ mod sync {
         /// Orrery's ids of the event's audiences, joined by commas.
         audience_ids: Option<String>,
         ticketing_begins: Option<Timestamp>, // TimeString,
+        /// Where people get tickets or register, and what attending costs.
+        /// Absent from an orrery that predates them.
+        #[serde(default)]
+        ticket_url: String,
+        #[serde(default)]
+        cost: String,
+        /// The group the event is limited to; empty when it's open to
+        /// everyone, or from an orrery that predates it.
+        #[serde(default)]
+        limited_to: String,
         outcomes_label: String,
         outcomes_link: String,
         circuit_id: String,
@@ -2010,42 +2197,17 @@ mod sync {
 
             tracing::info!("Retrieving events since {} {}...", &last_update, last_id);
 
-            let events: Vec<EventData> = match client
-                .get("https://scistarter.org/staff/sync/events")
-                .bearer_auth(env!("SYNC_TOKEN"))
-                .query(&[("since", &last_update), ("last_id", &last_id.to_string())])
-                .send()
-                .await
+            let events: Vec<EventData> = match fetch_sync_page(
+                &client,
+                "https://scistarter.org/staff/sync/events",
+                &last_update,
+                last_id,
+            )
+            .await
             {
-                Ok(response) => match response.error_for_status() {
-                    Ok(resp) => {
-                        let response_text = match resp.text().await {
-                            Ok(text) => text,
-                            Err(e) => {
-                                eprintln!("Failed to read response body: {}", e);
-                                sleep(Duration::from_secs(60)).await;
-                                continue;
-                            }
-                        };
-
-                        match serde_json::from_str(&response_text) {
-                            Ok(events) => events,
-                            Err(e) => {
-                                eprintln!("JSON parsing error: {}", e);
-                                eprintln!("Response body: {}", response_text);
-                                sleep(Duration::from_secs(60)).await;
-                                continue;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("HTTP error: {}", e);
-                        sleep(Duration::from_secs(60)).await;
-                        continue;
-                    }
-                },
-                Err(e) => {
-                    eprintln!("Request error: {}", e);
+                Ok(events) => events,
+                Err(err) => {
+                    eprintln!("{err:#}");
                     sleep(Duration::from_secs(60)).await;
                     continue;
                 }
@@ -2116,10 +2278,7 @@ mod sync {
                 );
                 evt.exchange = data.exchange;
 
-                evt.tags = data
-                    .tags
-                    .trim_matches('|')
-                    .split("||")
+                evt.tags = crate::exchange::orrery::orrery_tags(&data.tags)
                     .map(|s| s.into())
                     .collect();
 
@@ -2161,6 +2320,7 @@ mod sync {
                 evt.part_of = data.part_of.and_then(|s| s.parse().ok());
                 evt.location_type = data.location_type;
                 evt.entirely_online = data.entirely_online;
+                evt.also_online = data.also_online;
                 evt.location_name = data.location_name;
                 evt.location_description = data.location_description;
                 evt.address = data.address;
@@ -2189,6 +2349,9 @@ mod sync {
                     }
                 };
                 evt.ticketing_begins = data.ticketing_begins.map(|ts| ts.into());
+                evt.ticket_url = data.ticket_url;
+                evt.cost = data.cost;
+                evt.limited_to = data.limited_to;
                 evt.outcomes_label = data.outcomes_label.empty_as_none();
                 evt.outcomes_link = data.outcomes_link.empty_as_none();
                 evt.circuit_id = data.circuit_id.empty_as_none();

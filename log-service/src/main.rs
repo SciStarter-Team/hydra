@@ -7,6 +7,7 @@ use tokio::{signal, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 
 mod bridges;
+mod contributor_joins;
 mod engagement;
 mod exchange;
 mod foundations;
