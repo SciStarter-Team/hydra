@@ -15,7 +15,7 @@ sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "sqlite-load-ex
 tokio = { version = "1.47.1", features = ["full"] }
 ulid = { version = "1.2.1", features = ["serde"] }
 jiff = "0.2.15"
-reqwest = { version = "0.12.23", features = ["json"] }
+reqwest = { version = "0.12.23", default-features = false, features = ["json", "rustls-tls", "charset", "http2", "system-proxy"] }
 djangohashers = "1.8.2"
 webauthn-rs = { version = "0.5.2", features = ["danger-allow-state-serialisation"] }
 uuid = "1.18"
