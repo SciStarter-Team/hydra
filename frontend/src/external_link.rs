@@ -69,7 +69,7 @@ pub struct ClickthroughBeacon {
     pub from_path: String,
 }
 
-/// Record an outbound external-link click reported by `static/js/clickthrough.js`.
+/// Record an outbound external-link click reported by `static/js/pagelife.js`.
 ///
 /// This replaces the old server-side href rewriting. Links stay direct; a
 /// delegated `sendBeacon` handler posts here on external-link clicks. It records

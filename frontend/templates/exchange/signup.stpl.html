@@ -6,6 +6,7 @@
     <title>Exchange</title>
     <%+ crate::component::HtmxRuntime::default() %>
     <link href="/-static/exchange/css/styles.css" rel="stylesheet">
+    <script src="/-static/js/pagelife.js" defer></script>
   </head>
   <body hx-headers:inherited='{"X-CSRFToken": "<%= csrftoken %>"}'>
     <div class="login-wrapper back-wrapper">

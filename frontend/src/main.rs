@@ -317,6 +317,10 @@ fn user_facing() -> impl Endpoint {
         .at("/go/*friendly_url", get(gourl::handle_go_url))
         .at("/-link/:link_id", get(external_link::handle_external_link))
         .at("/-clickthrough", post(external_link::record_clickthrough))
+        .at(
+            "/-pageview",
+            post(middleware::analytics::record_activated_view),
+        )
         .nest("/badges", badge::routes())
         .nest("/evolveme", evolveme::routes())
         .nest("/exchange", exchange::routes())
