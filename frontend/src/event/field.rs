@@ -66,6 +66,8 @@ pub enum EventFieldValue {
     Contacts(Box<[Contact]>),
     PageEditorIds(Box<[Ulid]>),
     Reviewed(bool),
+    /// When the event was first made public; see `crate::submission`.
+    PublishedAt(Option<TimeString>),
     FacebookEvent(FacebookEvent),
     /// The group the event is limited to, in the organizer's words; empty
     /// when it's open to everyone.
@@ -150,6 +152,7 @@ impl EventField {
             EventFieldValue::Contacts(_) => EventFieldType::Contacts,
             EventFieldValue::PageEditorIds(_) => EventFieldType::PageEditorIds,
             EventFieldValue::Reviewed(_) => EventFieldType::Reviewed,
+            EventFieldValue::PublishedAt(_) => EventFieldType::PublishedAt,
             EventFieldValue::FacebookEvent(_) => EventFieldType::FacebookEvent,
         }
     }
@@ -319,6 +322,21 @@ impl EventField {
         sqlx::query!(
             "UPDATE events SET created = ? WHERE event_id = ?",
             created_str,
+            event_id_str
+        )
+        .execute(db())
+        .await?;
+
+        Ok(())
+    }
+
+    async fn save_published_at(&self, published_at: &Option<TimeString>) -> Result<(), Error> {
+        use common::shared::db;
+
+        let event_id_str = self.event_id.to_string();
+        sqlx::query!(
+            "UPDATE events SET published_at = ? WHERE event_id = ?",
+            published_at,
             event_id_str
         )
         .execute(db())
@@ -894,6 +912,23 @@ impl EventField {
         .await?;
         let created = TimeString::try_from(created_str)?;
         Ok(EventField::new(event_id, EventFieldValue::Created(created)))
+    }
+
+    async fn read_published_at(event_id: Ulid) -> Result<Self, Error> {
+        use common::shared::db;
+        let event_id_str = event_id.to_string();
+        let published_at = sqlx::query_scalar!(
+            "SELECT published_at FROM events WHERE event_id = ?",
+            event_id_str
+        )
+        .fetch_one(db())
+        .await?
+        .map(TimeString::try_from)
+        .transpose()?;
+        Ok(EventField::new(
+            event_id,
+            EventFieldValue::PublishedAt(published_at),
+        ))
     }
 
     async fn read_reviewed(event_id: Ulid) -> Result<Self, Error> {
@@ -1488,6 +1523,9 @@ impl LoadStorePeered for EventField {
             EventFieldValue::Contacts(contacts) => self.save_contacts(contacts).await,
             EventFieldValue::PageEditorIds(ids) => self.save_page_editor_ids(ids).await,
             EventFieldValue::Reviewed(reviewed) => self.save_reviewed(reviewed).await,
+            EventFieldValue::PublishedAt(published_at) => {
+                self.save_published_at(published_at).await
+            }
             EventFieldValue::FacebookEvent(facebook_event) => {
                 self.save_facebook_event(facebook_event).await
             }
@@ -1584,6 +1622,7 @@ impl LoadStorePeered for EventField {
             EventFieldType::Contacts => Self::read_contacts(event_id).await,
             EventFieldType::PageEditorIds => Self::read_page_editor_ids(event_id).await,
             EventFieldType::Reviewed => Self::read_reviewed(event_id).await,
+            EventFieldType::PublishedAt => Self::read_published_at(event_id).await,
             EventFieldType::FacebookEvent => Self::read_facebook_event(event_id).await,
         }
     }

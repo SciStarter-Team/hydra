@@ -28,7 +28,8 @@ use crate::contact::{edit_contact_person, edit_manager};
 use crate::page_change::Stored;
 use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
-use crate::project::all::{ProjectAll, Submission, persist_new_project};
+use crate::project::all::{ProjectAll, persist_new_project};
+use crate::submission::Submission;
 use crate::project::field_source::FieldSource;
 use crate::project::location::{ANYWHERE, AT_AN_ADDRESS, IN_A_RANGE};
 
@@ -1295,7 +1296,7 @@ pub async fn project_add(body: String) -> Result<Response, Error> {
             key_email: validation.email.clone().unwrap_or_default(),
             notify_reviewers: validation.api_projects_notify_reviewers,
         };
-        persist_new_project(proj, false, api_user_id, submission).await?
+        persist_new_project(proj, false, api_user_id, submission, None).await?
     } else {
         let before = Stored::of_project(project_id).await;
         proj.store().await?;

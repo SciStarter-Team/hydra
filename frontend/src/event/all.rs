@@ -106,6 +106,10 @@ pub struct EventAll {
     /// through to approve or reject it.
     pub reviewed: bool,
 
+    /// When the event was first made public, or None while it never has
+    /// been.
+    pub published_at: Option<TimeString>,
+
     /// What the organizer said about promoting the event on Facebook.
     pub facebook_event: FacebookEvent,
 }
@@ -219,7 +223,8 @@ impl LoadStorePeered for EventAll {
               "also_online",
               "ticket_url",
               "cost",
-              "limited_to"
+              "limited_to",
+              "published_at"
             )
             values (
               ?1,
@@ -274,7 +279,8 @@ impl LoadStorePeered for EventAll {
               ?36,
               ?37,
               ?38,
-              ?39
+              ?39,
+              ?40
             )"#,
             event_id,
             self.created,
@@ -315,6 +321,7 @@ impl LoadStorePeered for EventAll {
             self.ticket_url,
             self.cost,
             self.limited_to,
+            self.published_at,
         )
         .execute(&mut tx)
         .await?;
@@ -512,7 +519,8 @@ impl LoadStorePeered for EventAll {
                 facebook_event as "facebook_event: bool",
                 facebook_event_url,
                 facebook_event_requested as "facebook_event_requested: bool",
-                also_online as "also_online: bool", ticket_url, cost, limited_to
+                also_online as "also_online: bool", ticket_url, cost, limited_to,
+                published_at
             FROM events WHERE event_id = ?"#,
             event_id_str
         )
@@ -669,6 +677,11 @@ impl LoadStorePeered for EventAll {
             instances,
             exchange: event_row.exchange,
             reviewed: event_row.reviewed,
+            published_at: event_row
+                .published_at
+                .map(TimeString::try_from)
+                .transpose()
+                .map_err(|e| anyhow::anyhow!("Invalid published_at TimeString: {}", e))?,
             facebook_event: FacebookEvent::from_columns(
                 event_row.facebook_event,
                 event_row.facebook_event_url,

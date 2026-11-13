@@ -1,8 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;700;800;900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/-static/fonts/fonts.css" />
 <link rel="stylesheet" type="text/css" href="/-static/css/style.css" />
 <%# https://tailwindcss.com/docs/styling-with-utility-classes %>
 <link rel=stylesheet href="/-static/css/style.css"/>
@@ -12,7 +10,7 @@
   <link rel="stylesheet" href="/-static/webawesome/styles/utilities.css" />
   <%# Leaving out WebAwesome's native.css on purpose, it's optional and would conflict with Tailwind %>
   <link rel="stylesheet" href="/-static/webawesome/styles/themes/default.css" />
-  <script type="module" src="/-static/webawesome/webawesome.loader.js"></script>
+  <script type="module" src="/-static/js/webawesome.js"></script>
   <style>body:not([data-loading-phase-over]):has(:not(:defined)),:not(:defined){opacity:0;}</style>
   <script>setTimeout(() => {document.body.dataset.loadingPhaseOver=true;}, 2000);</script>
 <% } %>
@@ -43,8 +41,8 @@
   <script src="/-static/slick.js"></script>
 <% } %>
 <% if self.enable_geosearch { %>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@opencage/geosearch-bundle/dist/css/autocomplete-theme-classic.min.css" />
-  <script src="https://cdn.jsdelivr.net/npm/@opencage/geosearch-bundle"></script>
+  <link rel="stylesheet" href="/-static/mirror/cdn.jsdelivr.net/npm/@opencage/geosearch-bundle@0.4.0/dist/css/autocomplete-theme-classic.min.css" />
+  <script src="/-static/mirror/cdn.jsdelivr.net/npm/@opencage/geosearch-bundle@0.4.0/dist/js/opencage-geosearch-bundle.js"></script>
   <style>
     .aa-Autocomplete { --aa-primary-color-rgb: 0, 0, 0; }
     .aa-Form {

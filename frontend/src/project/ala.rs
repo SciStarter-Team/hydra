@@ -50,13 +50,14 @@ use ulid::Ulid;
 
 use super::{
     ProjectStatus,
-    all::{ProjectAll, Submission, create_page_entity, persist_new_project},
+    all::{ProjectAll, create_page_entity, persist_new_project},
     field::{FIELDS_OF_SCIENCE_VOCABULARY, ProjectFieldType},
     field_source::FieldSource,
     location::{ANYWHERE, IN_A_RANGE},
 };
 use crate::{
     contact::{edit_manager, remove_manager},
+    submission::Submission,
     page_change::Stored,
     peering::LoadStorePeered,
 };
@@ -594,7 +595,7 @@ async fn write(
     let project_id = project.project_id;
 
     if is_new {
-        persist_new_project(project, false, owner, Submission::Imported).await?;
+        persist_new_project(project, false, owner, Submission::Imported, None).await?;
     } else {
         let name = project.name.clone();
         let before = Stored::of_project(project_id).await;

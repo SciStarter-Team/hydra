@@ -257,7 +257,9 @@ struct CsmHomeContent {
     phase: CsmPhase,
     acts: Option<ActsToDateResponse>,
     phase_override: bool,
-    show_social_feed: bool,
+    /// The first page of SciStarter's social media posts, when the page
+    /// shows them and they could be read.
+    social_feed: Option<crate::social_feed::FeedPage>,
 }
 
 #[handler]
@@ -269,11 +271,27 @@ async fn csm_home(
 ) -> Result<Response, anyhow::Error> {
     let info = CsmPhaseInfo::detect(query.phase.as_deref()).await;
 
-    let show_social_feed = {
-        let today = jiff::Zoned::now().date();
-        let month: i32 = today.month().into();
-        let day: i32 = today.day().into();
-        month == 3 && day >= 25
+    // Before April the posts are shown only from March 25; once the month
+    // has begun they always are.
+    let show_social_feed = match info.phase {
+        CsmPhase::PreApril => {
+            let today = jiff::Zoned::now().date();
+            let month: i32 = today.month().into();
+            let day: i32 = today.day().into();
+            month == 3 && day >= 25
+        }
+        CsmPhase::April | CsmPhase::AprilReached | CsmPhase::May => true,
+    };
+
+    // A feed that cannot be read leaves its section out, rather than the
+    // whole page failing.
+    let social_feed = if show_social_feed {
+        crate::social_feed::page(None)
+            .await
+            .inspect_err(|error| tracing::warn!("Reading the social feed failed: {error:#}"))
+            .ok()
+    } else {
+        None
     };
 
     let layout = StandardLayout::new(
@@ -282,7 +300,7 @@ async fn csm_home(
             phase: info.phase,
             acts: info.acts_to_date,
             phase_override: info.phase_override,
-            show_social_feed,
+            social_feed,
         },
     )
     .prepare(user_info.clone())

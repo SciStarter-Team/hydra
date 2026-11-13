@@ -38,6 +38,7 @@ use crate::markdown::user_content_html;
 use crate::middleware::authorization::Authenticated;
 use crate::middleware::error_pages::error_response;
 use crate::thumbnail::thumbnail_url;
+use crate::video::YouTubeVideo;
 
 #[derive(TemplateOnce)]
 #[template(path = "ambassador/page.stpl.html")]
@@ -206,8 +207,8 @@ impl Viewer {
 
 /// How the profile shows an ambassador's introduction video.
 enum Video {
-    /// A YouTube video, as the URL of its embeddable player.
-    Embed(String),
+    /// A YouTube video, shown as a preview that loads its player on request.
+    Embed(YouTubeVideo),
     /// Anything else, as a link.
     Link(String),
 }
@@ -218,47 +219,11 @@ impl Video {
         if url.is_empty() {
             return None;
         }
-        Some(match youtube_embed_url(url) {
-            Some(embed) => Video::Embed(embed),
+        Some(match YouTubeVideo::from_url(url) {
+            Some(video) => Video::Embed(video),
             None => Video::Link(url.to_string()),
         })
     }
-}
-
-/// The embeddable player for a YouTube watch, share, shorts, live or embed
-/// URL, or `None` if `url` is not a YouTube video.
-fn youtube_embed_url(url: &str) -> Option<String> {
-    let parsed = url::Url::parse(url).ok()?;
-    if !matches!(parsed.scheme(), "http" | "https") {
-        return None;
-    }
-    let host = parsed
-        .host_str()?
-        .trim_start_matches("www.")
-        .trim_start_matches("m.");
-    let mut segments = parsed.path_segments()?.filter(|s| !s.is_empty());
-    let id = match host {
-        "youtu.be" => segments.next()?.to_string(),
-        "youtube.com" | "youtube-nocookie.com" => match segments.next()? {
-            "watch" => parsed
-                .query_pairs()
-                .find(|(key, _)| key == "v")
-                .map(|(_, value)| value.into_owned())?,
-            "embed" | "shorts" | "live" | "v" => segments.next()?.to_string(),
-            _ => return None,
-        },
-        _ => return None,
-    };
-    // Video ids are drawn from this alphabet; anything else is not one, and
-    // must not reach the iframe's URL.
-    if id.is_empty()
-        || !id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-    {
-        return None;
-    }
-    Some(format!("https://www.youtube-nocookie.com/embed/{id}"))
 }
 
 /// An event on a profile.
@@ -581,35 +546,6 @@ pub async fn contact(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn youtube_urls_become_embeds() {
-        let embed = Some("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ".to_string());
-        for url in [
-            "https://youtu.be/dQw4w9WgXcQ",
-            "https://youtu.be/dQw4w9WgXcQ?t=42",
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=x",
-            "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
-            "https://youtube.com/shorts/dQw4w9WgXcQ",
-            "https://www.youtube.com/embed/dQw4w9WgXcQ",
-        ] {
-            assert_eq!(youtube_embed_url(url), embed, "{url}");
-        }
-    }
-
-    #[test]
-    fn other_urls_are_not_youtube_embeds() {
-        for url in [
-            "https://vimeo.com/123",
-            "https://www.youtube.com/channel/abc",
-            "https://youtu.be/",
-            "javascript:alert(1)",
-            "https://youtu.be/abc%22onload",
-            "not a url",
-        ] {
-            assert_eq!(youtube_embed_url(url), None, "{url}");
-        }
-    }
 
     #[test]
     fn directory_links_keep_the_search() {

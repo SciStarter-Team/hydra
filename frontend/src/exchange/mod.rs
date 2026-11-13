@@ -28,6 +28,9 @@ pub struct SubmissionExchange {
     /// What the add forms say about how the exchange handles a submission,
     /// as [`ExchangeSettings::submission_notice`] has it.
     pub notice: String,
+    /// Whether only the exchange's own people may add to it, as
+    /// [`ExchangeSettings::restricted_add`] has it.
+    pub restricted_add: bool,
 }
 
 impl SubmissionExchange {
@@ -58,7 +61,23 @@ impl SubmissionExchange {
             path_id,
             name: row.name,
             notice: settings.submission_notice,
+            restricted_add: settings.restricted_add,
         }))
+    }
+
+    /// Whether what `submitter` adds through this exchange is published as
+    /// it arrives rather than waiting for the exchange's approval.
+    ///
+    /// An exchange that lets only its own people add to it publishes what
+    /// they add, as orrery does. Anyone else who reaches its add forms --
+    /// orrery only hides the button -- waits for its approval like any other
+    /// submission.
+    pub async fn publishes_for(&self, submitter: &BasicInfo) -> Result<bool, Error> {
+        if !self.restricted_add {
+            return Ok(false);
+        }
+
+        access::may_manage(Ulid::from_string(&self.exchange_id)?, Some(submitter)).await
     }
 }
 

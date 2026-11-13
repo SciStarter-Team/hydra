@@ -1,0 +1,4 @@
+<%# The social feed's posts as a grid of cards: see crate::social_feed. %>
+<ul class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-left list-none p-0 m-0">
+  <%+ crate::social_feed::SocialFeedPage { page: self.page } %>
+</ul>

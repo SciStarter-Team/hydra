@@ -210,6 +210,8 @@ pub enum ProjectFieldValue {
     ScistarterLastEditor(Option<Ulid>),
     ScistarterLastEdited(Option<TimeString>),
     Reviewed(bool),
+    /// When the project was first made public; see `crate::submission`.
+    PublishedAt(Option<TimeString>),
     /// Why a reviewer declined to publish this project. Selecting a reason
     /// emails the submitter; see `admin::projects::notify_rejection`.
     RejectionReason(ProjectRejectionReason),
@@ -506,6 +508,7 @@ impl ProjectField {
             ProjectFieldValue::ScistarterLastEditor(_) => ProjectFieldType::ScistarterLastEditor,
             ProjectFieldValue::ScistarterLastEdited(_) => ProjectFieldType::ScistarterLastEdited,
             ProjectFieldValue::Reviewed(_) => ProjectFieldType::Reviewed,
+            ProjectFieldValue::PublishedAt(_) => ProjectFieldType::PublishedAt,
             ProjectFieldValue::RejectionReason(_) => ProjectFieldType::RejectionReason,
             ProjectFieldValue::Draft(_) => ProjectFieldType::Draft,
             ProjectFieldValue::Name(_) => ProjectFieldType::Name,
@@ -1796,6 +1799,23 @@ impl ProjectField {
         ))
     }
 
+    async fn read_published_at(project_id: Ulid) -> Result<Self, Error> {
+        let project_id_str = project_id.to_string();
+        let published_at = sqlx::query_scalar!(
+            "SELECT published_at FROM projects WHERE project_id = ?",
+            project_id_str
+        )
+        .fetch_one(db())
+        .await?
+        .map(TimeString::try_from)
+        .transpose()
+        .map_err(|e| anyhow::anyhow!("Invalid published_at TimeString: {}", e))?;
+        Ok(ProjectField::new(
+            project_id,
+            ProjectFieldValue::PublishedAt(published_at),
+        ))
+    }
+
     async fn read_rejection_reason(project_id: Ulid) -> Result<Self, Error> {
         let project_id_str = project_id.to_string();
         let reason = sqlx::query_scalar!(
@@ -3068,6 +3088,18 @@ impl ProjectField {
         Ok(())
     }
 
+    async fn save_published_at(&self, published_at: &Option<TimeString>) -> Result<(), Error> {
+        let project_id_str = self.project_id.to_string();
+        sqlx::query!(
+            "UPDATE projects SET published_at = ? WHERE project_id = ?",
+            published_at,
+            project_id_str
+        )
+        .execute(db())
+        .await?;
+        Ok(())
+    }
+
     async fn save_rejection_reason(&self, reason: ProjectRejectionReason) -> Result<(), Error> {
         let project_id_str = self.project_id.to_string();
         sqlx::query!(
@@ -3838,6 +3870,9 @@ impl LoadStorePeered for ProjectField {
             }
             ProjectFieldValue::Extra(extra) => self.save_extra(extra).await,
             ProjectFieldValue::Reviewed(reviewed) => self.save_reviewed(*reviewed).await,
+            ProjectFieldValue::PublishedAt(published_at) => {
+                self.save_published_at(published_at).await
+            }
             ProjectFieldValue::RejectionReason(reason) => self.save_rejection_reason(*reason).await,
             ProjectFieldValue::ParticipantInstructionsEmail(participant_instructions_email) => {
                 self.save_participant_instructions_email(participant_instructions_email)
@@ -4084,6 +4119,7 @@ impl LoadStorePeered for ProjectField {
             ProjectFieldType::PageCreatorId => Self::read_page_creator_id(project_id).await,
             ProjectFieldType::Extra => Self::read_extra(project_id).await,
             ProjectFieldType::Reviewed => Self::read_reviewed(project_id).await,
+            ProjectFieldType::PublishedAt => Self::read_published_at(project_id).await,
             ProjectFieldType::RejectionReason => Self::read_rejection_reason(project_id).await,
             ProjectFieldType::ParticipantInstructionsEmail => {
                 Self::read_participant_instructions_email(project_id).await

@@ -19,6 +19,7 @@ use crate::middleware::analytics::{Device, Interaction};
 use crate::middleware::authorization::Authenticated;
 use crate::page_change::last_changes;
 use crate::peering::LoadStorePeered;
+use crate::submission::SubmissionKind;
 
 use super::tracking::{self, TrackedAction, TrackedPage};
 use super::{
@@ -1862,13 +1863,6 @@ impl StaffMember {
     }
 }
 
-/// What can be submitted through an exchange and wait for its approval.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SubmissionKind {
-    Project,
-    Event,
-}
-
 impl SubmissionKind {
     /// The path segment naming the kind in approve and reject URLs.
     fn segment(self) -> &'static str {
@@ -1883,13 +1877,6 @@ impl SubmissionKind {
             "projects" => Some(SubmissionKind::Project),
             "events" => Some(SubmissionKind::Event),
             _ => None,
-        }
-    }
-
-    fn entity_kind(self) -> crate::entity::EntityKind {
-        match self {
-            SubmissionKind::Project => crate::entity::EntityKind::Project,
-            SubmissionKind::Event => crate::entity::EntityKind::Event,
         }
     }
 }
@@ -2843,6 +2830,11 @@ pub async fn approve_submission(
 
     Entity::publish_page(kind.entity_kind(), id, &name).await?;
     mark_reviewed(kind, id).await?;
+
+    // Published either way; the submitter is told if the mail can be queued.
+    if let Err(err) = crate::submission::mark_published(kind, id).await {
+        tracing::error!(%id, ?kind, ?err, "Could not tell the submitter their submission was published");
+    }
 
     tracking::record(
         exchange.exchange_id,

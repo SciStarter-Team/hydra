@@ -45,11 +45,10 @@
         <section class="mb-8 max-w-[800px]">
           <h2 class="font-semibold text-2xl text-primary-dark mb-2">More about <%= self.first_name %></h2>
           <div class="ss-text [&_a]:text-primary-action [&_a]:underline"><%- self.bio_html %></div>
-          <% match &self.video { Some(Video::Embed(src)) => { %>
+          <% match &self.video { Some(Video::Embed(video)) => { %>
+            <% let title = format!("{}'s introduction video", self.first_name); %>
             <div class="aspect-video mt-4">
-              <iframe class="w-full h-full" src="<%= src %>" title="<%= self.first_name %>'s introduction video"
-                      allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="lazy"></iframe>
+              <%+ crate::video::VideoPreview { video, title: &title, class: "", style: "width:100%;height:100%;position:relative;" } %>
             </div>
           <% } Some(Video::Link(href)) => { %>
             <p class="mt-4"><a class="text-primary-action underline" href="<%= href %>" rel="nofollow ugc noopener noreferrer">Watch <%= self.first_name %>'s introduction video</a></p>

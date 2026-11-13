@@ -272,8 +272,7 @@
     <div class="flex flex-col w-[600px] max-w-full md:pl-[40px] relative">
       <h2 class="text-white text-lg md:text-xl font-condensed uppercase mt-[30px] md:mt-[-10px] mb-0">Subscribe to our Newsletter</h2>
       <p class="text-white mb-4">Get these updates and more in your inbox every two weeks.</p>
-      <div class="ctct-inline-form" data-form-id="029fabe3-ae81-4e34-b572-e21191957732"></div>
-      <p class="text-white text-xs opacity-80 mb-0">Newsletter signup is protected by reCAPTCHA. The Google <a href="https://policies.google.com/privacy" class="underline hover:opacity-100">Privacy Policy</a> and <a href="https://policies.google.com/terms" class="underline hover:opacity-100">Terms of Service</a> apply.</p>
+      <a href="/go/newsletter" class="btn btn-primary self-start mb-2">Subscribe</a>
       <img src="/-static/img/home/newsletter-ribbon.svg" class="absolute -top-8 w-[30px] md:left-[-30px] md:w-[50px]" />
     </div>
   </div>
@@ -398,32 +397,5 @@
         { breakpoint: 480, settings: { slidesToShow: 1, slidesToScroll: 1 } }
       ]
     });
-  });
-</script>
-
-<!-- Constant Contact Active Forms -->
-<script>var _ctct_m = "8ca4b7ea493c9e5987c082de51149ec1";</script>
-<script id="signupScript" src="//static.ctctcdn.com/js/signup-form-widget/current/signup-form-widget.min.js" async defer></script>
-<script>
-  document.addEventListener("DOMContentLoaded", function() {
-    const interval = setInterval(() => {
-      const form = document.querySelector('.ctct-form-custom');
-      const emailField = document.querySelector('#email_address_field_0');
-      const input = document.querySelector('#email_address_0');
-      const button = document.querySelector('.ctct-form-button');
-
-      if (form && emailField && input && button) {
-        clearInterval(interval);
-        const label = document.querySelector('#email_address_label_0');
-        if (label) label.remove();
-        input.setAttribute('placeholder', 'Email');
-        input.removeAttribute('style');
-        const flexWrapper = document.createElement('div');
-        flexWrapper.className = 'cc-flex-wrapper';
-        flexWrapper.appendChild(input);
-        flexWrapper.appendChild(button);
-        emailField.replaceWith(flexWrapper);
-      }
-    }, 200);
   });
 </script>

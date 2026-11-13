@@ -5,7 +5,7 @@
   <div class="add-form-shell">
     <h1 class="add-form-title">Add a Project</h1>
 
-    <%+ crate::add::ExchangeNotice { exchange: self.exchange.as_ref(), noun: "project", path: "/add/project", oob: false } %>
+    <%+ crate::add::ExchangeNotice { exchange: self.exchange.as_ref(), publishes: self.publishes, noun: "project", path: "/add/project", oob: false } %>
 
     <%+ crate::component::floating_field::FormErrorNotice { error } %>
 

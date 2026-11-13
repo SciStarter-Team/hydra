@@ -4,15 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= crate::i18n::tr("{name} Badge").replace("{name}", &self.name) %></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/-static/fonts/fonts.css" />
     <link rel="stylesheet" type="text/css" href="/-static/css/style.css" />
     <script src="/-static/js/scripts.js"></script>
     <script src="/-static/js/pagelife.js" defer></script>
     <script src="/-static/js/copy-text.js" defer></script>
     <% if self.own_badge { %>
-    <script type="text/javascript" src="https://platform-api.sharethis.com/js/sharethis.js#property=684be7fdeb2dda0012da59f3&product=inline-share-buttons&source=platform" async="async"></script>
+    <script src="/-static/js/social_share.js" defer></script>
     <% } %>
     <%# Everyone's view of this page carries these, crawlers' included:
         they say what was earned, never who earned it. %>
@@ -85,9 +83,14 @@
               <div class="badge-option-body">
                 <h3 class="badge-subheading"><%= crate::i18n::tr(crate::badge::SOCIAL_HEADING) %></h3>
                 <p class="ss-xxs mb-2"><%= crate::i18n::tr(crate::badge::SOCIAL_EXPLANATION) %></p>
-                <div class="min-h-[70px]">
-                  <div class="sharethis-inline-share-buttons" data-url="<%= &self.canonical_url %>" data-title="<%= &self.share_text %>" data-message="<%= &self.share_message %>"></div>
-                </div>
+                <%+ crate::share::ShareLinks {
+                    url: &self.canonical_url,
+                    text: &self.share_text,
+                    image: &self.card_url,
+                    target_id: None,
+                    email: Some(crate::share::EmailShare { subject: &self.link_title, body: &self.share_message }),
+                    centered: false,
+                } %>
                 <%# The words the share buttons post, without the link: every
                     share dialog attaches that itself. For pasting into the
                     dialogs that cannot be given any words of ours. %>

@@ -1805,8 +1805,6 @@ pub async fn share_modal(Path(id): Path<String>) -> poem::Result<poem::Response>
         _ => "/projects/",
     };
     let share_url = format!("https://{}{}{}", DOMAIN, path_prefix, row.slug);
-    let url_enc = urlencoding::encode(&share_url);
-    let name_enc = urlencoding::encode(&row.name);
 
     #[derive(TemplateOnce)]
     #[template(path = "pages/detail_page_share_modal.stpl.html")]
@@ -1817,15 +1815,9 @@ pub async fn share_modal(Path(id): Path<String>) -> poem::Result<poem::Response>
         share_url: String,
         /// Absolute URL of the uploaded image, shared to Instagram. Empty when none.
         image: String,
-        facebook_url: String,
-        twitter_url: String,
-        linkedin_url: String,
     }
 
     let html = ShareModal {
-        facebook_url: format!("https://www.facebook.com/sharer/sharer.php?u={url_enc}"),
-        twitter_url: format!("https://twitter.com/intent/tweet?url={url_enc}&text={name_enc}"),
-        linkedin_url: format!("https://www.linkedin.com/sharing/share-offsite/?url={url_enc}"),
         target_id: id,
         name: row.name,
         image: row.image,

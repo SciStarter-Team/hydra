@@ -15,7 +15,7 @@ use crate::project::field::{
     STAKEHOLDERS_VOCABULARY, SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY,
 };
 use crate::project::field_source::FieldSource;
-use crate::project::publish::Submitter;
+use crate::submission::{SubmissionKind, Submitter, notice_fields};
 use crate::project::{ProjectRejectionReason, SUBMISSION_REJECTION_NOTICES};
 use common::insensitivestring::InsensitiveString;
 use common::message::log::Housekeeping;
@@ -1473,8 +1473,7 @@ async fn notify_rejection(project_id: Ulid) -> Result<(), anyhow::Error> {
     let project_id_str = project_id.to_string();
 
     let project = sqlx::query!(
-        r#"SELECT name,
-                  rejection_reason as "reason: ProjectRejectionReason",
+        r#"SELECT rejection_reason as "reason: ProjectRejectionReason",
                   rejection_notified as "notified: ProjectRejectionReason"
            FROM projects WHERE project_id = ?"#,
         project_id_str
@@ -1486,20 +1485,17 @@ async fn notify_rejection(project_id: Ulid) -> Result<(), anyhow::Error> {
         return Ok(());
     }
 
-    let Some(submitter) = Submitter::of(project_id).await? else {
+    let Some(submitter) = Submitter::of(SubmissionKind::Project, project_id).await? else {
         return Ok(());
     };
 
+    let mut fields =
+        notice_fields(SubmissionKind::Project, project_id, Some(submitter.creator())).await?;
+    fields.push(("submission_type".to_string(), "project".to_string()));
+    fields.push(("reason".to_string(), project.reason.message().to_string()));
+
     submitter
-        .notify(
-            TriggerEvent::ProjectRejected,
-            &[
-                ("project_name".to_string(), project.name),
-                ("project_id".to_string(), project_id_str.clone()),
-                ("submission_type".to_string(), "project".to_string()),
-                ("reason".to_string(), project.reason.message().to_string()),
-            ],
-        )
+        .notify(TriggerEvent::ProjectRejected, &fields)
         .await?;
 
     let notified = project.reason;
@@ -2117,6 +2113,17 @@ async fn projects_update_field(
                     )
                 };
                 crate::project::field::ProjectFieldValue::ScistarterLastEdited(option_value)
+            }
+            crate::project::field::ProjectFieldType::PublishedAt => {
+                let option_value = if form_value.is_empty() {
+                    None
+                } else {
+                    Some(
+                        TimeString::try_from(form_value)
+                            .map_err(|e| anyhow::anyhow!("Invalid time format: {}", e))?,
+                    )
+                };
+                crate::project::field::ProjectFieldValue::PublishedAt(option_value)
             }
             crate::project::field::ProjectFieldType::Draft => {
                 let bool_value = form_value.parse::<bool>().unwrap_or_else(|_| {
@@ -3277,7 +3284,8 @@ async fn projects_create(
         new_project,
         form.publish,
         user_info.user_id,
-        crate::project::all::Submission::Submitted,
+        crate::submission::Submission::Submitted,
+        None,
     )
     .await
     {

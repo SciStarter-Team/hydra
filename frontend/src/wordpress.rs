@@ -147,12 +147,57 @@ pub async fn fetch_page(page_url: &str) -> Result<WordPressPage> {
         scripts: extracted.scripts,
     };
 
+    warn_of_third_party_loads(&result, &page);
+
     WORDPRESS_CACHE
         .lock()
         .unwrap()
         .insert(page_url.to_string(), result.clone());
 
     Ok(result)
+}
+
+/// Logs every script and stylesheet resource of an embedded page that the
+/// visitor's browser would still fetch from outside the WordPress site's own
+/// domain: one this site does not mirror yet, and should.
+fn warn_of_third_party_loads(page: &WordPressPage, page_url: &Url) {
+    let site = registrable_domain(page_url.host_str().unwrap_or_default());
+
+    let mut loads: Vec<String> = page
+        .scripts
+        .iter()
+        .filter_map(|script| script.src.clone())
+        .collect();
+    map_css_urls(&page.css, |target| {
+        loads.push(target.to_string());
+        target.to_string()
+    });
+
+    for load in loads {
+        let Ok(url) = Url::parse(&load) else {
+            // A path on this site, a mirrored file among them, or data.
+            continue;
+        };
+        let Some(host) = url.host_str() else {
+            continue;
+        };
+        if registrable_domain(host) != site {
+            tracing::warn!(
+                "{page_url} loads {load}, which visitors' browsers will fetch from {host}; \
+                 add it to the mirror in static/vendor.sh"
+            );
+        }
+    }
+}
+
+/// The last two labels of a host name (`pages.scistarter.org` gives
+/// `scistarter.org`), which is the site a WordPress host and the hosts it
+/// counts as its own share.
+fn registrable_domain(host: &str) -> &str {
+    match host.rmatch_indices('.').nth(1) {
+        Some((dot, _)) => &host[dot + 1..],
+        None => host,
+    }
 }
 
 /// Everything taken from the fetched markup, before any further fetching
@@ -276,7 +321,7 @@ fn carried_script(element: &scraper::ElementRef, page: &Url) -> Option<Script> {
     }
 
     Some(Script {
-        src: src.and_then(|src| page.join(src).ok()).map(String::from),
+        src: src.map(|src| resolve_against(src, page)),
         body,
         is_module,
         is_async: value.attr("async").is_some(),
@@ -310,7 +355,8 @@ fn fetch_stylesheet_at_depth(
 
         // An `@import` cannot survive being wrapped in `@scope`, and would pull
         // in an unconfined sheet if it did, so each one is fetched and spliced
-        // in where it stood. This is how the theme loads its fonts.
+        // in where it stood --- except a Google Fonts import, which is dropped
+        // in favour of this site's own copies of the fonts.
         let imports = find_imports(&css);
         if imports.is_empty() {
             return Ok(css);
@@ -322,6 +368,12 @@ fn fetch_stylesheet_at_depth(
 
         let mut resolved = Vec::with_capacity(imports.len());
         for import in &imports {
+            if let Some(families) = google_fonts_families(&import.url) {
+                warn_of_unhosted_families(&families, &sheet_url);
+                resolved.push(String::new());
+                continue;
+            }
+
             let inlined = match fetch_stylesheet_at_depth(import.url.clone(), depth + 1).await {
                 Ok(css) => css,
                 Err(error) => {
@@ -340,6 +392,82 @@ fn fetch_stylesheet_at_depth(
 
         Ok(splice(&css, &imports, &resolved))
     })
+}
+
+/// The families a Google Fonts stylesheet URL asks for, or `None` if `url`
+/// is not one.
+///
+/// A theme's Google Fonts import is dropped rather than inlined: inlining it
+/// would leave its `@font-face` rules pointing at `fonts.gstatic.com`, so that
+/// every visitor's browser fetched the fonts from Google. The page around the
+/// embedded content already loads this site's own copies of the fonts, from
+/// `static/fonts/fonts.css`.
+fn google_fonts_families(url: &str) -> Option<Vec<String>> {
+    let parsed = Url::parse(url).ok()?;
+    if parsed.host_str() != Some("fonts.googleapis.com") {
+        return None;
+    }
+
+    // `css2` names one family per `family` parameter (`Inter:ital,wght@…`);
+    // the older `css` names several in one, separated by `|`.
+    Some(
+        parsed
+            .query_pairs()
+            .filter(|(key, _)| key == "family")
+            .flat_map(|(_, value)| {
+                value
+                    .split('|')
+                    .map(|family| {
+                        family
+                            .split(':')
+                            .next()
+                            .unwrap_or_default()
+                            .trim()
+                            .to_string()
+                    })
+                    .filter(|family| !family.is_empty())
+                    .collect::<Vec<_>>()
+            })
+            .collect(),
+    )
+}
+
+/// The font families this site serves itself, as `static/fonts/fonts.css`
+/// declares them.
+fn self_hosted_families() -> &'static [String] {
+    static FAMILIES: LazyLock<Vec<String>> = LazyLock::new(|| {
+        let mut families: Vec<String> = include_str!("../static/fonts/fonts.css")
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("font-family:"))
+            .map(|family| {
+                family
+                    .trim()
+                    .trim_end_matches(';')
+                    .trim_matches(['\'', '"'])
+                    .to_string()
+            })
+            .collect();
+        families.sort();
+        families.dedup();
+        families
+    });
+
+    &FAMILIES
+}
+
+/// Logs the families in a dropped Google Fonts import that this site does not
+/// serve, which the embedded page will show in a fallback font until they are
+/// added to `static/vendor.sh`.
+fn warn_of_unhosted_families(families: &[String], sheet_url: &str) {
+    let hosted = self_hosted_families();
+    for family in families {
+        if !hosted.contains(family) {
+            tracing::warn!(
+                "{sheet_url} imports the font {family:?} from Google Fonts, which this site does \
+                 not host; add it to the fonts in static/vendor.sh"
+            );
+        }
+    }
 }
 
 /// An `@import` rule found at the top level of a stylesheet
@@ -434,9 +562,12 @@ fn resolve_against(target: &str, base: &Url) -> String {
     if target.is_empty() || target.starts_with("data:") || target.starts_with('#') {
         return target.to_string();
     }
-    base.join(target)
-        .map(String::from)
-        .unwrap_or_else(|_| target.to_string())
+    match base.join(target) {
+        // A file this site mirrors is served from here, so that the visitor's
+        // browser never fetches it from the CDN it names.
+        Ok(url) => crate::mirror::local_url(url.as_str()).unwrap_or_else(|| url.into()),
+        Err(_) => target.to_string(),
+    }
 }
 
 /// Resolve the `url()` references in a stylesheet
@@ -445,6 +576,12 @@ fn resolve_against(target: &str, base: &Url) -> String {
 /// closing parenthesis, and a pattern that stops at the first `)` would truncate
 /// it --- the same mistake that cut the theme's `@import` in half.
 fn rewrite_css_urls(css: &str, base: &Url) -> String {
+    map_css_urls(css, |target| resolve_against(target, base))
+}
+
+/// Replace the target of every `url()` reference in a stylesheet with what
+/// `replace` makes of it, leaving everything else as it was.
+fn map_css_urls(css: &str, mut replace: impl FnMut(&str) -> String) -> String {
     let mut out = String::with_capacity(css.len());
     let mut i = 0;
 
@@ -480,10 +617,7 @@ fn rewrite_css_urls(css: &str, base: &Url) -> String {
                 None => inner,
             };
             let quote = quote.map(String::from).unwrap_or_default();
-            out.push_str(&format!(
-                "url({quote}{}{quote})",
-                resolve_against(target, base)
-            ));
+            out.push_str(&format!("url({quote}{}{quote})", replace(target)));
             i = (j + 1).min(css.len());
             continue;
         }
@@ -925,6 +1059,8 @@ fn retarget_compound(compound: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use assert2::check;
+
     use super::*;
 
     #[test]
@@ -978,6 +1114,32 @@ mod tests {
     /// scanning to the first semicolon: doing that cut the URL in half and left
     /// `700;800&…swap');` behind, whose stray quote opened an unterminated
     /// string that swallowed the remaining 80% of the stylesheet.
+    #[test]
+    fn google_fonts_imports_name_their_families() {
+        check!(
+            google_fonts_families(
+                "https://fonts.googleapis.com/css2?family=Barlow:wght@400;700&family=Roboto+Slab:wght@100..900&display=swap"
+            ) == Some(vec!["Barlow".to_string(), "Roboto Slab".to_string()])
+        );
+        check!(
+            google_fonts_families("https://fonts.googleapis.com/css?family=Open+Sans:400|Lato")
+                == Some(vec!["Open Sans".to_string(), "Lato".to_string()])
+        );
+        check!(google_fonts_families("https://pages.scistarter.org/style.css") == None);
+    }
+
+    #[test]
+    fn the_themes_fonts_are_all_hosted_here() {
+        let theme = google_fonts_families(
+            "https://fonts.googleapis.com/css2?family=Barlow:wght@400;700;800;900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Roboto+Slab:wght@100..900&display=swap",
+        )
+        .unwrap();
+
+        for family in theme {
+            check!(self_hosted_families().contains(&family), "{family}");
+        }
+    }
+
     #[test]
     fn an_import_url_may_contain_semicolons() {
         let css = "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@0,300;400;700&display=swap');\n\

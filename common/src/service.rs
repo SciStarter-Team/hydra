@@ -721,6 +721,11 @@ pub enum TriggerEvent {
     /// Sent when a project is submitted for review
     ProjectSubmitted,
 
+    /// Sent to an event's submitter when it arrives to wait for review,
+    /// SciStarter's or an exchange's. One published as it arrives is
+    /// announced by [`TriggerEvent::EventPublished`] instead.
+    EventSubmitted,
+
     /// Sent when a reviewer declines to publish a project, quoting the
     /// reason they picked
     ProjectRejected,
@@ -829,6 +834,11 @@ pub enum TriggerEvent {
     /// `project-created-api` is not.
     ProjectCreatedApi,
 
+    /// Sent to each of an exchange's owner and staff when a project or event
+    /// arrives in the exchange's approval queue, as orrery sends
+    /// `project-created-exchange`.
+    ProjectCreatedExchange,
+
     /// Sent when a new forum post is created
     ForumNewPost,
 
@@ -866,6 +876,7 @@ impl TriggerEvent {
             Self::UserWelcomeGirlScout => "When a Girl Scout signup completes",
             Self::UserWelcomeGirlScoutVolunteer => "When a Girl Scout volunteer signup completes",
             Self::ProjectSubmitted => "When a project is submitted for review",
+            Self::EventSubmitted => "When an event is submitted for review",
             Self::ProjectRejected => "When a project is rejected by a reviewer",
             Self::BadgeFoundations => "When the Foundations of Citizen Science badge is earned",
             Self::BadgeLibrariesHubs => {
@@ -910,6 +921,9 @@ impl TriggerEvent {
             Self::ProjectCreatedApi => {
                 "When a partner's API key adds a new project (staff notification)"
             }
+            Self::ProjectCreatedExchange => {
+                "When a project or event awaits an exchange's approval (exchange staff notification)"
+            }
             Self::ForumNewPost => "When a new forum post is created",
             Self::ForumPostReply => "When someone replies to a forum post",
             Self::ForumPostEdited => "When a forum post is edited",
@@ -933,11 +947,13 @@ impl TriggerEvent {
             | Self::EmailValidation
             | Self::FirstContribution => "user",
             Self::ProjectSubmitted
+            | Self::EventSubmitted
             | Self::ProjectRejected
             | Self::ProjectPublished
             | Self::EventPublished
             | Self::ProjectCreatedStaff
-            | Self::ProjectCreatedApi => "project",
+            | Self::ProjectCreatedApi
+            | Self::ProjectCreatedExchange => "project",
             Self::BadgeFoundations
             | Self::BadgeLibrariesHubs
             | Self::BadgeDataLiteracy

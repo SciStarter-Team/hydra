@@ -17,7 +17,7 @@ use common::{
     insensitivestring::InsensitiveString,
     message::location::{GeocodeReverseRequest, GeocodeReverseResponse, Point},
     message::user::BasicInfo,
-    service::{TriggerEvent, log_activity, trigger_email},
+    service::log_activity,
     shared::db,
     timestring::TimeString,
 };
@@ -40,6 +40,7 @@ use crate::{
         all::ProjectAll,
         location::{ANYWHERE, AT_AN_ADDRESS, IN_A_RANGE},
     },
+    submission::{Arrival, Submission, SubmissionKind, announce},
     upload::storage::untracked_file_id,
     web_address::is_web_address,
 };
@@ -537,6 +538,8 @@ struct AddEventContent {
     values: EventFormValues,
     /// The exchange the form's `exchange` field names, if it names one.
     exchange: Option<SubmissionExchange>,
+    /// Whether that exchange publishes what this visitor adds as it arrives.
+    publishes: bool,
     /// The collapsed section of what the event picks from the lists that
     /// aren't asked with its location.
     categories: ChoiceGroup,
@@ -973,6 +976,18 @@ async fn session_exchange(
     Ok(exchange)
 }
 
+/// Whether what `user` submits through `exchange` is published as it
+/// arrives. Nothing is without an exchange, or before anyone has signed in.
+async fn published_on_arrival(
+    exchange: Option<&SubmissionExchange>,
+    user: Option<&BasicInfo>,
+) -> Result<bool, anyhow::Error> {
+    match (exchange, user) {
+        (Some(exchange), Some(user)) => exchange.publishes_for(user).await,
+        _ => Ok(false),
+    }
+}
+
 /// The notice under an add form's heading naming the exchange the
 /// submission goes through, and the form's field carrying it. Answering
 /// the notice's link replaces it, and the field out of band, with an empty
@@ -981,6 +996,9 @@ async fn session_exchange(
 #[template(path = "site/add_exchange_notice.stpl.html")]
 pub struct ExchangeNotice<'a> {
     pub exchange: Option<&'a SubmissionExchange>,
+    /// Whether the exchange publishes what this visitor adds as it arrives,
+    /// as [`SubmissionExchange::publishes_for`] decides.
+    pub publishes: bool,
     /// What is being added: "project" or "event".
     pub noun: &'a str,
     /// The form's own path, which the link falls back to without htmx.
@@ -997,6 +1015,7 @@ pub async fn add_exchange_clear(session: &Session) -> Result<Response, anyhow::E
 
     let html = ExchangeNotice {
         exchange: None,
+        publishes: false,
         noun: "",
         path: "",
         oob: true,
@@ -1029,9 +1048,10 @@ pub async fn add_event_page(
     render_event_form(None, values, user_info).await
 }
 
-/// POST `/add/event` — validate, create the event (unpublished), and redirect
-/// to the confirmation page. On validation failure, re-render the form with
-/// the entered values preserved.
+/// POST `/add/event` — validate, create the event, and redirect to the
+/// confirmation page, or to the event itself when it is published as it
+/// arrives. On validation failure, re-render the form with the entered values
+/// preserved.
 #[handler]
 #[tracing::instrument(skip(form))]
 pub async fn add_event_submit(
@@ -1045,10 +1065,12 @@ pub async fn add_event_submit(
     match validate_and_build(&form, user_info.user_id) {
         Ok(mut event) => {
             // Submitted through an exchange, it waits in that exchange's
-            // approval queue (`reviewed` starts false).
-            event.exchange = SubmissionExchange::find(&form.exchange)
-                .await?
-                .map(|exchange| exchange.exchange_id);
+            // approval queue (`reviewed` starts false), unless the exchange
+            // publishes it as it arrives.
+            let exchange = SubmissionExchange::find(&form.exchange).await?;
+            let published = published_on_arrival(exchange.as_ref(), Some(&user_info)).await?;
+            event.exchange = exchange.as_ref().map(|exchange| exchange.exchange_id.clone());
+            event.reviewed = published;
 
             let online = OrreryValue::EVENT_ONLINE.find().await?;
             if online.is_none() {
@@ -1078,18 +1100,18 @@ pub async fn add_event_submit(
             // Persist (and distribute to peers) via LoadStorePeered.
             event.store().await?;
 
-            // Create the page entity, unpublished — it becomes publicly
-            // resolvable at /events/<slug> only after staff publish it.
+            // Create the page entity. Unless it is published as it arrives,
+            // it becomes publicly resolvable at /events/<slug> only once its
+            // reviewer publishes it.
             let entity =
                 Entity::new_by_name(&name, EntityKind::Event, EntityTarget::Ulid(event_id)).await?;
-            Entity::new_with_publish(
+            let entity = Entity::new_with_publish(
                 entity.slug(),
                 *entity.kind(),
                 entity.target().clone(),
-                false,
-            )
-            .store()
-            .await?;
+                published,
+            );
+            entity.store().await?;
 
             log_activity(
                 None,
@@ -1100,19 +1122,24 @@ pub async fn add_event_submit(
             )
             .await?;
 
-            // Notify staff that a submission is awaiting review. The submitter
-            // is acknowledged by the confirmation page, so no email to them.
-            trigger_email(
-                TriggerEvent::StaffNotification,
-                user_info.user_id,
-                Some(&[
-                    ("kind".to_string(), "event".to_string()),
-                    ("event_name".to_string(), name.clone()),
-                    ("event_id".to_string(), event_id.to_string()),
-                ]),
-            )
-            .await
-            .ok();
+            let arrival = Arrival {
+                kind: SubmissionKind::Event,
+                id: event_id,
+                creator: user_info.user_id,
+                exchange: exchange.as_ref(),
+                published,
+                submission: &Submission::Submitted,
+            };
+
+            // The event exists whether or not the mail about it could be
+            // queued.
+            if let Err(err) = announce(arrival).await {
+                tracing::error!(%event_id, ?err, "Could not tell everyone of a new event");
+            }
+
+            if published {
+                return Ok(Redirect::see_other(entity.canonical_path()).into_response());
+            }
 
             Ok(Redirect::see_other(format!(
                 "/add/event/submitted?name={}",
@@ -1215,11 +1242,13 @@ async fn render_event_form(
     if exchange.is_none() {
         values.exchange.clear();
     }
+    let publishes = published_on_arrival(exchange.as_ref(), user_info.as_deref()).await?;
 
     let content = AddEventContent {
         error,
         values,
         exchange,
+        publishes,
         categories,
         location,
         image,
@@ -1749,11 +1778,6 @@ fn photon_suggestion(feature: &serde_json::Value) -> Option<PlaceSuggestion> {
     let longitude = coordinates.first()?.as_f64()?;
     let latitude = coordinates.get(1)?.as_f64()?;
 
-    let name = prop("name");
-    if name.is_empty() {
-        return None;
-    }
-
     let mut address = prop("street");
     let housenumber = prop("housenumber");
     if !housenumber.is_empty() {
@@ -1762,6 +1786,15 @@ fn photon_suggestion(feature: &serde_json::Value) -> Option<PlaceSuggestion> {
         } else {
             format!("{housenumber} {address}")
         };
+    }
+
+    // Most buildings in OSM have no name, so a search for an ordinary street
+    // address matches only unnamed features. Such a feature is offered by its
+    // address; one with neither a name nor an address has nothing to show.
+    let named = !prop("name").is_empty();
+    let name = if named { prop("name") } else { address.clone() };
+    if name.is_empty() {
+        return None;
     }
 
     let mut city = [
@@ -1777,10 +1810,11 @@ fn photon_suggestion(feature: &serde_json::Value) -> Option<PlaceSuggestion> {
     let mut country = prop("country");
     let zip = prop("postcode");
 
-    let mut location_name = name.clone();
     let osm_key = prop("osm_key");
     let osm_value = prop("osm_value");
-    if osm_key == "place" || osm_key == "boundary" {
+    // An address is not a venue, so it leaves the venue name empty.
+    let mut location_name = if named { name.clone() } else { String::new() };
+    if named && (osm_key == "place" || osm_key == "boundary") {
         // A locality, not a venue: the name belongs in an address component.
         // When the component it names is already filled (e.g. a neighborhood
         // inside a known city), keep it as the place name instead.
@@ -1800,9 +1834,15 @@ fn photon_suggestion(feature: &serde_json::Value) -> Option<PlaceSuggestion> {
         .collect::<Vec<_>>()
         .join(", ");
 
+    let kind = if named {
+        photon_kind(&osm_value)
+    } else {
+        "Address".to_string()
+    };
+
     Some(PlaceSuggestion {
         name,
-        kind: photon_kind(&osm_value),
+        kind,
         context,
         timezone: timezone_at(latitude, longitude),
         location_name,
@@ -2429,6 +2469,8 @@ struct AddProjectContent {
     values: ProjectFormValues,
     /// The exchange the form's `exchange` field names, if it names one.
     exchange: Option<SubmissionExchange>,
+    /// Whether that exchange publishes what this visitor adds as it arrives.
+    publishes: bool,
     topics: ChoiceGroup,
     audience: ChoiceGroup,
     activities: ChoiceGroup,
@@ -2458,8 +2500,9 @@ pub async fn add_project_page(
     render_project_form(None, values, user_info).await
 }
 
-/// POST `/add/project` — validate, create the project (draft + unpublished),
-/// and redirect to the confirmation page.
+/// POST `/add/project` — validate, create the project (a draft), and redirect
+/// to the confirmation page, or to the project itself when it is published as
+/// it arrives.
 #[handler]
 #[tracing::instrument(skip(form))]
 pub async fn add_project_submit(
@@ -2473,10 +2516,10 @@ pub async fn add_project_submit(
     match validate_and_build_project(&form, user_info.user_id) {
         Ok(mut project) => {
             // Submitted through an exchange, it waits in that exchange's
-            // approval queue (`reviewed` starts false).
-            project.exchange = SubmissionExchange::find(&form.exchange)
-                .await?
-                .map(|exchange| exchange.exchange_id);
+            // approval queue (`reviewed` starts false), unless the exchange
+            // publishes it as it arrives.
+            let exchange = SubmissionExchange::find(&form.exchange).await?;
+            let published = published_on_arrival(exchange.as_ref(), Some(&user_info)).await?;
 
             // Everything the project's own person wrote stands against
             // imports, as orrery gives a project made through its form full
@@ -2491,14 +2534,19 @@ pub async fn add_project_submit(
                 ChoiceValue::known(ChoiceList::Activity, form.activities.iter().cloned()).await?;
 
             let name = project.name.clone();
-            // Public submissions stay unpublished pending review.
-            crate::project::all::persist_new_project(
+            let slug = crate::project::all::persist_new_project(
                 project,
-                false,
+                published,
                 user_info.user_id,
-                crate::project::all::Submission::Submitted,
+                Submission::Submitted,
+                exchange.as_ref(),
             )
             .await?;
+
+            if published {
+                return Ok(Redirect::see_other(EntityKind::Project.path(&slug)).into_response());
+            }
+
             Ok(Redirect::see_other(format!(
                 "/add/project/submitted?name={}",
                 urlencoding::encode(&name)
@@ -2570,11 +2618,13 @@ async fn render_project_form(
     if exchange.is_none() {
         values.exchange.clear();
     }
+    let publishes = published_on_arrival(exchange.as_ref(), user_info.as_deref()).await?;
 
     let content = AddProjectContent {
         error,
         values,
         exchange,
+        publishes,
         topics,
         audience,
         activities,
@@ -2752,12 +2802,43 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn an_unnamed_building_is_offered_by_its_address() {
+        let house = serde_json::json!({
+            "geometry": { "coordinates": [-122.31, 37.91] },
+            "properties": {
+                "osm_key": "place",
+                "osm_value": "house",
+                "housenumber": "1234",
+                "street": "Elm Street",
+                "city": "El Cerrito",
+                "state": "California",
+                "country": "United States",
+            },
+        });
+
+        let suggestion = photon_suggestion(&house).unwrap();
+        check!(suggestion.name == "1234 Elm Street");
+        check!(suggestion.kind == "Address");
+        check!(suggestion.location_name == "");
+        check!(suggestion.address == "1234 Elm Street");
+        check!(suggestion.city == "El Cerrito");
+        check!(suggestion.context == "El Cerrito, California, United States");
+
+        let nothing = serde_json::json!({
+            "geometry": { "coordinates": [-122.31, 37.91] },
+            "properties": { "osm_key": "building", "osm_value": "yes" },
+        });
+        check!(photon_suggestion(&nothing).is_none());
+    }
+
     fn exchange() -> SubmissionExchange {
         SubmissionExchange {
             exchange_id: Ulid::new().to_string(),
             path_id: 42,
             name: "SciStarter Australia".to_string(),
             notice: String::new(),
+            restricted_add: false,
         }
     }
 
@@ -2766,6 +2847,7 @@ mod tests {
         let exchange = exchange();
         let html = ExchangeNotice {
             exchange: Some(&exchange),
+            publishes: false,
             noun: "event",
             path: "/add/event",
             oob: false,
@@ -2789,6 +2871,7 @@ mod tests {
         };
         let html = ExchangeNotice {
             exchange: Some(&exchange),
+            publishes: false,
             noun: "project",
             path: "/add/project",
             oob: false,
@@ -2802,9 +2885,34 @@ mod tests {
     }
 
     #[test]
+    fn an_exchange_that_publishes_what_its_people_add_says_so() {
+        let exchange = SubmissionExchange {
+            notice: "The Australian volunteer will review your submission.".to_string(),
+            restricted_add: true,
+            ..exchange()
+        };
+        let html = ExchangeNotice {
+            exchange: Some(&exchange),
+            publishes: true,
+            noun: "event",
+            path: "/add/event",
+            oob: false,
+        }
+        .render_once()
+        .unwrap();
+
+        check!(html.contains(
+            "You&rsquo;re adding this event to <strong>SciStarter Australia</strong>, \
+             which will publish it as soon as you submit it."
+        ));
+        check!(!html.contains("review"));
+    }
+
+    #[test]
     fn without_an_exchange_the_notice_is_empty() {
         let html = ExchangeNotice {
             exchange: None,
+            publishes: false,
             noun: "project",
             path: "/add/project",
             oob: false,
@@ -2821,6 +2929,7 @@ mod tests {
     fn choosing_scistarter_also_empties_the_forms_exchange_field() {
         let html = ExchangeNotice {
             exchange: None,
+            publishes: false,
             noun: "",
             path: "",
             oob: true,
@@ -2982,6 +3091,7 @@ mod tests {
             error,
             values,
             exchange: None,
+            publishes: false,
             categories: ChoiceGroup::new(SectionIcon::Details, "Categories", Vec::new()),
             location: picker("online").with_event_modes(),
             image: ImageField {

@@ -4,13 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= crate::i18n::tr("{name} Badge").replace("{name}", &self.name) %></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/-static/fonts/fonts.css" />
     <link rel="stylesheet" type="text/css" href="/-static/css/style.css" />
     <script src="/-static/js/scripts.js"></script>
     <script src="/-static/js/pagelife.js" defer></script>
-    <script type="text/javascript" src="https://platform-api.sharethis.com/js/sharethis.js#property=684be7fdeb2dda0012da59f3&product=inline-share-buttons&source=platform" async="async"></script>
+    <script src="/-static/js/social_share.js" defer></script>
     <meta property="og:title" content="<%= crate::i18n::tr("{name} Badge").replace("{name}", &self.name) %>">
     <meta property="og:description" content="<%= &self.badgeclass_description_raw %>">
     <meta property="og:image" content="<%= &self.image_url %>">
@@ -34,7 +32,15 @@
               <a href="<%= url %>" class="btn btn-blue"><%= crate::i18n::tr(crate::badge::LEARN_HOW_TO_EARN) %></a>
             </div>
             <% } %>
-            <div class="sharethis-inline-share-buttons"></div>
+            <% let title = crate::i18n::tr("{name} Badge").replace("{name}", &self.name); %>
+            <%+ crate::share::ShareLinks {
+                url: &self.canonical_url,
+                text: &title,
+                image: &self.image_url,
+                target_id: None,
+                email: None,
+                centered: false,
+            } %>
           </div>
         </div>
 

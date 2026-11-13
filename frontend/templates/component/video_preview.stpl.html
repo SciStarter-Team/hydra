@@ -1,0 +1,25 @@
+<%# A video's thumbnail and play control, standing in for its player: see
+    crate::video. Without scripts the control is a link to the video on
+    YouTube; with them, pressing it puts the player from the <template> into
+    the box. Inline styles only, because this is rewritten into pages that
+    load none of the site's CSS. %>
+<div data-video-preview class="<%= self.class %>" style="<%= self.style.trim_end_matches(';') %>;overflow:hidden;background:#000;">
+  <a href="<%= self.video.watch_url() %>" target="_blank" rel="noopener" data-no-track
+     aria-label="<%= crate::i18n::tr("Play video: {title}").replace("{title}", self.title) %>"
+     hx-on:click="event.preventDefault(); const box = this.closest('[data-video-preview]'); box.replaceChildren(box.querySelector('template').content.cloneNode(true));"
+     style="position:absolute;inset:0;display:block;cursor:pointer;">
+    <img src="<%= self.video.thumbnail_path() %>" alt="" loading="lazy"
+         style="display:block;width:100%;height:100%;object-fit:cover;">
+    <svg viewBox="0 0 64 64" aria-hidden="true"
+         style="position:absolute;top:50%;left:50%;width:64px;height:64px;transform:translate(-50%,-50%);filter:drop-shadow(0 1px 3px rgba(0,0,0,.5));">
+      <circle cx="32" cy="32" r="31" fill="rgba(0,0,0,.6)" stroke="#fff" stroke-width="2"/>
+      <path d="M26 20 46 32 26 44Z" fill="#fff"/>
+    </svg>
+  </a>
+  <template>
+    <iframe src="<%= self.video.player_url() %>" title="<%= self.title %>" credentialless
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write; web-share"
+            referrerpolicy="strict-origin-when-cross-origin" allowfullscreen
+            style="position:absolute;inset:0;width:100%;height:100%;border:0;"></iframe>
+  </template>
+</div>

@@ -62,6 +62,7 @@ svg-hush = "0.9.6"
 tzf-rs = "2.3.0"
 resvg = "0.48.1"
 ttf-parser = "0.25"
+lol_html = "3.0.3"
 
 [build-dependencies]
 walkdir = "2"

@@ -44,6 +44,7 @@ pub mod markdown;
 pub mod mcp;
 pub mod mcp_token;
 pub mod middleware;
+pub mod mirror;
 pub mod misc;
 pub mod news;
 pub mod number;
@@ -60,19 +61,24 @@ pub mod profile;
 pub mod profile_card;
 pub mod project;
 pub mod region;
+pub mod remote_image;
 pub mod schedule;
 pub mod search;
 pub mod session;
+pub mod share;
 pub mod sitemap;
 pub mod slug;
+pub mod social_feed;
 pub mod ssrf;
 pub mod staff;
 pub mod staff_pick;
+pub mod submission;
 pub mod thumbnail;
 pub mod training;
 pub mod ui;
 pub mod upload;
 pub mod verify_email;
+pub mod video;
 pub mod web_address;
 pub mod webinar;
 pub mod wiki;
@@ -573,6 +579,9 @@ fn user_facing() -> impl Endpoint {
         .at("/projects/*slug", get(project_page))
         .at("/events/*slug", get(event_page))
         .at("/*slug", get(entity_page).post(entity_page))
+        // No page of the public site loads a video player until its visitor
+        // asks for one; see crate::video.
+        .with(video::VideoPreviews)
         .with(middleware::analytics::AnalyticsMiddleware)
         .with(middleware::attribution::FirstTouchMiddleware)
 }
@@ -607,6 +616,7 @@ fn dynamic() -> impl Endpoint {
         .nest("/-forum", component::forum::forum_routes())
         .nest("/-webauthn", auth::webauthn_routes())
         .nest("/-embed", embed::routes())
+        .nest("/-social-feed", social_feed::routes())
         .nest_no_strip("/", user_facing())
         .with(middleware::error_pages::ErrorPages)
         // Wraps the whole dynamic tree rather than just the user-facing
@@ -654,7 +664,10 @@ async fn main() -> Result<(), Error> {
         .at("/robots.txt", get(sitemap::robots_txt))
         .at("/sitemap.xml", get(sitemap::sitemap_index))
         .at("/sitemap/:file_name", get(sitemap::section_sitemap))
-        .nest("/-static", StaticFiles::new())
+        // Static HTML pages (the design mockups) embed videos too.
+        .nest("/-static", StaticFiles::new().with(video::VideoPreviews))
+        .nest("/-video", video::routes())
+        .at(social_feed::IMAGE_PATH, social_feed::image_route())
         .nest(upload::storage::UNTRACKED_PATH, upload::anonymous_routes())
         .nest("/messaging/emailer", emailer::routes())
         .nest("/api", api::routes().with(api::middleware::api_cors()))
@@ -1642,6 +1655,11 @@ mod sync {
                 proj.promotion_target = data.promotion_target.map(|ts| ts.into());
                 proj.admin_notes = data.admin_notes;
                 proj.created = data.created.into();
+                proj.published_at = crate::submission::first_public(
+                    data.published_at,
+                    data.publish,
+                    data.created,
+                );
                 proj.wild_hope = data.wild_hope;
                 proj.exchange = data.exchange;
                 proj.origin = data.origin;
@@ -2252,6 +2270,11 @@ mod sync {
                 };
 
                 evt.created = data.created.into();
+                evt.published_at = crate::submission::first_public(
+                    data.published_at,
+                    data.publish,
+                    data.created,
+                );
                 evt.flagged = data.flagged;
                 evt.admin_notes = data.admin_notes;
                 evt.welcomed = data.welcomed;

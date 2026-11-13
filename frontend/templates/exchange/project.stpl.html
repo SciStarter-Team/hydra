@@ -500,15 +500,14 @@
           <main class="modal__content" id="modal-1-content">
             <div class="ss-share-this">
               <div>
-                <% let ss_url = self.encode(&format!("https://scistarter.org/{}", &self.project.slug)).to_string(); %>
-                <% let ss_name = self.encode(&self.project.name).to_string(); %>
-                <a data-link="#share-facebook" data-no-track href="https://www.facebook.com/sharer/sharer.php?u=<%= &ss_url %>" target="_blank">
+                <% let ss_url = format!("https://scistarter.org/{}", &self.project.slug); %>
+                <a data-link="#share-facebook" data-no-track href="<%= crate::share::facebook_url(&ss_url) %>" target="_blank">
                   <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;">
                     <use xlink:href="/img/icons.svg#icon--facebook"></use>
                   </svg>
                   <span class="u-visuallyhidden">Share on Facebook</span>
                 </a>
-                <a data-link="#share-twitter" data-no-track href="https://twitter.com/intent/tweet?text=<%= &ss_name %>&url=<%= &ss_url %>" target="_blank">
+                <a data-link="#share-twitter" data-no-track href="<%= crate::share::twitter_url(&ss_url, &self.project.name) %>" target="_blank">
                   <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;">
                     <use xlink:href="/img/icons.svg#icon--twitter"></use>
                   </svg>
@@ -524,7 +523,7 @@
                   </svg>
                   <span class="u-visuallyhidden">Share on Instagram</span>
                 </a>
-                <a data-link="#share-linkedin" data-no-track href="https://www.linkedin.com/sharing/share-offsite/?url=<%= &ss_url %>" target="_blank">
+                <a data-link="#share-linkedin" data-no-track href="<%= crate::share::linkedin_url(&ss_url) %>" target="_blank">
                   <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1em" height="1em" aria-hidden="true" style="fill: currentcolor;">
                     <use xlink:href="/img/icons.svg#icon--linkedin"></use>
                   </svg>

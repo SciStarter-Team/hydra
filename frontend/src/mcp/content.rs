@@ -883,6 +883,7 @@ async fn tool_create_entity(args: Value) -> Result<String, Error> {
 
     let entity = Entity::new_with_publish(&slug, kind, target, publish);
     entity.store().await?;
+    announce_if_published(&entity).await;
     log_activity(
         None,
         entity_change(&kind, PageChange::EntityCreate),
@@ -896,6 +897,15 @@ async fn tool_create_entity(args: Value) -> Result<String, Error> {
         "slug": slug,
         "status": "created",
     }))?)
+}
+
+/// A project or event this tool publishes for the first time tells its
+/// submitter, as it would published from the Engine Room. The entity is
+/// stored either way, so a failure here is logged rather than returned.
+async fn announce_if_published(entity: &Entity) {
+    if let Err(err) = crate::submission::entity_published(entity).await {
+        tracing::error!(slug = entity.slug(), ?err, "Could not record or announce the publication");
+    }
 }
 
 async fn tool_update_entity(args: Value) -> Result<String, Error> {
@@ -945,6 +955,7 @@ async fn tool_update_entity(args: Value) -> Result<String, Error> {
         .with_publish(publish)
         .with_password(password);
     entity.store().await?;
+    announce_if_published(&entity).await;
     log_activity(
         None,
         entity_change(&kind, PageChange::EntityUpdate),

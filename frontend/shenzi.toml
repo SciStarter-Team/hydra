@@ -5,6 +5,13 @@
 input = "static"
 output = "dist"
 
+# Mirrored third-party files keep their original paths exactly, since that is
+# how they are found (see vendor.sh). The first matching rule applies, so this
+# one has to stay ahead of the *.min.* renames below.
+[[rules]]
+include = "mirror/**"
+handler = "Copy"
+
 [[rules]]
 include = "**/*.xcf"
 handler = "Ignore"

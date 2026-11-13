@@ -11,8 +11,10 @@ use ulid::Ulid;
 use crate::{
     choice::{ChoiceList, ChoiceValue},
     contact::{Contact, ContactRole},
+    exchange::SubmissionExchange,
     participant_file::ParticipantFile,
     peering::LoadStorePeered,
+    submission::{Arrival, Submission, SubmissionKind, announce},
 };
 
 use strum::IntoEnumIterator;
@@ -82,6 +84,8 @@ pub struct ProjectAll {
     pub scistarter_last_editor: Option<Ulid>,
     pub scistarter_last_edited: Option<TimeString>,
     pub reviewed: bool,
+    /// When it was first made public, or None while it never has been.
+    pub published_at: Option<TimeString>,
 
     // section Project
     pub draft: bool,
@@ -452,6 +456,7 @@ impl ProjectAll {
           "university_affiliation",
           "circuit_id",
           "sustainable_development_goals",
+          "published_at",
           "regions",
           "point"
         ) values (
@@ -562,6 +567,7 @@ impl ProjectAll {
           ?104,
           ?105,
           ?106,
+          ?110,
           case
             when ?107 is null then
               null
@@ -606,6 +612,7 @@ impl ProjectAll {
           "page_creator_id" = excluded."page_creator_id",
           "extra" = excluded."extra",
           "reviewed" = excluded."reviewed",
+          "published_at" = excluded."published_at",
           "draft" = excluded."draft",
           "name" = excluded."name",
           "participation_degree" = excluded."participation_degree",
@@ -798,6 +805,7 @@ impl ProjectAll {
             self.regions,
             self.point,
             self.legacy_id,
+            self.published_at,
         )
         .execute(&mut tx)
         .await?;
@@ -1318,6 +1326,7 @@ impl ProjectAll {
             ),
             scistarter_last_edited: merge_field!(scistarter_last_edited, ScistarterLastEdited),
             reviewed: merge_field!(reviewed, Reviewed, copy),
+            published_at: merge_field!(published_at, PublishedAt),
 
             // Project section
             draft: merge_field!(draft, Draft, copy),
@@ -1509,7 +1518,8 @@ impl LoadStorePeered for ProjectAll {
                 promotion_time, promotion_target, admin_notes, created, wild_hope,
                 exchange, origin, suborigin, guid, opengraph_description,
                 is_affiliate, is_inaturalist, inat_project_id, welcomed,
-                page_creator_id, extra, reviewed, draft, name, participation_degree,
+                page_creator_id, extra, reviewed, published_at, draft, name,
+                participation_degree,
                 participant_instructions, participant_instructions_email,
                 us_federally_funded, presenter, goal, task, description,
                 image, image_credit, connect_opaque_url, connect_opaque_url1,
@@ -1712,6 +1722,11 @@ impl LoadStorePeered for ProjectAll {
             scistarter_last_editor: None,
             scistarter_last_edited: None,
             reviewed: project_row.reviewed,
+            published_at: project_row
+                .published_at
+                .map(TimeString::try_from)
+                .transpose()
+                .map_err(|e| anyhow::anyhow!("Invalid published_at TimeString: {}", e))?,
 
             // Project section
             draft: project_row.draft,
@@ -1966,24 +1981,29 @@ impl LoadStorePeered for ProjectAll {
     }
 }
 
-/// Persist a brand-new project and its page entity, then fire the submission
-/// triggers. This is the single source of truth for project creation, shared by
-/// the admin "Add Project" handler, the public `/add/project` form, the partner
-/// API and the ALA import — callers build the `ProjectAll` with whatever fields
-/// they collect and set the system fields (page_creator_id, created, origin,
-/// authoritative, status, draft); this function gives the project its integer
-/// id and handles the persistence/entity/notification sequence.
+/// Persist a brand-new project and its page entity, then tell whoever should
+/// hear of it. This is the single source of truth for project creation, shared
+/// by the admin "Add Project" handler, the public `/add/project` form, the
+/// partner API and the ALA import — callers build the `ProjectAll` with
+/// whatever fields they collect and set the system fields (page_creator_id,
+/// created, origin, authoritative, status, draft); this function gives the
+/// project its integer id and handles the persistence/entity/notification
+/// sequence.
 ///
 /// `publish` controls the page entity's visibility (public submissions pass
-/// `false` so the project stays unpublished pending review). `submission`
-/// says who is told of it. Returns the entity slug.
+/// `false` so the project stays unpublished pending review, unless
+/// [`SubmissionExchange::publishes_for`] says otherwise). `exchange` is the
+/// exchange it was submitted through, whose queue it waits in when it is not
+/// published. `submission` says how it arrived; see
+/// [`crate::submission::announce`] for who is told. Returns the entity slug.
 pub async fn persist_new_project(
     mut project: ProjectAll,
     publish: bool,
     user_id: Ulid,
     submission: Submission,
+    exchange: Option<&SubmissionExchange>,
 ) -> Result<String, Error> {
-    use common::service::{TriggerEvent, log_activity, trigger_email};
+    use common::service::log_activity;
 
     let project_id = project.project_id;
     let name = project.name.clone();
@@ -1991,6 +2011,10 @@ pub async fn persist_new_project(
     if project.legacy_id.is_none() {
         project.legacy_id = Some(next_legacy_id().await?);
     }
+
+    project.exchange = exchange.map(|exchange| exchange.exchange_id.clone());
+    // Published as it arrives, it never waits in a review queue.
+    project.reviewed |= publish;
 
     // Save (and distribute to peers) via LoadStorePeered.
     project.store().await?;
@@ -2006,45 +2030,18 @@ pub async fn persist_new_project(
     )
     .await?;
 
-    let merge = [
-        ("project_name".to_string(), name.clone()),
-        ("project_id".to_string(), project_id.to_string()),
-        (
-            "project_link".to_string(),
-            format!("https://{}/projects/{slug}", env!("DOMAIN")),
-        ),
-        (
-            "admin_link".to_string(),
-            format!("https://{}/-admin/projects/{project_id}", env!("DOMAIN")),
-        ),
-    ];
-    match submission {
-        Submission::Submitted => {
-            trigger_email(TriggerEvent::ProjectSubmitted, user_id, Some(&merge))
-                .await
-                .ok();
-            trigger_email(TriggerEvent::ProjectCreatedStaff, user_id, Some(&merge))
-                .await
-                .ok();
-        }
-        Submission::Imported => {
-            trigger_email(TriggerEvent::ProjectCreatedStaff, user_id, Some(&merge))
-                .await
-                .ok();
-        }
-        Submission::Api {
-            key_email,
-            notify_reviewers,
-        } => {
-            if notify_reviewers {
-                let mut merge = merge.to_vec();
-                merge.push(("name".to_string(), name.clone()));
-                merge.push(("key_email".to_string(), key_email));
-                trigger_email(TriggerEvent::ProjectCreatedApi, user_id, Some(&merge))
-                    .await
-                    .ok();
-            }
-        }
+    let arrival = Arrival {
+        kind: SubmissionKind::Project,
+        id: project_id,
+        creator: user_id,
+        exchange,
+        published: publish,
+        submission: &submission,
+    };
+
+    // The project exists whether or not the mail about it could be queued.
+    if let Err(err) = announce(arrival).await {
+        tracing::error!(%project_id, ?err, "Could not tell everyone of a new project");
     }
 
     Ok(slug)
@@ -2094,20 +2091,3 @@ pub async fn create_page_entity(
     Ok(slug)
 }
 
-/// How a new project reached SciStarter, which decides who hears about it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Submission {
-    /// A person submitted it through a form. They are told it was received,
-    /// and the reviewers hear of it.
-    Submitted,
-    /// It arrived from an imported catalog. The reviewers hear of it.
-    Imported,
-    /// A partner's API key added it. The reviewers hear of it in their own
-    /// words, naming the key's account (`key_email`), unless that account is
-    /// set not to tell them. The account itself is not told, as orrery does
-    /// not tell it.
-    Api {
-        key_email: String,
-        notify_reviewers: bool,
-    },
-}

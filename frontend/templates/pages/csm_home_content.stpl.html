@@ -111,12 +111,11 @@
         </div>
       </div>
 
-      <% if self.show_social_feed { %>
+      <% if let Some(page) = &self.social_feed { %>
       <!-- Social Shares (from March 25) -->
       <div class="acts-wrapper mb-16">
-        <div class="acts-container text-center">
-
-          <div id="curator-feed-default-feed-layout" style="position:relative;z-index:0"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+        <div class="acts-container">
+          <%+ crate::social_feed::SocialFeed { page } %>
         </div>
       </div>
       <% } %>
@@ -208,13 +207,14 @@
         </div>
       </div>
 
+      <% if let Some(page) = &self.social_feed { %>
       <!-- Social Shares -->
       <div class="acts-wrapper mb-16">
-        <div class="acts-container text-center">
-
-          <div id="curator-feed-default-feed-layout" style="position:relative;z-index:0"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+        <div class="acts-container">
+          <%+ crate::social_feed::SocialFeed { page } %>
         </div>
       </div>
+      <% } %>
 
       <!-- FAQ LINK -->
       <div class="text-center px-4 my-16">
@@ -280,13 +280,14 @@
         </div>
       </div>
 
+      <% if let Some(page) = &self.social_feed { %>
       <!-- Social Shares -->
       <div class="acts-wrapper mb-16">
-        <div class="acts-container text-center">
-
-          <div id="curator-feed-default-feed-layout" style="position:relative;z-index:0"><a href="https://curator.io" target="_blank" class="crt-logo crt-tag">Powered by Curator.io</a></div>
+        <div class="acts-container">
+          <%+ crate::social_feed::SocialFeed { page } %>
         </div>
       </div>
+      <% } %>
 
       <!-- FAQ LINK -->
       <div class="text-center px-4 my-16">
@@ -305,7 +306,7 @@
 
 <% if self.phase != CsmPhase::May { %>
 <!-- COUNTDOWN TIMER -->
-<script src="https://unpkg.com/@pqina/flip/dist/flip.min.js"></script>
+<script src="/-static/mirror/unpkg.com/@pqina/flip@1.8.4/dist/flip.min.js"></script>
 <script>
 function handleTickInit(tick) {
     var now = new Date();
@@ -342,16 +343,6 @@ function handleTickInit(tick) {
 })();
 </script>
 
-<!-- Curator.io social feed -->
-<script>
-if (document.getElementById('curator-feed-default-feed-layout')) {
-  (function(){
-    var i,e,d=document,s="script";i=d.createElement("script");i.async=1;i.charset="UTF-8";
-    i.src="https://cdn.curator.io/published/9acd2fa2-8cb5-4bb8-aa94-c4e46af90e9f.js";
-    e=d.getElementsByTagName(s)[0];e.parentNode.insertBefore(i, e);
-  })();
-}
-</script>
 
 <!-- Slick Carousel for Sponsors (jQuery + Slick loaded via Head.with_slick()) -->
 <script>
