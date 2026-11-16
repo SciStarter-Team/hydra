@@ -161,12 +161,15 @@ async fn fetch_summary(
                 created,
                 begin: None,
                 end: None,
+                zone: None,
             }))
         }
         "Event" => {
             let row = sqlx::query!(
                 r#"SELECT "name", "image", "status",
-                    "begin" as "begin_time?", "end" as "end_time?"
+                    "begin" as "begin_time?", "end" as "end_time?",
+                    ST_Y("point") AS "latitude: f64", ST_X("point") AS "longitude: f64",
+                    "location_type", "entirely_online" AS "entirely_online: bool"
                 FROM "events"
                 WHERE "event_id" = ?"#,
                 target
@@ -188,6 +191,13 @@ async fn fetch_summary(
                 created,
                 begin: row.begin_time.filter(|b| !b.is_empty()),
                 end: row.end_time.filter(|e| !e.is_empty()),
+                zone: crate::event::zone::of_venue(
+                    row.latitude,
+                    row.longitude,
+                    &row.location_type,
+                    row.entirely_online,
+                )
+                .and_then(|zone| zone.iana_name().map(str::to_string)),
             }))
         }
         _ => Ok(None),

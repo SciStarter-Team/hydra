@@ -306,4 +306,11 @@
   } else {
     initAll();
   }
+  // Swapped in later, as the event page's location editor is: htmx fires
+  // this on each root of the new content once it's in the page.
+  document.addEventListener("htmx:after:process", function (e) {
+    if (!e.target || !e.target.querySelectorAll) return;
+    if (e.target.matches && e.target.matches("[data-region-editor]")) init(e.target);
+    e.target.querySelectorAll("[data-region-editor]").forEach(init);
+  });
 })();

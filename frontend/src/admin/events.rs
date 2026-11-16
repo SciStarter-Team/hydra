@@ -5,7 +5,7 @@
 
 use super::types::lookup_user_email;
 use crate::component::{AdminLayout, Component, admin_layout::AdminLayoutPrepared};
-use crate::local_time::{TimeFormat, local_time};
+use crate::local_time::{Clocks, TimeFormat, zoned_time};
 use crate::middleware::authorization::Authenticated;
 use crate::peering::LoadStorePeered;
 use common::message::log::Housekeeping;
@@ -35,6 +35,8 @@ pub struct AdminEvent {
     pub instances: u32, // Number of scheduled instances
     pub is_ongoing: bool,
     pub next_instance: Option<TimeString>,
+    /// The venue's time zone, which `next_instance` is told in.
+    pub zone: Option<jiff::tz::TimeZone>,
     pub location: String,
 
     /// The names of the event's types, in list order.
@@ -71,6 +73,8 @@ pub struct AdminEventFull {
     pub country: String,
     pub origin: String,
     pub facebook_event: crate::event::facebook::FacebookEvent,
+    /// The organizer contacts, in the card the event page shows its editors.
+    pub contacts: Vec<crate::component::detail_page::ContactDisplay>,
 }
 
 impl AdminEventFull {
@@ -107,6 +111,7 @@ impl AdminEventFull {
             country: event.country,
             origin: event.origin,
             facebook_event: event.facebook_event,
+            contacts: crate::component::detail_page_edit::contacts_to_display(&event.contacts),
         })
     }
 }
@@ -132,6 +137,9 @@ async fn fetch_events_page(
         location_name: String,
         event_types: Option<String>,
         entirely_online: bool,
+        location_type: String,
+        latitude: Option<f64>,
+        longitude: Option<f64>,
         next_instance_begin: Option<String>,
         instance_count: i64,
         is_currently_ongoing: i32,
@@ -143,7 +151,7 @@ async fn fetch_events_page(
         query.push(
             "SELECT e.event_id, e.name, e.created, e.location_name,
                     (SELECT group_concat(n.name, ', ' ORDER BY n.rank, n.position, n.name) FROM event_type_names n WHERE n.target = e.event_id) as event_types,
-                    e.entirely_online,
+                    e.entirely_online, e.location_type, ST_Y(e.point) AS latitude, ST_X(e.point) AS longitude,
                     MIN(CASE WHEN ei.begin > datetime('now') THEN ei.begin END) as next_instance_begin,
                     COUNT(ei.begin) as instance_count,
                     CASE WHEN EXISTS(SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.begin <= datetime('now') AND ei2.end > datetime('now')) THEN 1 ELSE 0 END as is_currently_ongoing
@@ -157,7 +165,7 @@ async fn fetch_events_page(
         query.push(
             "SELECT e.event_id, e.name, e.created, e.location_name,
                     (SELECT group_concat(n.name, ', ' ORDER BY n.rank, n.position, n.name) FROM event_type_names n WHERE n.target = e.event_id) as event_types,
-                    e.entirely_online,
+                    e.entirely_online, e.location_type, ST_Y(e.point) AS latitude, ST_X(e.point) AS longitude,
                     MIN(CASE WHEN ei.begin > datetime('now') THEN ei.begin END) as next_instance_begin,
                     COUNT(ei.begin) as instance_count,
                     CASE WHEN EXISTS(SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.begin <= datetime('now') AND ei2.end > datetime('now')) THEN 1 ELSE 0 END as is_currently_ongoing
@@ -209,6 +217,12 @@ async fn fetch_events_page(
                 instances: row.instance_count as u32,
                 is_ongoing,
                 next_instance,
+                zone: crate::event::zone::of_venue(
+                    row.latitude,
+                    row.longitude,
+                    &row.location_type,
+                    row.entirely_online,
+                ),
                 location,
                 event_types: row.event_types.unwrap_or_default(),
             }

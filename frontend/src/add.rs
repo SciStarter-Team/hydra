@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use jiff::{Zoned, civil, tz::TimeZone};
+use jiff::{Zoned, civil};
 use poem::{
     IntoResponse, Response, handler,
     session::Session,
@@ -14,8 +14,7 @@ use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use common::{
-    insensitivestring::InsensitiveString,
-    message::location::{GeocodeReverseRequest, GeocodeReverseResponse, Point},
+    message::location::{GeocodeReverseRequest, GeocodeReverseResponse},
     message::user::BasicInfo,
     service::log_activity,
     shared::db,
@@ -26,23 +25,29 @@ use crate::{
     choice::{ChoiceCheckboxes, ChoiceList, ChoiceValue, OrreryValue, limited_heading},
     component::{
         Component, Head, StandardLayout,
+        date_row::DateRowValues,
         floating_field::FormError,
         image_field::{ImageField, ImageLayout, ImageUploadResult, ImageUrlInput},
+        location_picker::LocationPicker,
     },
     contact::{Contact, ContactRole},
+    edit_access::Editor,
     entity::{Entity, EntityKind, EntityTarget},
-    event::{EventInstance, all::EventAll},
+    event::{
+        EventInstance,
+        all::EventAll,
+        location::{EventLocation, LocationInput, picked_point, settle_online},
+        rules::{self, DateRow, Field, Refusal, RowReading, ZonedInstance, stored_instance},
+    },
     exchange::SubmissionExchange,
     form::QsForm,
     middleware::authorization::Authenticated,
     peering::LoadStorePeered,
     project::{
         all::ProjectAll,
-        location::{ANYWHERE, AT_AN_ADDRESS, IN_A_RANGE},
+        location::{ANYWHERE, AT_AN_ADDRESS, IN_A_RANGE, LocationMode, missing_place},
     },
     submission::{Arrival, Submission, SubmissionKind, announce},
-    upload::storage::untracked_file_id,
-    web_address::is_web_address,
 };
 
 // ---------------------------------------------------------------------------
@@ -96,102 +101,8 @@ pub async fn add_chooser_page(
 // Add Event: option vocabularies
 // ---------------------------------------------------------------------------
 
-/// Time zones offered in the start-time picker. The page's script adds the
-/// visitor's actual browser time zone if it isn't already listed and
-/// preselects it, so this curated list only needs to cover common cases.
-const COMMON_TIMEZONES: &[(&str, &str)] = &[
-    ("America/New_York", "Eastern Time (US & Canada)"),
-    ("America/Chicago", "Central Time (US & Canada)"),
-    ("America/Denver", "Mountain Time (US & Canada)"),
-    ("America/Phoenix", "Mountain Time - Arizona (no DST)"),
-    ("America/Los_Angeles", "Pacific Time (US & Canada)"),
-    ("America/Anchorage", "Alaska Time"),
-    ("Pacific/Honolulu", "Hawaii Time"),
-    ("America/Toronto", "Eastern Time - Toronto"),
-    ("America/Mexico_City", "Central Time - Mexico City"),
-    ("UTC", "UTC"),
-    ("Europe/London", "London (GMT/BST)"),
-    ("Europe/Paris", "Central European Time"),
-    ("Europe/Berlin", "Central European Time - Berlin"),
-    ("Africa/Johannesburg", "South Africa Standard Time"),
-    ("Asia/Kolkata", "India Standard Time"),
-    ("Asia/Shanghai", "China Standard Time"),
-    ("Asia/Tokyo", "Japan Standard Time"),
-    ("Australia/Sydney", "Australian Eastern Time"),
-];
-
-/// Every IANA time zone, grouped by region for the picker's `<optgroup>`s.
-/// The curated `COMMON_TIMEZONES` stay at the top of the select; these groups
-/// make the rest of the world reachable. Entries are `(value, label)` where
-/// the label drops the region prefix and underscores ("America/Argentina/
-/// Buenos_Aires" -> "Argentina/Buenos Aires" under "America"). Built once.
-fn all_timezones() -> &'static [(String, Vec<(String, String)>)] {
-    static ZONES: std::sync::OnceLock<Vec<(String, Vec<(String, String)>)>> =
-        std::sync::OnceLock::new();
-    ZONES.get_or_init(|| {
-        const REGIONS: &[&str] = &[
-            "Africa",
-            "America",
-            "Antarctica",
-            "Asia",
-            "Atlantic",
-            "Australia",
-            "Europe",
-            "Indian",
-            "Pacific",
-        ];
-        let mut groups: Vec<(String, Vec<(String, String)>)> = REGIONS
-            .iter()
-            .map(|region| (region.to_string(), Vec::new()))
-            .collect();
-
-        let mut names: Vec<String> = jiff::tz::db()
-            .available()
-            .map(|name| name.to_string())
-            .collect();
-        names.sort();
-
-        for name in names {
-            // Region-less names (UTC, EST5EDT, ...) and non-geographic
-            // regions (Etc/*, US/*, ...) are aliases or legacy entries; the
-            // canonical geographic zones all live under the regions above.
-            let Some((region, rest)) = name.split_once('/') else {
-                continue;
-            };
-            if let Some(group) = groups.iter_mut().find(|(r, _)| r == region) {
-                let label = rest.replace('_', " ");
-                group.1.push((name.clone(), label));
-            }
-        }
-        groups
-    })
-}
-
 /// Where the event or project takes place. Every mode also permits a link,
 /// so a venue or a region can carry a livestream or information link.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum LocationMode {
-    InPerson,
-    Online,
-    /// In person, wherever each participant is, as in a worldwide bioblitz:
-    /// no address and no region. An event's mode alone, offered only by the
-    /// event form's picker.
-    Anywhere,
-    Region,
-}
-
-impl LocationMode {
-    fn as_str(self) -> &'static str {
-        match self {
-            LocationMode::InPerson => "in_person",
-            LocationMode::Online => "online",
-            LocationMode::Anywhere => "anywhere",
-            LocationMode::Region => "region",
-        }
-    }
-}
-
 /// Deserialize an optional field, treating an empty string as `None`, as a
 /// form submits a field left unanswered.
 fn empty_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -258,18 +169,9 @@ enum Attendance {
     Limited,
 }
 
-/// The most characters (code points) the group an event is limited to may
-/// have, as orrery's `SciStarter.EVENT_LIMITED_TO_LIMIT`.
-pub const LIMITED_TO_LIMIT: usize = 140;
-
 /// A recurrence is never expanded beyond this many occurrences per base
 /// date/time, as a guard against runaway input.
 const MAX_OCCURRENCES: usize = 366;
-
-/// The most characters (code points) a new event's name may have, as
-/// orrery's `SciStarter.EVENT_NAME_LIMIT`. Older events may be longer, so
-/// only the add form holds names to it.
-pub const EVENT_NAME_LIMIT: usize = 100;
 
 // ---------------------------------------------------------------------------
 // Add Event: submitted form
@@ -311,6 +213,10 @@ struct AddEventForm {
     regions: String,
     #[serde(default)]
     url: String,
+    /// What was left typed in the location picker's place search; read only
+    /// to say, when no address was given, that it wasn't used as one.
+    #[serde(default)]
+    place_query: String,
     /// The slugs of the formats, programs or campaigns and kinds of venue
     /// ticked.
     #[serde(default)]
@@ -344,6 +250,10 @@ struct AddEventForm {
     contact_affiliation: String,
     #[serde(default)]
     contact_email: String,
+    /// A contact form or page staff can reach the organizer through, beside
+    /// or instead of `contact_email`.
+    #[serde(default)]
+    contact_url: String,
     #[serde(default)]
     contact_phone: String,
     #[serde(default)]
@@ -387,26 +297,9 @@ struct InstanceInput {
     end_time: String,
 }
 
-/// A start (and optional end) resolved to concrete zoned instants, kept in the
-/// original time zone so recurrence steps preserve local clock time across DST.
-struct ZonedInstance {
-    begin: Zoned,
-    end: Option<Zoned>,
-}
-
 // ---------------------------------------------------------------------------
 // Add Event: form-value carriers (for first render and re-render on error)
 // ---------------------------------------------------------------------------
-
-#[derive(Debug, Default)]
-struct InstanceValues {
-    begin_date: String,
-    begin_time: String,
-    timezone: String,
-    has_end: bool,
-    end_date: String,
-    end_time: String,
-}
 
 #[derive(Debug, Default)]
 struct EventFormValues {
@@ -425,6 +318,7 @@ struct EventFormValues {
     longitude: String,
     regions: String,
     url: String,
+    place_query: String,
     formats: Vec<String>,
     programs: Vec<String>,
     venues: Vec<String>,
@@ -440,6 +334,7 @@ struct EventFormValues {
     contact_name: String,
     contact_affiliation: String,
     contact_email: String,
+    contact_url: String,
     contact_phone: String,
     contact_address: String,
     ticketing_date: String,
@@ -449,7 +344,7 @@ struct EventFormValues {
     cost: String,
     repeat_frequency: String,
     repeat_until: String,
-    instances: Vec<InstanceValues>,
+    instances: Vec<DateRowValues>,
     /// Whether the event is limited to a group, and the group.
     limited: bool,
     limited_to: String,
@@ -457,10 +352,10 @@ struct EventFormValues {
 
 impl From<&AddEventForm> for EventFormValues {
     fn from(f: &AddEventForm) -> Self {
-        let mut instances: Vec<InstanceValues> = f
+        let mut instances: Vec<DateRowValues> = f
             .instances
             .iter()
-            .map(|i| InstanceValues {
+            .map(|i| DateRowValues {
                 begin_date: i.begin_date.clone(),
                 begin_time: i.begin_time.clone(),
                 timezone: i.timezone.clone(),
@@ -471,7 +366,7 @@ impl From<&AddEventForm> for EventFormValues {
             .collect();
 
         if instances.is_empty() {
-            instances.push(InstanceValues::default());
+            instances.push(DateRowValues::default());
         }
 
         EventFormValues {
@@ -493,6 +388,7 @@ impl From<&AddEventForm> for EventFormValues {
             longitude: f.longitude.clone(),
             regions: f.regions.clone(),
             url: f.url.clone(),
+            place_query: f.place_query.clone(),
             formats: f.formats.clone(),
             programs: f.programs.clone(),
             venues: f.venues.clone(),
@@ -508,6 +404,7 @@ impl From<&AddEventForm> for EventFormValues {
             contact_name: f.contact_name.clone(),
             contact_affiliation: f.contact_affiliation.clone(),
             contact_email: f.contact_email.clone(),
+            contact_url: f.contact_url.clone(),
             contact_phone: f.contact_phone.clone(),
             contact_address: f.contact_address.clone(),
             ticketing_date: f.ticketing_date.clone(),
@@ -541,162 +438,18 @@ struct AddEventContent {
     /// Whether that exchange publishes what this visitor adds as it arrives.
     publishes: bool,
     /// The collapsed section of what the event picks from the lists that
-    /// aren't asked with its location.
+    /// aren't asked with its location or who can attend.
     categories: ChoiceGroup,
+    /// The audiences, asked with who can attend.
+    audience: ChoiceCheckboxes,
     location: LocationPicker,
     image: ImageField,
     tags: TagInput,
 }
 
-/// Reusable map-based area editor. Renders a MapLibre map plus the hidden
-/// field it keeps in sync; the `js/region-editor.js` module (loaded by
-/// `Head::with_region_editor`) wires up click-to-draw behavior. Drop this into
-/// any form that needs to capture a `regions` geometry (e.g. the project form).
-#[derive(sailfish::TemplateOnce)]
-#[template(path = "site/region_editor.stpl.html")]
-struct RegionEditor {
-    /// Form field name the geometry is submitted under.
-    field_name: String,
-    /// DOM id of the hidden input (the map editor's `data-target`).
-    field_id: String,
-    /// Existing geometry as a GeoJSON string (empty for a fresh editor).
-    initial: String,
-}
-
 // ---------------------------------------------------------------------------
 // Shared add-form components (used by both /add/event and /add/project)
 // ---------------------------------------------------------------------------
-
-/// The location section: an "in person or virtual?" mode select, a place
-/// type-ahead search backed by `/add/place-search` with the structured address
-/// fields behind a details disclosure, the region editor (revealed on request),
-/// a free-text location note, and the link/URL. Backed by
-/// `js/location-picker.js`.
-#[derive(sailfish::TemplateOnce)]
-#[template(path = "site/location_picker.stpl.html")]
-struct LocationPicker {
-    mode: String,
-    location_name: String,
-    address: String,
-    city: String,
-    state: String,
-    zip: String,
-    country: String,
-    latitude: String,
-    longitude: String,
-    location_description: String,
-    url: String,
-    region_editor: RegionEditor,
-    /// Whether the mode only an event has is offered: in person, anywhere
-    /// in the world.
-    offers_event_modes: bool,
-    /// The kinds of venue an event held at an address may pick, asked with
-    /// the address.
-    venues: Option<ChoiceCheckboxes>,
-    /// The form's error, when it was refused; marks the control it is about.
-    error: Option<FormError>,
-}
-
-impl LocationPicker {
-    /// Build from the common location fields shared by both forms.
-    fn build(
-        mode: &str,
-        location_name: &str,
-        address: &str,
-        city: &str,
-        state: &str,
-        zip: &str,
-        country: &str,
-        latitude: &str,
-        longitude: &str,
-        location_description: &str,
-        url: &str,
-        regions_geojson: &str,
-    ) -> Self {
-        LocationPicker {
-            mode: mode.to_string(),
-            location_name: location_name.to_string(),
-            address: address.to_string(),
-            city: city.to_string(),
-            state: state.to_string(),
-            zip: zip.to_string(),
-            country: country.to_string(),
-            latitude: latitude.to_string(),
-            longitude: longitude.to_string(),
-            location_description: location_description.to_string(),
-            url: url.to_string(),
-            region_editor: RegionEditor {
-                field_name: "regions".to_string(),
-                field_id: "regions-geojson".to_string(),
-                initial: regions_geojson.to_string(),
-            },
-            offers_event_modes: false,
-            venues: None,
-            error: None,
-        }
-    }
-
-    /// Offer the modes only an event has besides the others.
-    fn with_event_modes(mut self) -> Self {
-        self.offers_event_modes = true;
-        self
-    }
-
-    /// Ask which kinds of `venues` an event held at an address is held at,
-    /// when there are any.
-    fn with_venues(mut self, venues: ChoiceCheckboxes) -> Self {
-        self.venues = (!venues.is_empty()).then(|| venues.with_legend("Kind of venue (optional)"));
-        self
-    }
-
-    /// Mark the control `error` is about, when it is one of this section's.
-    fn errors(mut self, error: Option<&FormError>) -> Self {
-        self.error = error.cloned();
-        self
-    }
-
-    /// Whether the form's error is about the control named `field`.
-    fn is_invalid(&self, field: &str) -> bool {
-        self.error.as_ref().is_some_and(|e| e.is_about(field))
-    }
-}
-
-/// The time-zone control for one date/time row, a field in the row beside
-/// the date and time. Zones are inferred from the picked venue or the
-/// browser, so the list is there to correct an inference rather than to ask a
-/// question. With JavaScript the field shows the zone's short name ("PDT",
-/// "GMT+3") over the full list, which opens on click; without it, the list
-/// itself shows.
-#[derive(sailfish::TemplateOnce)]
-#[template(path = "site/timezone_field.stpl.html")]
-struct TimezoneField {
-    field_name: String,
-    selected: String,
-    required: bool,
-    invalid: bool,
-    timezones: &'static [(&'static str, &'static str)],
-    all_timezones: &'static [(String, Vec<(String, String)>)],
-}
-
-impl TimezoneField {
-    /// Build the control for `field_name`, preselecting `selected`.
-    fn build(field_name: impl Into<String>, selected: &str, required: bool) -> Self {
-        TimezoneField {
-            field_name: field_name.into(),
-            selected: selected.to_string(),
-            required,
-            invalid: false,
-            timezones: COMMON_TIMEZONES,
-            all_timezones: all_timezones(),
-        }
-    }
-
-    /// Mark the field invalid when `error` is about it.
-    fn errors(mut self, error: Option<&FormError>) -> Self {
-        self.invalid = error.is_some_and(|e| e.is_about(&self.field_name));
-        self
-    }
-}
 
 /// The header of one of an add form's optional sections: an icon and a title
 /// on the `<summary>` of a collapsed `details.add-section` (the chevron is
@@ -803,43 +556,16 @@ impl ChoiceGroup {
 }
 
 /// Checkboxes for picking from `values` of `list` as the add-event form's
-/// `field`, under `title` and how many may be picked.
+/// `field`, under the list's heading and how many may be picked.
 fn event_choices(
     field: &'static str,
-    title: &'static str,
     list: ChoiceList,
     values: Vec<ChoiceValue>,
     picked: &[String],
 ) -> ChoiceCheckboxes {
     let limit = crate::event::pick_limit(list);
-    let legend = match limit {
-        Some(_) => limited_heading(title, limit),
-        None => format!("{title} (choose any)").into(),
-    };
     ChoiceCheckboxes::new(field, values, picked.iter().cloned().collect(), limit)
-        .with_legend(legend)
-}
-
-/// The values of `list`, one of the event-type lists, that the add-event
-/// form offers: all but Online, which its location toggle answers.
-async fn offered_event_types(list: ChoiceList) -> Result<Vec<ChoiceValue>, anyhow::Error> {
-    Ok(ChoiceValue::all(list)
-        .await?
-        .into_iter()
-        .filter(|value| !OrreryValue::EVENT_ONLINE.is(value))
-        .collect())
-}
-
-/// Event formats as the add-event form offers them: alphabetically, with
-/// the catch-all Other last.
-fn in_format_order(mut formats: Vec<ChoiceValue>) -> Vec<ChoiceValue> {
-    formats.sort_by_cached_key(|value| {
-        (
-            OrreryValue::EVENT_OTHER.is(value),
-            value.name.to_lowercase(),
-        )
-    });
-    formats
+        .with_legend(crate::event::choice_legend(list))
 }
 
 /// What an add-event submission picks from each event-type list: the
@@ -850,7 +576,7 @@ fn event_type_picks(
     form: &AddEventForm,
     online: Option<&ChoiceValue>,
 ) -> BTreeMap<ChoiceList, BTreeSet<String>> {
-    let at_address = form.location_mode == Some(LocationMode::InPerson);
+    let at_address = form.location_mode.is_some_and(LocationMode::at_address);
     let mut picks = BTreeMap::from([
         (
             ChoiceList::EventFormat,
@@ -871,12 +597,11 @@ fn event_type_picks(
     ]);
 
     if let Some(online) = online {
-        let list = picks.entry(online.list).or_default();
-        if form.location_mode == Some(LocationMode::Online) {
-            list.insert(online.slug.clone());
-        } else {
-            list.remove(&online.slug);
-        }
+        settle_online(
+            picks.entry(online.list).or_default(),
+            online,
+            form.location_mode == Some(LocationMode::Online),
+        );
     }
 
     picks
@@ -1043,7 +768,7 @@ pub async fn add_event_page(
     let mut values = EventFormValues::default();
     values.exchange = exchange.map(|e| e.path_id.to_string()).unwrap_or_default();
     values.repeat_frequency = RepeatFrequency::Once.as_str().to_string();
-    values.instances.push(InstanceValues::default());
+    values.instances.push(DateRowValues::default());
 
     render_event_form(None, values, user_info).await
 }
@@ -1062,14 +787,16 @@ pub async fn add_event_submit(
         return Ok(Redirect::see_other("/login?next=/add/event").into_response());
     };
 
-    match validate_and_build(&form, user_info.user_id) {
+    match validate_and_build(&form, Editor::from(&*user_info)) {
         Ok(mut event) => {
             // Submitted through an exchange, it waits in that exchange's
             // approval queue (`reviewed` starts false), unless the exchange
             // publishes it as it arrives.
             let exchange = SubmissionExchange::find(&form.exchange).await?;
             let published = published_on_arrival(exchange.as_ref(), Some(&user_info)).await?;
-            event.exchange = exchange.as_ref().map(|exchange| exchange.exchange_id.clone());
+            event.exchange = exchange
+                .as_ref()
+                .map(|exchange| exchange.exchange_id.clone());
             event.reviewed = published;
 
             let online = OrreryValue::EVENT_ONLINE.find().await?;
@@ -1179,10 +906,11 @@ async fn render_event_form(
         &values.url,
         &values.regions,
     )
-    .with_event_modes()
+    .with_place_query(&values.place_query)
+    .for_events()
     .with_venues(ChoiceCheckboxes::new(
         "venues",
-        offered_event_types(ChoiceList::EventVenue).await?,
+        crate::event::offered_types(ChoiceList::EventVenue).await?,
         values.venues.iter().cloned().collect(),
         crate::event::pick_limit(ChoiceList::EventVenue),
     ))
@@ -1201,37 +929,36 @@ async fn render_event_form(
     };
 
     // Whether the event is online, and the kind of venue it's held at, are
-    // asked with its location; the rest of what it picks is here.
+    // asked with its location, and its audience with who can attend; the
+    // rest of what it picks is here.
+    let audience = event_choices(
+        "audience",
+        ChoiceList::Audience,
+        ChoiceValue::all(ChoiceList::Audience).await?,
+        &values.audience,
+    );
     let categories = ChoiceGroup::new(
         SectionIcon::Details,
-        "Audience, topics and event type",
+        "Topics and event type",
         vec![
             event_choices(
-                "audience",
-                "Audience",
-                ChoiceList::Audience,
-                ChoiceValue::all(ChoiceList::Audience).await?,
-                &values.audience,
-            ),
-            event_choices(
                 "topics",
-                "Topics",
                 ChoiceList::Topic,
                 ChoiceValue::all(ChoiceList::Topic).await?,
                 &values.topics,
             ),
             event_choices(
                 "formats",
-                "Type of event",
                 ChoiceList::EventFormat,
-                in_format_order(offered_event_types(ChoiceList::EventFormat).await?),
+                crate::event::in_format_order(
+                    crate::event::offered_types(ChoiceList::EventFormat).await?,
+                ),
                 &values.formats,
             ),
             event_choices(
                 "programs",
-                "Part of a program or campaign?",
                 ChoiceList::EventProgram,
-                offered_event_types(ChoiceList::EventProgram).await?,
+                crate::event::offered_types(ChoiceList::EventProgram).await?,
                 &values.programs,
             ),
         ],
@@ -1250,6 +977,7 @@ async fn render_event_form(
         exchange,
         publishes,
         categories,
+        audience,
         location,
         image,
         tags,
@@ -1484,11 +1212,16 @@ pub async fn add_tag_search(
                SELECT tag FROM event_tags
                UNION
                SELECT tag FROM project_tags
-           ) WHERE tag LIKE ? ORDER BY tag LIMIT 10"#,
+           ) WHERE tag LIKE ? ORDER BY tag"#,
         pattern
     )
     .fetch_all(db())
-    .await?;
+    .await?
+    .into_iter()
+    // Staff's own tags are never offered, as orrery never offers them.
+    .filter(|tag| !crate::tag::is_hidden(tag))
+    .take(10)
+    .collect();
 
     Ok(html_fragment(
         TagSuggestions {
@@ -1684,17 +1417,6 @@ pub async fn add_place_search(
         .body(serde_json::to_string(&suggestions)?))
 }
 
-/// The IANA time zone at a coordinate, from tzf-rs's embedded boundary data
-/// (empty when the lookup has no answer). The finder builds its spatial index
-/// once, on first use.
-fn timezone_at(latitude: f64, longitude: f64) -> String {
-    static FINDER: std::sync::OnceLock<tzf_rs::DefaultFinder> = std::sync::OnceLock::new();
-    FINDER
-        .get_or_init(tzf_rs::DefaultFinder::new)
-        .get_tz_name(longitude, latitude)
-        .to_string()
-}
-
 /// A short human label for what kind of place a Photon feature is, from its
 /// OSM tag value ("city" -> "City", "place_of_worship" -> "Place of worship").
 /// Values that don't describe anything ("yes") map to an empty label.
@@ -1844,7 +1566,7 @@ fn photon_suggestion(feature: &serde_json::Value) -> Option<PlaceSuggestion> {
         name,
         kind,
         context,
-        timezone: timezone_at(latitude, longitude),
+        timezone: crate::event::zone::name_at(latitude, longitude),
         location_name,
         address,
         city,
@@ -1867,222 +1589,83 @@ fn photon_suggestion(feature: &serde_json::Value) -> Option<PlaceSuggestion> {
 /// order orrery's add form makes the same checks in its `build`: the name,
 /// description, mode and dates; what the mode requires; the shape of the
 /// links; the ticketing date; and the contact.
-fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, FormError> {
+fn validate_and_build(form: &AddEventForm, author: Editor) -> Result<EventAll, FormError> {
+    let user_id = author.user_id;
+    rules::name(&form.name, None).map_err(refused)?;
     let name = form.name.trim();
-    if name.is_empty() {
-        return Err(FormError::at("name", "Please enter a name for your event."));
-    }
-    // Counted in characters, as the field counts them.
-    if name.chars().count() > EVENT_NAME_LIMIT {
-        return Err(FormError::at(
-            "name",
-            format!("Please shorten your event's name to {EVENT_NAME_LIMIT} characters or fewer."),
-        ));
-    }
 
     let topics = form.topics.iter().collect::<BTreeSet<_>>().len();
     if let Some(refusal) = crate::event::refuse_picks(ChoiceList::Topic, topics) {
         return Err(FormError::at("topics", refusal));
     }
 
+    rules::description(&form.description).map_err(refused)?;
     let description = form.description.trim();
-    if description.is_empty() {
-        return Err(FormError::at(
-            "description",
-            "Please add a description of your event.",
-        ));
-    }
 
-    let mode = form.location_mode.ok_or_else(|| {
-        FormError::at(
-            "location_mode",
-            "Please choose where the event takes place.",
-        )
-    })?;
+    let mode = rules::mode(form.location_mode).map_err(refused)?;
 
     // Resolve the date/time rows that carry a start.
+    let now = Zoned::now();
     let mut base: Vec<ZonedInstance> = Vec::new();
     for (i, inst) in form.instances.iter().enumerate() {
-        let field = |part: &str| format!("instances[{i}][{part}]");
-        let begin_date = inst.begin_date.trim();
-        let begin_time = inst.begin_time.trim();
-
-        if begin_date.is_empty() && begin_time.is_empty() {
-            continue; // an untouched row
-        }
-        if begin_date.is_empty() || begin_time.is_empty() {
-            let missing = if begin_date.is_empty() {
-                "begin_date"
-            } else {
-                "begin_time"
-            };
-            return Err(FormError::at(
-                field(missing),
-                "Each date/time needs both a date and a start time.",
-            ));
-        }
-        if inst.timezone.trim().is_empty() {
-            return Err(FormError::at(
-                field("timezone"),
-                "Please choose a time zone for each date/time.",
-            ));
-        }
-
-        let begin = parse_datetime(begin_date, begin_time, inst.timezone.trim())
-            .map_err(|message| FormError::at(field("begin_date"), message))?;
-        if starts_before_today(&begin, &Zoned::now()) {
-            return Err(FormError::at(
-                field("begin_date"),
-                "An event can't start on a date that has already passed.",
-            ));
-        }
-
-        let end = if inst.has_end.is_some()
-            && !inst.end_date.trim().is_empty()
-            && !inst.end_time.trim().is_empty()
-        {
-            let end = parse_datetime(
-                inst.end_date.trim(),
-                inst.end_time.trim(),
-                inst.timezone.trim(),
-            )
-            .map_err(|message| FormError::at(field("end_date"), message))?;
-            if end < begin {
-                return Err(FormError::at(
-                    field("end_date"),
-                    "An event's end time can't be before its start time.",
-                ));
-            }
-            Some(end)
-        } else {
-            None
+        let row = DateRow {
+            begin_date: &inst.begin_date,
+            begin_time: &inst.begin_time,
+            end: inst
+                .has_end
+                .is_some()
+                .then_some((inst.end_date.as_str(), inst.end_time.as_str())),
+            timezone: &inst.timezone,
         };
-
-        base.push(ZonedInstance { begin, end });
+        match rules::date_row(row, None, &now) {
+            Ok(RowReading::Dated(instance)) => base.push(instance),
+            Ok(RowReading::Blank | RowReading::Kept) => {} // an untouched row
+            Err(refusal) => return Err(refused_in_row(refusal, i)),
+        }
     }
-
-    if base.is_empty() {
-        return Err(FormError::at(
-            "instances[0][begin_date]",
-            "Please add at least one date and start time.",
-        ));
-    }
+    rules::some_date(!base.is_empty()).map_err(|refusal| refused_in_row(refusal, 0))?;
 
     let instances = expand_recurrence(base, form)?;
 
     let url = form.url.trim().to_string();
 
-    // Location-specific requirements.
-    match mode {
-        LocationMode::Online => {
-            if url.is_empty() {
-                return Err(FormError::at(
-                    "url",
-                    "Please provide a link where people can join the online event.",
-                ));
-            }
-        }
-        LocationMode::InPerson => {
-            if form.address.trim().is_empty() && form.city.trim().is_empty() {
-                return Err(FormError::at(
-                    "address",
-                    "Please provide an address or city for the in-person event.",
-                ));
-            }
-        }
-        LocationMode::Region => {
-            if form.location_description.trim().is_empty() {
-                return Err(FormError::at(
-                    "location_description",
-                    "Please describe the area the event covers.",
-                ));
-            }
-        }
-        LocationMode::Anywhere => {}
-    }
+    // What the mode requires.
+    rules::join_link(&url, mode).map_err(refused)?;
+    rules::place(mode, &form.address, &form.city, &form.place_query).map_err(refused)?;
+    rules::location_note(mode, &form.location_description).map_err(refused)?;
 
-    let limited_to = match form.attendance {
-        Attendance::Open => "",
-        Attendance::Limited => {
-            let group = form.limited_to.trim();
-            if group.is_empty() {
-                return Err(FormError::at(
-                    "limited_to",
-                    "Please say who is eligible to attend, such as \u{201c}Library cardholders only.\u{201d}",
-                ));
-            }
-            // Counted in characters, as the field counts them.
-            if group.chars().count() > LIMITED_TO_LIMIT {
-                return Err(FormError::at(
-                    "limited_to",
-                    format!(
-                        "Please say who is eligible to attend in {LIMITED_TO_LIMIT} characters or fewer."
-                    ),
-                ));
-            }
-            group
-        }
-    };
+    let limited = form.attendance == Attendance::Limited;
+    rules::limited_to(&form.limited_to, limited).map_err(refused)?;
+    let limited_to = if limited { form.limited_to.trim() } else { "" };
 
-    if !url.is_empty() && !is_web_address(&url) {
-        return Err(FormError::at(
-            "url",
-            "Please check the event's link; it should be a whole web address, such as https://example.org/event.",
-        ));
-    }
+    rules::link(&url, None).map_err(refused)?;
 
-    // An uploaded image's address is the site's own; only a typed link needs
-    // checking.
+    rules::image_link(&form.image, None).map_err(refused)?;
     let image = form.image.trim();
-    if !image.is_empty() && untracked_file_id(image).is_none() && !is_web_address(image) {
-        return Err(FormError::at(
-            ImageUrlInput::NAME,
-            "Please check the image link; it should be a whole web address, such as https://example.org/photo.jpg.",
-        ));
-    }
 
+    rules::ticket_link(&form.ticket_url, None).map_err(refused)?;
     let ticket_url = form.ticket_url.trim();
-    if !ticket_url.is_empty() && !is_web_address(ticket_url) {
-        return Err(FormError::at(
-            "ticket_url",
-            "Please check the ticket / registration link; it should be a whole web address, such as https://example.org/tickets.",
-        ));
-    }
 
     // Optional ticketing/registration open date.
-    let ticketing_date = form.ticketing_date.trim();
-    let ticketing_begins = if ticketing_date.is_empty() {
-        None
-    } else {
-        if form.ticketing_timezone.trim().is_empty() {
-            return Err(FormError::at(
-                "ticketing_timezone",
-                "Please choose a time zone for the ticketing date.",
-            ));
-        }
-        let ticketing_time = form.ticketing_time.trim();
-        let ticketing_time = if ticketing_time.is_empty() {
-            "00:00"
-        } else {
-            ticketing_time
-        };
-        let begins = parse_datetime(
-            ticketing_date,
-            ticketing_time,
-            form.ticketing_timezone.trim(),
-        )
-        .map_err(|message| FormError::at("ticketing_date", message))?;
-        Some(TimeString::from(begins.timestamp()))
-    };
+    let ticketing_begins = rules::ticketing(
+        &form.ticketing_date,
+        &form.ticketing_time,
+        &form.ticketing_timezone,
+    )
+    .map_err(refused)?
+    .map(TimeString::from);
 
-    // A single organizer contact, if one was provided.
+    // The organizer contact: someone staff can ask about the event, and
+    // some way to reach them.
+    rules::contact(
+        &form.contact_name,
+        &form.contact_email,
+        &form.contact_url,
+        None,
+    )
+    .map_err(refused)?;
     let contact_email = form.contact_email.trim();
-    if !contact_email.is_empty() && !crate::contact::plausible_email(contact_email) {
-        return Err(FormError::at(
-            "contact_email",
-            "Please check the contact person's email; it should look like name@example.org.",
-        ));
-    }
+    let contact_url = form.contact_url.trim();
 
     let mut event = EventAll::default();
     event.event_id = Ulid::new();
@@ -2091,72 +1674,47 @@ fn validate_and_build(form: &AddEventForm, user_id: Ulid) -> Result<EventAll, Fo
     event.origin = "scistarter".to_string();
     event.name = name.to_string();
     event.description = description.to_string();
-    event.url = url;
     event.presenter = form.presenter.trim().to_string();
     event.image = image.to_string();
     event.image_credit = form.image_credit.trim().to_string();
     event.how_to_join = form.how_to_join.trim().to_string();
     event.part_of = form.part_of.trim().parse::<Ulid>().ok();
-    // A location note is meaningful in every mode.
-    event.location_description = form.location_description.trim().to_string();
     event.ticket_url = ticket_url.to_string();
     event.cost = form.cost.trim().to_string();
     event.limited_to = limited_to.to_string();
     event.ticketing_begins = ticketing_begins;
-    event.tags = form
-        .tags
-        .split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(InsensitiveString::from)
-        .collect();
+    event.tags = crate::tag::as_set_by(crate::tag::split(&form.tags), [], author.is_staff);
 
-    if !contact_email.is_empty() || !form.contact_name.trim().is_empty() {
-        event.contacts = Box::new([Contact {
-            contact_id: Ulid::new(),
-            role: ContactRole::ContactPerson,
-            name: empty_to_none(&form.contact_name),
-            affiliation: empty_to_none(&form.contact_affiliation),
-            email: contact_email.to_string(),
-            phone: empty_to_none(&form.contact_phone),
-            address: empty_to_none(&form.contact_address),
-        }]);
-    }
+    event.contacts = Box::new([Contact {
+        contact_id: Ulid::new(),
+        role: ContactRole::ContactPerson,
+        name: empty_to_none(&form.contact_name),
+        affiliation: empty_to_none(&form.contact_affiliation),
+        email: contact_email.to_string(),
+        phone: empty_to_none(&form.contact_phone),
+        address: empty_to_none(&form.contact_address),
+        url: empty_to_none(contact_url),
+    }]);
 
-    // The `location_type`s orrery's form gives each mode, as orrery's sync
-    // spells them here: an online event, and one in person wherever each
-    // participant is, are both anywhere.
-    match mode {
-        LocationMode::Online => {
-            event.entirely_online = true;
-            event.location_type = ANYWHERE.to_string();
-        }
-        LocationMode::Anywhere => {
-            event.entirely_online = false;
-            event.location_type = ANYWHERE.to_string();
-        }
-        LocationMode::InPerson => {
-            event.entirely_online = false;
-            event.location_type = AT_AN_ADDRESS.to_string();
-            event.location_name = form.location_name.trim().to_string();
-            event.address = form.address.trim().to_string();
-            event.city = form.city.trim().to_string();
-            event.state = form.state.trim().to_string();
-            event.zip = form.zip.trim().to_string();
-            event.country = form.country.trim().to_string();
-            event.point = picked_point(&form.latitude, &form.longitude);
-        }
-        LocationMode::Region => {
-            // A region is defined by the drawn polygon + the location note; it
-            // doesn't carry a single city/state/country.
-            event.entirely_online = false;
-            event.location_type = IN_A_RANGE.to_string();
-            let regions = form.regions.trim();
-            if !regions.is_empty() {
-                event.regions = Some(regions.to_string());
-            }
-        }
-    }
+    EventLocation::settle(
+        LocationInput {
+            mode,
+            location_name: &form.location_name,
+            address: &form.address,
+            city: &form.city,
+            state: &form.state,
+            zip: &form.zip,
+            country: &form.country,
+            latitude: &form.latitude,
+            longitude: &form.longitude,
+            location_description: &form.location_description,
+            url: &url,
+            regions: &form.regions,
+            venues: &form.venues,
+        },
+        None,
+    )
+    .apply_to(&mut event);
 
     event.instances = instances.into_boxed_slice();
 
@@ -2172,25 +1730,6 @@ fn empty_to_none(s: &str) -> Option<String> {
     }
 }
 
-/// The coordinates of the place picked in the location search, as a GeoJSON
-/// point string, when both are present and in range. A picked place pins the
-/// point column exactly; without one the save path falls back to geocoding
-/// the address fields.
-fn picked_point(latitude: &str, longitude: &str) -> Option<String> {
-    let latitude: f64 = latitude.trim().parse().ok()?;
-    let longitude: f64 = longitude.trim().parse().ok()?;
-    if !(-90.0..=90.0).contains(&latitude) || !(-180.0..=180.0).contains(&longitude) {
-        return None;
-    }
-    Some(
-        Point {
-            latitude,
-            longitude,
-        }
-        .to_string(),
-    )
-}
-
 /// Keep only submitted values that are part of the controlled vocabulary, so a
 /// forged request can't store arbitrary categorization values.
 fn filter_to_vocabulary(values: &[String], vocabulary: &[&str]) -> Box<[String]> {
@@ -2199,6 +1738,39 @@ fn filter_to_vocabulary(values: &[String], vocabulary: &[&str]) -> Box<[String]>
         .filter(|v| vocabulary.contains(&v.as_str()))
         .cloned()
         .collect()
+}
+
+/// The add event form's control a refusal is about.
+fn refused(refusal: Refusal) -> FormError {
+    let name = match refusal.field {
+        Field::Name => "name",
+        Field::Description => "description",
+        Field::ImageLink => ImageUrlInput::NAME,
+        Field::Url => "url",
+        Field::TicketUrl => "ticket_url",
+        Field::LimitedTo => "limited_to",
+        Field::LocationMode => "location_mode",
+        Field::Address => "address",
+        Field::LocationDescription => "location_description",
+        Field::TicketingDate => "ticketing_date",
+        Field::TicketingTimezone => "ticketing_timezone",
+        Field::ContactName => "contact_name",
+        Field::ContactEmail => "contact_email",
+        Field::ContactUrl => "contact_url",
+        Field::Date(_) => return refused_in_row(refusal, 0),
+    };
+    FormError::at(name, refusal.message)
+}
+
+/// The add event form's control in date/time row `row` a refusal is about.
+fn refused_in_row(refusal: Refusal, row: usize) -> FormError {
+    match refusal.field {
+        Field::Date(part) => FormError::at(
+            format!("instances[{row}][{}]", part.name()),
+            refusal.message,
+        ),
+        _ => refused(refusal),
+    }
 }
 
 /// Expand each base date/time into one or more `EventInstance`s according to
@@ -2232,7 +1804,7 @@ fn expand_recurrence(
                 let mut count = 0usize;
 
                 while begin.date() <= until {
-                    out.push(to_event_instance(&begin, end.as_ref()));
+                    out.push(stored_instance(&begin, end.as_ref()));
                     count += 1;
                     if count >= MAX_OCCURRENCES {
                         tracing::warn!(
@@ -2253,48 +1825,11 @@ fn expand_recurrence(
                     };
                 }
             }
-            None => out.push(to_event_instance(&inst.begin, inst.end.as_ref())),
+            None => out.push(inst.stored()),
         }
     }
 
     Ok(out)
-}
-
-/// An instance with no explicit end is stored as a zero-duration occurrence
-/// (end == begin), matching how point-in-time events are represented.
-fn to_event_instance(begin: &Zoned, end: Option<&Zoned>) -> EventInstance {
-    EventInstance {
-        begin: TimeString::from(begin.timestamp()),
-        end: TimeString::from(end.unwrap_or(begin).timestamp()),
-    }
-}
-
-/// Combine a `YYYY-MM-DD` date, an `HH:MM` (or `HH:MM:SS`) time, and an IANA
-/// time-zone name into a zoned instant.
-fn parse_datetime(date: &str, time: &str, timezone: &str) -> Result<Zoned, String> {
-    let tz = TimeZone::get(timezone)
-        .map_err(|_| format!("Unrecognized time zone \u{201c}{timezone}\u{201d}."))?;
-
-    let time = if time.len() == 5 {
-        format!("{time}:00")
-    } else {
-        time.to_string()
-    };
-
-    let datetime: civil::DateTime = format!("{date}T{time}")
-        .parse()
-        .map_err(|_| "Please enter a valid date and time.".to_string())?;
-
-    datetime
-        .to_zoned(tz)
-        .map_err(|e| format!("That date and time isn't valid in the chosen time zone: {e}"))
-}
-
-/// Whether `begin` falls on a day before `now`'s, both read in `begin`'s own
-/// zone: "today" is the event's today, wherever the visitor is. Earlier the
-/// same day is allowed, so an event can be listed while it's under way.
-fn starts_before_today(begin: &Zoned, now: &Zoned) -> bool {
-    begin.date() < now.with_time_zone(begin.time_zone().clone()).date()
 }
 
 fn parse_date(date: &str) -> Result<civil::Date, String> {
@@ -2367,6 +1902,9 @@ struct AddProjectForm {
     regions: String,
     #[serde(default)]
     url: String,
+    /// What was left typed in the location picker's place search.
+    #[serde(default)]
+    place_query: String,
     #[serde(default)]
     contact_name: String,
     #[serde(default)]
@@ -2407,6 +1945,7 @@ struct ProjectFormValues {
     longitude: String,
     regions: String,
     url: String,
+    place_query: String,
     contact_name: String,
     contact_affiliation: String,
     contact_email: String,
@@ -2446,6 +1985,7 @@ impl From<&AddProjectForm> for ProjectFormValues {
             longitude: f.longitude.clone(),
             regions: f.regions.clone(),
             url: f.url.clone(),
+            place_query: f.place_query.clone(),
             contact_name: f.contact_name.clone(),
             contact_affiliation: f.contact_affiliation.clone(),
             contact_email: f.contact_email.clone(),
@@ -2513,7 +2053,7 @@ pub async fn add_project_submit(
         return Ok(Redirect::see_other("/login?next=/add/project").into_response());
     };
 
-    match validate_and_build_project(&form, user_info.user_id) {
+    match validate_and_build_project(&form, Editor::from(&*user_info)) {
         Ok(mut project) => {
             // Submitted through an exchange, it waits in that exchange's
             // approval queue (`reviewed` starts false), unless the exchange
@@ -2578,6 +2118,7 @@ async fn render_project_form(
         &values.url,
         &values.regions,
     )
+    .with_place_query(&values.place_query)
     .errors(error.as_ref());
     let image = ImageField {
         label: "Image link".to_string(),
@@ -2649,8 +2190,9 @@ async fn render_project_form(
 /// user-facing message string on validation failure.
 fn validate_and_build_project(
     form: &AddProjectForm,
-    user_id: Ulid,
+    author: Editor,
 ) -> Result<ProjectAll, FormError> {
+    let user_id = author.user_id;
     let name = form.name.trim();
     if name.is_empty() {
         return Err(FormError::at(
@@ -2692,11 +2234,10 @@ fn validate_and_build_project(
             ));
         }
         LocationMode::InPerson => {
-            if form.address.trim().is_empty() && form.city.trim().is_empty() {
-                return Err(FormError::at(
-                    "address",
-                    "Please provide an address or city for the in-person project.",
-                ));
+            if let Some(message) =
+                missing_place(&form.address, &form.city, &form.place_query, "project")
+            {
+                return Err(FormError::at("address", message));
             }
         }
         LocationMode::Region => {
@@ -2727,13 +2268,7 @@ fn validate_and_build_project(
     project.image = form.image.trim().to_string();
     project.image_credit = form.image_credit.trim().to_string();
     project.location_description = form.location_description.trim().to_string();
-    project.tags = form
-        .tags
-        .split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(InsensitiveString::from)
-        .collect();
+    project.tags = crate::tag::as_set_by(crate::tag::split(&form.tags), [], author.is_staff);
 
     // The topics, audience and activities are read against their lists by
     // the handler, which can reach the database.
@@ -2758,6 +2293,7 @@ fn validate_and_build_project(
             email: contact_email.to_string(),
             phone: empty_to_none(&form.contact_phone),
             address: empty_to_none(&form.contact_address),
+            url: None,
         }]);
     }
 
@@ -2799,6 +2335,14 @@ fn validate_and_build_project(
 #[cfg(test)]
 mod tests {
     use assert2::check;
+
+    /// Someone, not staff, adding a page.
+    fn test_author() -> Editor {
+        Editor {
+            user_id: Ulid::new(),
+            is_staff: false,
+        }
+    }
 
     use super::*;
 
@@ -3000,12 +2544,12 @@ mod tests {
                  &url=https://example.org/bioblitz&repeat_frequency=once\
                  &instances[0][begin_date]=2099-11-01&instances[0][begin_time]=10:00\
                  &instances[0][timezone]=America/Chicago\
-                 &contact_email={email}"
+                 &contact_name=Ada+Organizer&contact_email={email}"
             );
             let form: AddEventForm = serde_qs::Config::new(10, false)
                 .deserialize_bytes(body.as_bytes())
                 .unwrap();
-            validate_and_build(&form, Ulid::new())
+            validate_and_build(&form, test_author())
         };
 
         let refused = submit("test@test").unwrap_err();
@@ -3013,6 +2557,103 @@ mod tests {
 
         let event = submit("name@example.org").unwrap();
         check!(event.contacts[0].email == "name@example.org");
+    }
+
+    #[test]
+    fn staff_need_the_contact_persons_name() {
+        for name in ["", "   "] {
+            let refused = submit_event(&[("contact_name", name)]).unwrap_err();
+            check!(refused.is_about("contact_name"));
+            check!(refused.message == "Please add the contact person's name.");
+        }
+
+        let event = submit_event(&[("contact_name", " Ada Organizer ")]).unwrap();
+        check!(event.contacts[0].name.as_deref() == Some("Ada Organizer"));
+    }
+
+    #[test]
+    fn staff_need_an_email_or_a_contact_form_link() {
+        let refused = submit_event(&[("contact_email", "")]).unwrap_err();
+        check!(refused.is_about("contact_email"));
+        check!(
+            refused.message
+                == "Please add the contact person's email, or a link to a contact form."
+        );
+
+        let event = submit_event(&[
+            ("contact_email", ""),
+            ("contact_url", " https://example.org/contact "),
+        ])
+        .unwrap();
+        check!(event.contacts.len() == 1);
+        check!(event.contacts[0].role == ContactRole::ContactPerson);
+        check!(event.contacts[0].email == "");
+        check!(event.contacts[0].url.as_deref() == Some("https://example.org/contact"));
+
+        let both = submit_event(&[("contact_url", "https://example.org/contact")]).unwrap();
+        check!(both.contacts[0].email == "organizer@example.org");
+        check!(both.contacts[0].url.as_deref() == Some("https://example.org/contact"));
+
+        let emailed = submit_event(&[]).unwrap();
+        check!(emailed.contacts[0].url == None);
+    }
+
+    #[test]
+    fn a_contact_form_link_is_a_whole_web_address() {
+        for link in [
+            "example.org/contact",
+            "ftp://example.org/contact",
+            "https://localhost/",
+        ] {
+            let refused = submit_event(&[("contact_url", link)]).unwrap_err();
+            check!(refused.is_about("contact_url"));
+            check!(
+                refused.message
+                    == "Please check the contact form link; it should be a whole web address, such as https://example.org/contact."
+            );
+        }
+    }
+
+    #[test]
+    fn an_online_event_has_no_location_note() {
+        let note = ("location_description", "Meet at the north entrance");
+
+        let online = submit_event(&[note]).unwrap();
+        check!(online.location_description == "");
+
+        let in_person = submit_event(&[
+            ("location_mode", "in_person"),
+            ("address", "1 Main St"),
+            note,
+        ])
+        .unwrap();
+        check!(in_person.location_description == "Meet at the north entrance");
+
+        let anywhere = submit_event(&[("location_mode", "anywhere"), note]).unwrap();
+        check!(anywhere.location_description == "Meet at the north entrance");
+    }
+
+    #[test]
+    fn words_left_in_the_place_search_are_not_an_address() {
+        let in_person = [("location_mode", "in_person"), ("url", "")];
+
+        let refused = submit_event(&in_person).unwrap_err();
+        check!(refused.is_about("address"));
+        check!(refused.message == "Please provide an address or city for the in-person event.");
+
+        let mut typed = in_person.to_vec();
+        typed.push(("place_query", "Shedd Aquarium loading dock"));
+        let refused = submit_event(&typed).unwrap_err();
+        check!(refused.is_about("address"));
+        check!(
+            refused.message
+                == "Please choose a place from the list, or choose to use what you typed as the address."
+        );
+
+        // Used as the address, the words are the street address.
+        typed.push(("address", "Shedd Aquarium loading dock"));
+        let event = submit_event(&typed).unwrap();
+        check!(event.address == "Shedd Aquarium loading dock");
     }
 
     #[test]
@@ -3072,7 +2713,7 @@ mod tests {
                 == "Please say who is eligible to attend, such as \u{201c}Library cardholders only.\u{201d}"
         );
 
-        let at_limit = "é".repeat(LIMITED_TO_LIMIT);
+        let at_limit = "é".repeat(rules::LIMITED_TO_LIMIT);
         let event = submit_event(&[("attendance", "limited"), ("limited_to", &at_limit)]).unwrap();
         check!(event.limited_to == at_limit);
 
@@ -3093,7 +2734,13 @@ mod tests {
             exchange: None,
             publishes: false,
             categories: ChoiceGroup::new(SectionIcon::Details, "Categories", Vec::new()),
-            location: picker("online").with_event_modes(),
+            audience: event_choices(
+                "audience",
+                ChoiceList::Audience,
+                vec![choice(ChoiceList::Audience, "families", "Families", None)],
+                &[],
+            ),
+            location: picker("online").for_events(),
             image: ImageField {
                 label: "Image link".to_string(),
                 value: String::new(),
@@ -3107,6 +2754,25 @@ mod tests {
         }
         .render_once()
         .unwrap()
+    }
+
+    #[test]
+    fn the_audience_is_asked_with_who_can_attend() {
+        let html = event_form(EventFormValues::default(), None);
+        let at = |text: &str| html.find(text).unwrap();
+        check!(
+            at("<legend>Who can attend?</legend>") < at("<legend>Audience (choose any)</legend>")
+        );
+        check!(at("<legend>Audience (choose any)</legend>") < at("What are the details?"));
+    }
+
+    #[test]
+    fn the_contact_is_reached_by_email_or_contact_form() {
+        let html = event_form(EventFormValues::default(), None);
+        check!(html.contains(r#"name="contact_email""#));
+        check!(html.contains(r#"name="contact_url""#));
+        check!(html.contains("Contact form link"));
+        check!(html.contains("Please give an email address, a link to a contact form, or both."));
     }
 
     #[test]
@@ -3171,6 +2837,8 @@ mod tests {
             ("instances[0][begin_date]", "2099-11-01".to_string()),
             ("instances[0][begin_time]", "10:00".to_string()),
             ("instances[0][timezone]", "America/Chicago".to_string()),
+            ("contact_name", "Ada Organizer".to_string()),
+            ("contact_email", "organizer@example.org".to_string()),
         ];
         for (name, value) in changes {
             match fields.iter_mut().find(|(field, _)| field == name) {
@@ -3187,7 +2855,7 @@ mod tests {
         let form: AddEventForm = serde_qs::Config::new(10, false)
             .deserialize_bytes(body.as_bytes())
             .unwrap();
-        validate_and_build(&form, Ulid::new())
+        validate_and_build(&form, test_author())
     }
 
     #[test]
@@ -3223,7 +2891,7 @@ mod tests {
     fn checks_come_in_orrerys_order() {
         // The name, then the dates, then the link's shape, then the
         // ticketing date, then the contact.
-        let long_name = "n".repeat(EVENT_NAME_LIMIT + 1);
+        let long_name = "n".repeat(rules::NAME_LIMIT + 1);
         let mut changes = vec![
             ("contact_email", "test@test"),
             ("ticketing_date", "2099-10-01"),
@@ -3246,7 +2914,7 @@ mod tests {
 
     #[test]
     fn a_new_events_name_is_held_to_the_limit_in_characters() {
-        let at_limit = "é".repeat(EVENT_NAME_LIMIT);
+        let at_limit = "é".repeat(rules::NAME_LIMIT);
         let event = submit_event(&[("name", &at_limit)]).unwrap();
         check!(event.name == at_limit);
 
@@ -3428,7 +3096,7 @@ mod tests {
 
     #[test]
     fn formats_are_alphabetical_with_other_last() {
-        let formats = in_format_order(vec![
+        let formats = crate::event::in_format_order(vec![
             choice(ChoiceList::EventFormat, "other", "Other", Some(208)),
             choice(ChoiceList::EventFormat, "webinar", "Webinar", Some(205)),
             choice(ChoiceList::EventFormat, "hackfest", "hackfest", Some(188)),
@@ -3446,7 +3114,6 @@ mod tests {
     fn the_event_choices_say_how_many_may_be_picked() {
         let audience = event_choices(
             "audience",
-            "Audience",
             ChoiceList::Audience,
             vec![choice(ChoiceList::Audience, "families", "Families", None)],
             &[],
@@ -3457,7 +3124,6 @@ mod tests {
 
         let topics = event_choices(
             "topics",
-            "Topics",
             ChoiceList::Topic,
             vec![choice(ChoiceList::Topic, "birds", "Birds", None)],
             &["birds".to_string()],
@@ -3485,7 +3151,7 @@ mod tests {
             None,
         );
         let html = picker("in_person")
-            .with_event_modes()
+            .for_events()
             .with_venues(venues)
             .render_once()
             .unwrap();
@@ -3504,8 +3170,40 @@ mod tests {
     }
 
     #[test]
+    fn an_online_event_is_asked_no_location_note() {
+        let note = |html: &str| {
+            let at = html
+                .find(r#"<details class="quiet-disclosure location-note""#)
+                .unwrap();
+            html[at..at + html[at..].find('>').unwrap()].to_string()
+        };
+
+        let online_event = picker("online").for_events().render_once().unwrap();
+        check!(note(&online_event).contains(" data-no-online-note"));
+        check!(note(&online_event).ends_with(" hidden"));
+
+        let in_person_event = picker("in_person").for_events().render_once().unwrap();
+        check!(note(&in_person_event).contains(" data-no-online-note"));
+        check!(!note(&in_person_event).ends_with(" hidden"));
+
+        // A project joined online may still say where.
+        let online_project = picker("online").render_once().unwrap();
+        check!(!note(&online_project).contains("data-no-online-note"));
+        check!(!note(&online_project).ends_with(" hidden"));
+    }
+
+    #[test]
+    fn words_left_in_the_place_search_stay_there() {
+        let html = picker("in_person")
+            .with_place_query("Shedd \"Aquarium\"")
+            .render_once()
+            .unwrap();
+        check!(html.contains(r#"name="place_query" value="Shedd &quot;Aquarium&quot;""#));
+    }
+
+    #[test]
     fn the_toggle_is_in_person_or_online() {
-        let html = picker("").with_event_modes().render_once().unwrap();
+        let html = picker("").for_events().render_once().unwrap();
         check!(html.contains("Is it in person or online?"));
         for (value, label) in [("in_person", "In person"), ("online", "Online")] {
             let radio = toggle_radio(&html, value).unwrap();
@@ -3527,14 +3225,14 @@ mod tests {
     #[test]
     fn the_toggle_shows_in_person_for_a_region_or_anywhere() {
         for mode in ["region", "anywhere"] {
-            let html = picker(mode).with_event_modes().render_once().unwrap();
+            let html = picker(mode).for_events().render_once().unwrap();
             let radio = toggle_radio(&html, mode).unwrap();
             check!(radio.contains(" data-in-person"), "{mode}");
             check!(radio.contains(" checked"), "{mode}");
             check!(toggle_radio(&html, "in_person").is_none(), "{mode}");
         }
 
-        let html = picker("anywhere").with_event_modes().render_once().unwrap();
+        let html = picker("anywhere").for_events().render_once().unwrap();
         check!(
             html.contains(r#"<p class="field-help" data-only-mode="anywhere" >People take part"#)
         );
@@ -3550,7 +3248,7 @@ mod tests {
             "Please choose where the event takes place.",
         );
         let html = picker("")
-            .with_event_modes()
+            .for_events()
             .errors(Some(&error))
             .render_once()
             .unwrap();
@@ -3577,7 +3275,7 @@ mod tests {
         let form: AddProjectForm = serde_qs::Config::new(10, false)
             .deserialize_bytes(body.as_bytes())
             .unwrap();
-        validate_and_build_project(&form, Ulid::new())
+        validate_and_build_project(&form, test_author())
     }
 
     #[test]
@@ -3600,35 +3298,5 @@ mod tests {
             submit_project("&location_mode=anywhere&city=Chicago&url=https://example.org/bugs")
                 .unwrap_err();
         check!(refused.is_about("location_mode"));
-    }
-
-    #[test]
-    fn past_start_dates_are_judged_in_the_events_zone() {
-        // 02:00 UTC on 2026-09-21 is still the evening of the 20th in Chicago.
-        let now: Zoned = "2026-09-21T02:00:00+00:00[UTC]".parse().unwrap();
-
-        let chicago_evening = parse_datetime("2026-09-20", "21:00", "America/Chicago").unwrap();
-        assert!(!starts_before_today(&chicago_evening, &now));
-
-        let chicago_yesterday = parse_datetime("2026-09-19", "21:00", "America/Chicago").unwrap();
-        assert!(starts_before_today(&chicago_yesterday, &now));
-
-        let tokyo_same_instant = parse_datetime("2026-09-20", "21:00", "Asia/Tokyo").unwrap();
-        assert!(starts_before_today(&tokyo_same_instant, &now));
-    }
-
-    /// A venue pick's inferred zone must be a real IANA zone that the form's
-    /// time-zone select actually offers, or the client-side defaulting is a
-    /// silent no-op.
-    #[test]
-    fn venue_timezone_is_selectable() {
-        // Philadelphia city hall.
-        let zone = timezone_at(39.9527, -75.1635);
-        assert_eq!(zone, "America/New_York");
-
-        let listed = all_timezones()
-            .iter()
-            .any(|(_, zones)| zones.iter().any(|(value, _)| *value == zone));
-        assert!(listed, "inferred zone {zone} missing from the tz select");
     }
 }

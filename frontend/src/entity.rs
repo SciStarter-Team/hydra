@@ -695,6 +695,7 @@ impl Entity {
                     og_description,
                     og_image,
                     og_url,
+                    edits_event: false,
                 }
                 .into_response(None)
                 .await?
@@ -732,7 +733,7 @@ impl Entity {
 
                 let mut head = Head::default().with_maplibre();
                 if can_edit {
-                    head = head.with_quill();
+                    head = head.with_quill().with_region_editor();
                 }
 
                 crate::component::detail_page::DetailPageWrapper {
@@ -743,6 +744,7 @@ impl Entity {
                     og_description,
                     og_image,
                     og_url,
+                    edits_event: can_edit,
                 }
                 .into_response(None)
                 .await?

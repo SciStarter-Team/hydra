@@ -9,7 +9,7 @@ use ulid::Ulid;
 
 // Note: The `tags_text` database column is NOT included in EventFieldType
 // as it's a computed field for FTS search optimization, not a real event field.
-// Tags are managed separately via the event_tags table and dedicated handlers.
+// Tags live in the event_tags table, written through `crate::event::write_tags`.
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct EventField {
@@ -72,6 +72,13 @@ pub enum EventFieldValue {
     /// The group the event is limited to, in the organizer's words; empty
     /// when it's open to everyone.
     LimitedTo(String),
+    /// The event's dates, replaced all together.
+    Instances(Box<[crate::event::EventInstance]>),
+    /// The event's tags, replaced all together; see `crate::tag`.
+    Tags(std::collections::HashSet<common::insensitivestring::InsensitiveString>),
+    /// Where the event is held, saved all together; see
+    /// `crate::event::location`.
+    Location(crate::event::location::EventLocation),
 }
 
 impl EventFieldValue {
@@ -144,6 +151,9 @@ impl EventField {
             EventFieldValue::TicketUrl(_) => EventFieldType::TicketUrl,
             EventFieldValue::Cost(_) => EventFieldType::Cost,
             EventFieldValue::LimitedTo(_) => EventFieldType::LimitedTo,
+            EventFieldValue::Instances(_) => EventFieldType::Instances,
+            EventFieldValue::Tags(_) => EventFieldType::Tags,
+            EventFieldValue::Location(_) => EventFieldType::Location,
             EventFieldValue::OutcomesLabel(_) => EventFieldType::OutcomesLabel,
             EventFieldValue::OutcomesLink(_) => EventFieldType::OutcomesLink,
             EventFieldValue::CircuitId(_) => EventFieldType::CircuitId,
@@ -175,8 +185,8 @@ impl EventField {
             sqlx::query!(
                 r#"insert into event_contacts (
                   "contact_id", "event_id", "role", "name",
-                  "affiliation", "email", "phone", "address"
-                ) values (?, ?, ?, ?, ?, ?, ?, ?)"#,
+                  "affiliation", "email", "phone", "address", "url"
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
                 contact_id,
                 event_id,
                 contact.role,
@@ -185,6 +195,7 @@ impl EventField {
                 contact.email,
                 contact.phone,
                 contact.address,
+                contact.url,
             )
             .execute(&mut tx)
             .await?;
@@ -199,7 +210,7 @@ impl EventField {
 
         let event_id_str = event_id.to_string();
         let rows = sqlx::query!(
-            r#"SELECT contact_id, role, name, affiliation, email, phone, address
+            r#"SELECT contact_id, role, name, affiliation, email, phone, address, url
                FROM event_contacts WHERE event_id = ? ORDER BY role"#,
             event_id_str
         )
@@ -227,6 +238,7 @@ impl EventField {
                 email: row.email,
                 phone: row.phone,
                 address: row.address,
+                url: row.url,
             });
         }
 
@@ -659,6 +671,29 @@ impl EventField {
         .execute(db())
         .await?;
 
+        Ok(())
+    }
+
+    async fn save_instances(&self, instances: &[crate::event::EventInstance]) -> Result<(), Error> {
+        use common::shared::db;
+        use common::transaction::Immediate;
+
+        let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
+        crate::event::write_instances(&mut tx, &self.event_id.to_string(), instances).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn save_tags(
+        &self,
+        tags: &std::collections::HashSet<common::insensitivestring::InsensitiveString>,
+    ) -> Result<(), Error> {
+        use common::shared::db;
+        use common::transaction::Immediate;
+
+        let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
+        crate::event::write_tags(&mut tx, &self.event_id.to_string(), tags).await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -1462,7 +1497,17 @@ impl LoadStorePeered for EventField {
                 }
                 result
             }
-            EventFieldValue::Zip(zip) => self.save_zip(zip).await,
+            EventFieldValue::Zip(zip) => {
+                let result = self.save_zip(zip).await;
+                if result.is_ok() {
+                    if let Err(e) =
+                        crate::geocode::geocode_and_update_event_point(self.event_id).await
+                    {
+                        eprintln!("Geocoding after zip save failed: {e}");
+                    }
+                }
+                result
+            }
             EventFieldValue::State(state) => {
                 let result = self.save_state(state).await;
                 if result.is_ok() {
@@ -1511,6 +1556,9 @@ impl LoadStorePeered for EventField {
             EventFieldValue::TicketUrl(ticket_url) => self.save_ticket_url(ticket_url).await,
             EventFieldValue::Cost(cost) => self.save_cost(cost).await,
             EventFieldValue::LimitedTo(limited_to) => self.save_limited_to(limited_to).await,
+            EventFieldValue::Instances(instances) => self.save_instances(instances).await,
+            EventFieldValue::Tags(tags) => self.save_tags(tags).await,
+            EventFieldValue::Location(location) => location.save(self.event_id).await,
             EventFieldValue::OutcomesLabel(outcomes_label) => {
                 self.save_outcomes_label(outcomes_label).await
             }
@@ -1614,6 +1662,25 @@ impl LoadStorePeered for EventField {
             EventFieldType::TicketUrl => Self::read_ticket_url(event_id).await,
             EventFieldType::Cost => Self::read_cost(event_id).await,
             EventFieldType::LimitedTo => Self::read_limited_to(event_id).await,
+            EventFieldType::Location => Ok(EventField::new(
+                event_id,
+                EventFieldValue::Location(
+                    crate::event::location::EventLocation::read(event_id).await?,
+                ),
+            )),
+            EventFieldType::Tags => Ok(EventField::new(
+                event_id,
+                EventFieldValue::Tags(
+                    crate::event::read_tags(common::shared::db(), &event_id.to_string()).await?,
+                ),
+            )),
+            EventFieldType::Instances => Ok(EventField::new(
+                event_id,
+                EventFieldValue::Instances(
+                    crate::event::read_instances(common::shared::db(), &event_id.to_string())
+                        .await?,
+                ),
+            )),
             EventFieldType::OutcomesLabel => Self::read_outcomes_label(event_id).await,
             EventFieldType::OutcomesLink => Self::read_outcomes_link(event_id).await,
             EventFieldType::CircuitId => Self::read_circuit_id(event_id).await,

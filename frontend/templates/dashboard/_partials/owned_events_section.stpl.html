@@ -16,10 +16,7 @@
             <h3 class="font-semibold text-lg mb-1"><a href="<%= row.card.link %>" class="hover:text-primary"><%= row.card.name %></a></h3>
             <% if let Some(begin) = &row.card.begin { %>
             <p class="text-sm opacity-70 mb-2">
-                <%- local_time(begin, TimeFormat::DateTime) %>
-                <% if let Some(end) = &row.card.end { %>
-                to <%- local_time(end, TimeFormat::DateTime) %>
-                <% } %>
+                <%- crate::local_time::zoned_time_range(begin, row.card.end.as_deref().unwrap_or(begin), TimeFormat::DateTime, crate::local_time::Clocks::of(row.card.zone.as_ref())) %>
             </p>
             <% } %>
             <div class="flex gap-8 mb-3">

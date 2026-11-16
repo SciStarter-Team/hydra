@@ -261,6 +261,7 @@ fn steward_contacts(existing: &[Contact], steward: &UserDetails) -> Vec<Contact>
             email: steward.primary_email.clone(),
             phone: None,
             address: None,
+            url: None,
         });
     }
 
@@ -472,6 +473,7 @@ mod tests {
             email: email.to_string(),
             phone: Some("555-0100".to_string()),
             address: Some("12 Old Lab Road".to_string()),
+            url: None,
         }
     }
 

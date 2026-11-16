@@ -46,12 +46,10 @@
         <%+ self.field("programs") %>
         <%+ self.field("venues") %>
         <%+ self.field("topics") %>
-        <%+ self.field("audience") %>
-        <% } %>
         <%# Who can attend, where people see it before following the links
-            that sign them up. %>
-        <% if self.kind.is_event() { %>
+            that sign them up, and then who it is for. %>
         <%+ self.field("limited_to") %>
+        <%+ self.field("audience") %>
         <% } %>
         <% if !self.url.is_empty() || self.can_edit { %>
         <%+ self.field("url") %>
@@ -153,7 +151,10 @@
       <p class="mb-4 text-sm text-neutral-mid">Part of <a class="text-primary-action underline" href="<%= &self.part_of_path %>"><%= &self.part_of_name %></a></p>
       <% } %>
 
-      <% if !self.location_name.is_empty() || !self.regions_description.is_empty() || !self.location_description.is_empty() || !self.address.is_empty() || !self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty() || self.entirely_online || self.also_online || self.can_edit || (self.kind.is_event() && self.region_geojson.is_some()) { %>
+      <% if self.kind.is_event() { %>
+      <%+ crate::component::detail_page_edit::EventLocationDisplay::new(self.target_id.to_string(), self.can_edit, |part| self.field(part), self.entirely_online, self.also_online, self.has_point, self.region_geojson.clone()) %>
+      <% } else { %>
+      <% if !self.location_name.is_empty() || !self.regions_description.is_empty() || !self.location_description.is_empty() || !self.address.is_empty() || !self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty() || self.entirely_online || self.also_online || self.can_edit { %>
       <div class="border border-linework rounded-sm bg-primary-light mb-4">
         <dl>
           <dt class="ribbon-project bg-primary-dark text-white">Where</dt>
@@ -161,9 +162,7 @@
             <%+ self.field("entirely_online") %>
             <% if !self.entirely_online || self.can_edit { %>
             <%+ self.field("location_name") %>
-            <% if self.kind.is_project() { %>
             <%+ self.field("regions_description") %>
-            <% } %>
             <%+ self.field("location_description") %>
             <%+ self.field("address") %>
             <%+ self.field("city") %>
@@ -171,39 +170,16 @@
             <%+ self.field("zip") %>
             <%+ self.field("country") %>
             <% } %>
-            <% if self.kind.is_event() && self.also_online { %>
-            <p class="mb-2">and online</p>
-            <% } %>
             <% if self.has_point { %>
             <button class="btn btn-primary btn-thin btn-icon" hx-get="/-detail/<%= &self.target_id %>/map" hx-target="body" hx-swap="beforeend">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path d="M384 476.1L192 421.2l0-385.3L384 90.8l0 385.3zm32-1.2l0-386.5L543.1 37.5c15.8-6.3 32.9 5.3 32.9 22.3l0 334.8c0 9.8-6 18.6-15.1 22.3L416 474.8zM15.1 95.1L160 37.2l0 386.5L32.9 474.5C17.1 480.8 0 469.2 0 452.2L0 117.4c0-9.8 6-18.6 15.1-22.3z"/></svg>
               View Map
             </button>
             <% } %>
-            <% if self.kind.is_event() { if let Some(geojson) = &self.region_geojson { %>
-            <div id="detail-region-map" class="mt-3" style="height:320px;width:100%;border-radius:4px;overflow:hidden;"></div>
-            <script>
-              (function () {
-                if (typeof maplibregl === "undefined") return;
-                var data = <%- geojson %>;
-                if (!data || !data.coordinates) return;
-                var map = new maplibregl.Map({ container: "detail-region-map", style: "https://tiles.openfreemap.org/styles/liberty", center: [-98.5, 39.8], zoom: 3 });
-                map.on("load", function () {
-                  map.addSource("region", { type: "geojson", data: { type: "Feature", geometry: data, properties: {} } });
-                  map.addLayer({ id: "region-fill", type: "fill", source: "region", paint: { "fill-color": "#037F9B", "fill-opacity": 0.25 } });
-                  map.addLayer({ id: "region-line", type: "line", source: "region", paint: { "line-color": "#037F9B", "line-width": 2 } });
-                  try {
-                    var b = new maplibregl.LngLatBounds();
-                    (function ext(c) { if (typeof c[0] === "number") { b.extend(c); } else { c.forEach(ext); } })(data.coordinates);
-                    map.fitBounds(b, { padding: 30, maxZoom: 12, duration: 0 });
-                  } catch (e) {}
-                });
-              })();
-            </script>
-            <% } } %>
           </dd>
         </dl>
       </div>
+      <% } %>
       <% } %>
 
       <% let has_guidance = !self.guidance.is_nothing(); %>
@@ -235,9 +211,9 @@
         <dl>
           <dt class="ribbon-project bg-primary-dark text-white">When</dt>
           <dd class="p-4">
-            <%+ crate::component::detail_page_edit::InstancesDisplay { target_id: self.target_id.clone(), instances: self.instances.clone(), can_edit: self.can_edit } %>
+            <%+ crate::component::detail_page_edit::InstancesDisplay::new(self.target_id.to_string(), self.instances.clone(), self.can_edit, self.event_zone.clone()) %>
             <% if let Some(ticketing) = &self.ticketing_begins { %>
-            <p class="mt-3 text-sm"><strong>Tickets / registration open:</strong> <%- local_time(ticketing, TimeFormat::DateTime) %></p>
+            <p class="mt-3 text-sm"><strong>Tickets / registration open:</strong> <%- crate::local_time::zoned_time(ticketing, TimeFormat::DateTime, crate::local_time::Clocks::of(self.event_zone.as_ref())) %></p>
             <% } %>
           </dd>
         </dl>

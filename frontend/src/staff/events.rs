@@ -59,6 +59,7 @@ struct EventRow {
     instances: Vec<(String, String)>,
     topics: String,
     audience: String,
+    contact_url: String,
 }
 
 /// One contact row, with the nullable columns already defaulted, so the export
@@ -72,6 +73,7 @@ struct Contact {
     email: String,
     phone: String,
     address: String,
+    url: String,
 }
 
 const INSTANCES_SQL: &str = r#"SELECT event_id, "begin", "end" FROM event_instances
@@ -89,7 +91,7 @@ const TOPICS_SQL: &str = "SELECT target AS event_id, position, name FROM choice_
                           WHERE list = 'Topic' AND target IN";
 const AUDIENCE_SQL: &str = "SELECT target AS event_id, position, name FROM choice_names
                             WHERE list = 'Audience' AND target IN";
-const CONTACTS_SQL: &str = r#"SELECT event_id, role, name, affiliation, email, phone, address
+const CONTACTS_SQL: &str = r#"SELECT event_id, role, name, affiliation, email, phone, address, url
                               FROM event_contacts WHERE event_id IN"#;
 
 /// Run one `… IN (…)` query over the event ids and group its rows by event.
@@ -167,7 +169,7 @@ const FIXED_COLUMNS: &[&str] = &[
 
 /// The columns after the schedule, which orrery added there so that every
 /// column before them kept its place.
-const TRAILING_COLUMNS: &[&str] = &["topics", "audience"];
+const TRAILING_COLUMNS: &[&str] = &["topics", "audience", "contact_url"];
 
 /// GET `/staff/events/events.html` — the date-range form.
 #[handler]
@@ -291,6 +293,7 @@ pub async fn export_csv(Query(range): Query<RangeQuery>) -> Result<Response, any
                 email: row.get(4),
                 phone: row.get::<Option<String>, _>(5).unwrap_or_default(),
                 address: row.get::<Option<String>, _>(6).unwrap_or_default(),
+                url: row.get::<Option<String>, _>(7).unwrap_or_default(),
             },
         )
     })
@@ -348,6 +351,7 @@ pub async fn export_csv(Query(range): Query<RangeQuery>) -> Result<Response, any
                 .remove(&row.event_id)
                 .unwrap_or_default()
                 .join("||"),
+            contact_url: contact.url,
         });
     }
 
@@ -431,6 +435,7 @@ fn render_csv(events: &[EventRow]) -> String {
 
         line.push(csv_field(&event.topics));
         line.push(csv_field(&event.audience));
+        line.push(csv_field(&event.contact_url));
 
         csv.push_str(&line.join(","));
         csv.push('\n');
@@ -474,6 +479,7 @@ mod tests {
                 .collect(),
             topics: String::new(),
             audience: String::new(),
+            contact_url: String::new(),
         }
     }
 
@@ -483,7 +489,7 @@ mod tests {
         let header = csv.lines().next().expect("a header");
 
         assert!(
-            header.ends_with(",begin 1,end 1,topics,audience"),
+            header.ends_with(",begin 1,end 1,topics,audience,contact_url"),
             "{header}"
         );
     }
@@ -497,7 +503,9 @@ mod tests {
         let header = csv.lines().next().expect("a header");
 
         assert!(
-            header.ends_with(",begin 1,end 1,begin 2,end 2,begin 3,end 3,topics,audience"),
+            header.ends_with(
+                ",begin 1,end 1,begin 2,end 2,begin 3,end 3,topics,audience,contact_url"
+            ),
             "{header}"
         );
     }
@@ -527,21 +535,23 @@ mod tests {
     }
 
     #[test]
-    fn topics_and_audience_follow_the_schedule() {
+    fn topics_audience_and_contact_url_follow_the_schedule() {
         let mut one = event("One", &[("a", "b")]);
         one.topics = "Birds||Astronomy & Space".to_string();
         one.audience = "Adults".to_string();
+        one.contact_url = "https://example.org/contact".to_string();
         let two = event("Two", &[("a", "b"), ("c", "d")]);
 
         let csv = render_csv(&[one, two]);
         let lines: Vec<&str> = csv.lines().collect();
 
         assert!(
-            lines[1].ends_with(",a,b,,,Birds||Astronomy & Space,Adults"),
+            lines[1]
+                .ends_with(",a,b,,,Birds||Astronomy & Space,Adults,https://example.org/contact"),
             "{}",
             lines[1]
         );
-        assert!(lines[2].ends_with(",a,b,c,d,,"), "{}", lines[2]);
+        assert!(lines[2].ends_with(",a,b,c,d,,,"), "{}", lines[2]);
     }
 
     #[test]

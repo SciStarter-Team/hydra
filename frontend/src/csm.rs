@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::component::{Component, Head, StandardLayout, html_escape};
-use crate::local_time::{TimeFormat, local_time};
+use crate::local_time::{TimeFormat, zoned_time, zoned_time_range};
 use crate::middleware::authorization::Authenticated;
 use crate::project::location::ANYWHERE;
 
@@ -765,6 +765,8 @@ struct CsmEvent {
     address: String,
     city: String,
     state: String,
+    /// The venue's time zone, which the event's dates are told in.
+    zone: Option<jiff::tz::TimeZone>,
 }
 
 impl CsmEvent {
@@ -966,7 +968,7 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
     results_qb.push(" AND a.value = ");
     results_qb.push_bind(signature_type.1.to_string());
     results_qb.push(
-        "), ev.address, ev.city, ev.state \
+        "), ev.address, ev.city, ev.state, ST_Y(ev.point), ST_X(ev.point), ev.location_type \
          FROM events ev \
          JOIN entities e ON e.target = ev.event_id \
          JOIN event_instances ei ON ei.event_id = ev.event_id",
@@ -1001,6 +1003,9 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
             String,
             String,
             String,
+            Option<f64>,
+            Option<f64>,
+            String,
         )>()
         .fetch_all(db())
         .await?;
@@ -1018,6 +1023,7 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
             address: r.7,
             city: r.8,
             state: r.9,
+            zone: crate::event::zone::of_venue(r.10, r.11, &r.12, r.4),
         })
         .collect();
 
@@ -1313,6 +1319,7 @@ mod tests {
             address: "1 Main St".to_string(),
             city: String::new(),
             state: String::new(),
+            zone: None,
         };
 
         check!(event(false, true).location_display() == "Anywhere");

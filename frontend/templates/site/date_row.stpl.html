@@ -1,0 +1,21 @@
+<% use crate::component::floating_field::{FieldIcon, FieldKind, FloatingField}; %>
+<% use crate::component::timezone_field::TimezoneField; %>
+<% let error = self.error.as_ref(); %>
+<div data-date-row<% if let Some(stored) = &self.stored { %> data-stored-begin="<%= &*stored.begin %>" data-stored-end="<%= &*stored.end %>"<% } %><% if self.follow_viewer { %> data-follow-viewer<% } %>>
+  <div class="when-grid">
+    <%+ FloatingField::new(FieldKind::Date, self.name("begin_date"), "Start date", self.values.begin_date.as_str()).icon(FieldIcon::Calendar).required().errors(error) %>
+    <%+ FloatingField::new(FieldKind::Time, self.name("begin_time"), "Start time", self.values.begin_time.as_str()).icon(FieldIcon::Clock).required().errors(error) %>
+    <%+ TimezoneField::build(self.name("timezone"), &self.values.timezone, true).errors(error) %>
+  </div>
+
+  <input type="checkbox" class="has-end-toggle sr-only" name="<%= self.name("has_end") %>" <% if self.values.has_end { %>checked<% } %> tabindex="-1" aria-hidden="true">
+  <button type="button" class="link-btn end-toggle" <% if self.values.has_end { %>hidden<% } %>>+ End date and time</button>
+
+  <div class="end-block" <% if !self.values.has_end { %>hidden<% } %>>
+    <div class="field-pair">
+      <%+ FloatingField::new(FieldKind::Date, self.name("end_date"), "End date", self.values.end_date.as_str()).icon(FieldIcon::Calendar).errors(error) %>
+      <%+ FloatingField::new(FieldKind::Time, self.name("end_time"), "End time", self.values.end_time.as_str()).icon(FieldIcon::Clock).errors(error) %>
+    </div>
+    <button type="button" class="link-btn end-remove">Remove end date &amp; time</button>
+  </div>
+</div>

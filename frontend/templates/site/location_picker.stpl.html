@@ -46,8 +46,10 @@
               picking here. The marks show only while this fieldset does. %>
           <span class="pill-label">Add a place or address<span class="pill-required" aria-hidden="true"> *</span></span>
           <%# The address the in-person check wants is set by picking here, so
-              an error about it marks this, the control a visitor sees. %>
-          <input id="place-search-input" type="search" placeholder=" " aria-required="true"
+              an error about it marks this, the control a visitor sees. What
+              is left typed here is submitted only so that the refusal can
+              say it went unused, and so it is still here to pick from. %>
+          <input id="place-search-input" type="search" name="place_query" value="<%= self.place_query %>" placeholder=" " aria-required="true"
             autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"
             aria-controls="place-search-results"<%- invalid_attrs("address") %>>
         </label>
@@ -127,10 +129,13 @@
       <p id="add-url-help" class="field-help url-help"><% if online_active { %>The link people use to join or participate online.<% } else { %>A website, registration page, or livestream link.<% } %></p>
     </div>
 
-    <%# A location note meaningful in any mode (the area for a region, or a
-        "meet at the north entrance"-style note). Collapsed behind a quiet
-        disclosure; region mode requires it, so it opens there. %>
-    <details class="quiet-disclosure location-note" <% if region_active || !self.location_description.is_empty() { %>open<% } %>>
+    <%# A location note (the area for a region, or a "meet at the north
+        entrance"-style note), meaningful in every mode a place is joined in
+        person, and online too unless the picker says otherwise; the server
+        then drops it. Collapsed behind a quiet disclosure; region mode
+        requires it, so it opens there. %>
+    <% let note_hidden = online_active && !self.notes_online; %>
+    <details class="quiet-disclosure location-note"<% if !self.notes_online { %> data-no-online-note<% } %> <% if region_active || !self.location_description.is_empty() { %>open<% } %><% if note_hidden { %> hidden<% } %>>
       <summary>+ Add a location note</summary>
       <%+ FloatingField::new(FieldKind::Text, "location_description", "Location note", self.location_description.as_str()).id("location-description").described_by("location-description-help").errors(error) %>
       <p id="location-description-help" class="field-help">The area it covers, or a note like &ldquo;meet at the north entrance.&rdquo;</p>

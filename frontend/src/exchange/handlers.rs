@@ -14,7 +14,7 @@ use poem::{
 use sailfish::TemplateOnce;
 use ulid::Ulid;
 
-use crate::local_time::{TimeFormat, local_time, local_time_range};
+use crate::local_time::{Clocks, TimeFormat, local_time, zoned_time_range};
 use crate::middleware::analytics::{Device, Interaction};
 use crate::middleware::authorization::Authenticated;
 use crate::page_change::last_changes;
@@ -884,6 +884,9 @@ pub struct ExchangeEventDetail {
     pub event_types: Vec<String>,
     /// When it happens, earliest first.
     pub instances: Vec<super::events::Session>,
+    /// The venue's time zone, which `instances` are told in; `None` for an
+    /// event with no venue, told in the viewer's.
+    pub zone: Option<jiff::tz::TimeZone>,
     /// The venue, when the event names one.
     pub location_name: String,
     pub location: Where,
@@ -923,7 +926,8 @@ async fn load_exchange_event_detail(id: Ulid, slug: &str) -> Result<ExchangeEven
         SELECT name, presenter, image, image_credit, url, description, how_to_join,
                location_type, entirely_online as "entirely_online: bool",
                location_name, location_description, address, city, state, country,
-               AsGeoJSON(regions) as "coverage: Option<String>"
+               AsGeoJSON(regions) as "coverage: Option<String>",
+               ST_Y(point) AS "latitude: f64", ST_X(point) AS "longitude: f64"
         FROM events
         WHERE event_id = ?
         "#,
@@ -952,7 +956,7 @@ async fn load_exchange_event_detail(id: Ulid, slug: &str) -> Result<ExchangeEven
     .fetch_all(db())
     .await?
     .into_iter()
-    .filter(|tag| !crate::project::is_hidden_tag(tag))
+    .filter(|tag| !crate::tag::is_hidden(tag))
     .collect();
 
     let coverage = row.coverage.flatten();
@@ -994,6 +998,12 @@ async fn load_exchange_event_detail(id: Ulid, slug: &str) -> Result<ExchangeEven
             .unwrap_or(row.how_to_join),
         event_types,
         instances,
+        zone: crate::event::zone::of_venue(
+            row.latitude,
+            row.longitude,
+            &row.location_type,
+            row.entirely_online,
+        ),
         location_name: row.location_name,
         location,
         coverage,
@@ -1272,7 +1282,7 @@ async fn load_exchange_project_detail(
     let tags: Vec<String> = tag_rows
         .into_iter()
         .map(|r| r.tag)
-        .filter(|t| !crate::project::is_hidden_tag(t))
+        .filter(|t| !crate::tag::is_hidden(t))
         .collect();
 
     let pairs = |values: Vec<ChoiceValue>| -> Vec<(String, String)> {
@@ -1697,6 +1707,9 @@ struct ExchangeCsvRowFull {
     audience: String,
     classroom_materials: String,
     admin_link: String,
+    /// After the rest, as orrery added it, so the columns before it keep
+    /// their places.
+    contact_url: Option<String>,
 }
 
 /// Exchange CSV export.
@@ -1804,6 +1817,7 @@ pub async fn exchange_csv(
                 .join(";"),
             classroom_materials: project.classroom_materials,
             admin_link,
+            contact_url: contact.and_then(|contact| contact.url.clone()),
         })?;
     }
 

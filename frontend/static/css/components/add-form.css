@@ -601,6 +601,14 @@ form .add-more-fields {
 .place-search-results .place-context {
     @apply block text-sm text-neutral-mid;
 }
+/* The option to use the words typed as the address, set apart from the
+   places found above it (when there are any). */
+.place-search-results .place-typed:not(:first-child) {
+    @apply border-t border-linework;
+}
+.place-search-results .place-typed .place-name {
+    @apply font-normal italic;
+}
 
 /* Fieldsets group each date/time row for assistive software (with a visually
    hidden legend); they draw nothing themselves. */

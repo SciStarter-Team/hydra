@@ -57,9 +57,9 @@ use super::{
 };
 use crate::{
     contact::{edit_manager, remove_manager},
-    submission::Submission,
     page_change::Stored,
     peering::LoadStorePeered,
+    submission::Submission,
 };
 
 /// The `origin` of a project that originates at ALA, in BioCollect's records

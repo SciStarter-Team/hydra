@@ -15,10 +15,11 @@
       <tr>
         <th scope="row">When</th>
         <td>
+          <% let clocks = Clocks::of(self.event.zone.as_ref()); %>
           <% if session.spans_days() { %>
-          <%- local_time_range(&session.begin, &session.end, TimeFormat::ShortDate) %>
+          <%- zoned_time_range(&session.begin, &session.end, TimeFormat::ShortDate, clocks) %>
           <% } else { %>
-          <%- local_time(&session.begin, TimeFormat::DateTime) %>
+          <%- zoned_time(&session.begin, TimeFormat::DateTime, clocks) %>
           <% } %>
           <% if self.event.other_sessions > 0 { %><br><span class="b-small">and <%= self.event.other_sessions %> more <% if self.event.other_sessions == 1 { %>date<% } else { %>dates<% } %></span><% } %>
         </td>

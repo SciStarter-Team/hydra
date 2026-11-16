@@ -1065,6 +1065,11 @@ pub struct EntitySummary {
     /// Event end time (RFC 3339), if scheduled. Always `None` for projects.
     #[serde(default)]
     pub end: Option<String>,
+    /// The IANA name of the time zone of the event's venue, which its times
+    /// are told in. `None` for projects, and for an event with no venue (one
+    /// held online), whose times are told in the viewer's zone.
+    #[serde(default)]
+    pub zone: Option<String>,
 }
 
 impl EntitySummary {

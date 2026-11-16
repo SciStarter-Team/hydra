@@ -33,7 +33,7 @@ use super::handlers::{
     push_hidden_exclusion, push_membership, push_named_regions, with_global,
 };
 use super::{ExchangeInfo, SearchParams, TemplateExchange};
-use crate::local_time::{TimeFormat, local_time, local_time_range};
+use crate::local_time::{Clocks, TimeFormat, zoned_time, zoned_time_range};
 use crate::middleware::authorization::Authenticated;
 use crate::project::location::{ANYWHERE, Where};
 
@@ -87,6 +87,10 @@ pub struct EventSummary {
     pub other_sessions: usize,
 
     pub location: Where,
+
+    /// The venue's time zone, which the event's dates are told in; `None`
+    /// for an event with no venue, told in the viewer's.
+    pub zone: Option<jiff::tz::TimeZone>,
 
     /// Whether the exchange hid it from its visitors, which only its staff,
     /// who are still shown it, are told; filled in by
@@ -226,7 +230,9 @@ async fn find(
              ev.city,
              ev.state,
              ev.country,
-             ev.address"#,
+             ev.address,
+             ST_Y(ev.point),
+             ST_X(ev.point)"#,
     );
     query_builder.push(FROM);
     push_conditions(&mut query_builder, exchange, params, &scope);
@@ -288,6 +294,8 @@ async fn find(
         String,
         String,
         String,
+        Option<f64>,
+        Option<f64>,
     );
 
     let mut events: Vec<EventSummary> = query_builder
@@ -310,6 +318,8 @@ async fn find(
                 state,
                 country,
                 address,
+                latitude,
+                longitude,
             )| EventSummary {
                 event_id,
                 slug,
@@ -319,6 +329,12 @@ async fn find(
                 session: None,
                 other_sessions: 0,
                 hidden: false,
+                zone: crate::event::zone::of_venue(
+                    latitude,
+                    longitude,
+                    &location_type,
+                    entirely_online,
+                ),
                 location: if entirely_online {
                     Where::Online
                 } else {

@@ -904,7 +904,11 @@ async fn tool_create_entity(args: Value) -> Result<String, Error> {
 /// stored either way, so a failure here is logged rather than returned.
 async fn announce_if_published(entity: &Entity) {
     if let Err(err) = crate::submission::entity_published(entity).await {
-        tracing::error!(slug = entity.slug(), ?err, "Could not record or announce the publication");
+        tracing::error!(
+            slug = entity.slug(),
+            ?err,
+            "Could not record or announce the publication"
+        );
     }
 }
 

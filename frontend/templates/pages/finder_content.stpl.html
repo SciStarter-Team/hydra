@@ -283,9 +283,10 @@
                 <!-- Event card -->
                 <div class="event-finder">
                   <div class="ef-date">
-                    <span><%- result.event_date_html(TimeFormat::Month) %></span>
-                    <span><%- result.event_date_html(TimeFormat::Day) %></span>
-                    <span><%- result.event_date_html(TimeFormat::Year) %></span>
+                    <% let zone = self.event_zones.get(&result.slug); %>
+                    <span><%- result.event_date_html(TimeFormat::Month, zone) %></span>
+                    <span><%- result.event_date_html(TimeFormat::Day, zone) %></span>
+                    <span><%- result.event_date_html(TimeFormat::Year, zone) %></span>
                   </div>
                   <div class="ef-info">
                     <a href="<%= result.link() %>" class="block">

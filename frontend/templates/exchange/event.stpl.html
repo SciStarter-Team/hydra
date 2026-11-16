@@ -63,7 +63,7 @@
                     <ul class="event-instances">
                       <% for session in self.event.instances.iter() { %>
                       <li<% if session.is_over(&self.now) { %> class="past-end"<% } %>>
-                        <%- local_time_range(&session.begin, &session.end, if session.spans_days() { TimeFormat::ShortDate } else { TimeFormat::DateTime }) %>
+                        <%- zoned_time_range(&session.begin, &session.end, if session.spans_days() { TimeFormat::ShortDate } else { TimeFormat::DateTime }, Clocks::of(self.event.zone.as_ref())) %>
                         <% if session.is_over(&self.now) { %>(over)<% } %>
                       </li>
                       <% } %>

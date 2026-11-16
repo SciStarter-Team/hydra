@@ -366,29 +366,7 @@ impl LoadStorePeered for EventAll {
             }
         }
 
-        // "tags",
-        sqlx::query!(r#"delete from event_tags where event_id = ?"#, event_id)
-            .execute(&mut tx)
-            .await?;
-
-        for val in self.tags.iter() {
-            let val = val.as_ref();
-
-            sqlx::query!(
-                r#"insert into event_tags (
-              "event_id",
-              "tag"
-            )
-            values (
-              ?,
-              ?
-            )"#,
-                event_id,
-                val,
-            )
-            .execute(&mut tx)
-            .await?;
-        }
+        crate::event::write_tags(&mut tx, &event_id, &self.tags).await?;
 
         //pub contacts: Box<[Contact]>,
         sqlx::query!(r#"delete from event_contacts where event_id = ?"#, event_id)
@@ -406,9 +384,11 @@ impl LoadStorePeered for EventAll {
                   "affiliation",
                   "email",
                   "phone",
-                  "address"
+                  "address",
+                  "url"
                 )
                 values (
+                  ?,
                   ?,
                   ?,
                   ?,
@@ -426,75 +406,33 @@ impl LoadStorePeered for EventAll {
                 contact.email,
                 contact.phone,
                 contact.address,
+                contact.url,
             )
             .execute(&mut tx)
             .await?;
         }
 
-        // pub instances: Box<[EventInstance]>,
-        sqlx::query!(
-            r#"delete from event_instances where event_id = ?"#,
-            event_id
-        )
-        .execute(&mut tx)
-        .await?;
-
-        for val in self.instances.iter() {
-            sqlx::query!(
-                r#"insert into "event_instances" (
-                  "event_id",
-                  "begin",
-                  "end"
-                )
-                values (
-                  ?,
-                  ?,
-                  ?
-                )"#,
-                event_id,
-                val.begin,
-                val.end,
-            )
-            .execute(&mut tx)
-            .await?;
-        }
+        crate::event::write_instances(&mut tx, &event_id, &self.instances).await?;
 
         tx.commit().await?;
 
-        // Derive the point when it wasn't supplied: prefer the centroid of the
-        // region polygon, fall back to geocoding the address/locality, and
-        // otherwise leave it null (e.g. an entirely-online event).
-        if self.point.is_none() {
-            if self.regions.is_some() {
-                let event_id = self.event_id.to_string();
-                if let Err(e) = sqlx::query!(
-                    r#"UPDATE events SET point = ST_Centroid(regions)
-                       WHERE event_id = ? AND point IS NULL AND regions IS NOT NULL"#,
-                    event_id
-                )
-                .execute(db())
-                .await
-                {
-                    eprintln!(
-                        "Region-centroid point for event {} failed: {e}",
-                        self.event_id
-                    );
-                }
-            } else if !self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty() {
-                if let Err(e) = crate::geocode::geocode_and_update_event_point(self.event_id).await
-                {
-                    eprintln!("Auto-geocode for event {} failed: {e}", self.event_id);
-                }
-            }
-        }
-
-        // After the point is settled, derived or not, since both it and the
-        // area decide which regions the event is in. A failure leaves the
-        // cache stale until the next rebuild rather than failing a save
-        // that has already been committed.
-        if let Err(e) = crate::region::refresh_event(&self.event_id.to_string()).await {
-            eprintln!("Region refresh for event {} failed: {e}", self.event_id);
-        }
+        // Place the event when the save didn't pin it: in the middle of its
+        // region, or at its address, or nowhere (an entirely-online event).
+        crate::event::location::place_event(
+            self.event_id,
+            self.point.is_some(),
+            self.regions.is_some(),
+            [
+                &self.address,
+                &self.city,
+                &self.state,
+                &self.zip,
+                &self.country,
+            ]
+            .iter()
+            .any(|part| !part.trim().is_empty()),
+        )
+        .await;
 
         Ok(())
     }
@@ -543,20 +481,11 @@ impl LoadStorePeered for EventAll {
         .collect::<Result<Vec<_>, _>>()?
         .into_boxed_slice();
 
-        // Read tags
-        let tags = sqlx::query!(
-            "SELECT tag FROM event_tags WHERE event_id = ?",
-            event_id_str
-        )
-        .fetch_all(db())
-        .await?
-        .into_iter()
-        .map(|row| InsensitiveString::from(row.tag))
-        .collect::<HashSet<_>>();
+        let tags = crate::event::read_tags(db(), &event_id_str).await?;
 
         // Read contacts
         let contact_rows = sqlx::query!(
-            "SELECT contact_id, role, name, affiliation, email, phone, address FROM event_contacts WHERE event_id = ?",
+            "SELECT contact_id, role, name, affiliation, email, phone, address, url FROM event_contacts WHERE event_id = ?",
             event_id_str
         )
         .fetch_all(db())
@@ -583,29 +512,11 @@ impl LoadStorePeered for EventAll {
                 email: contact_row.email,
                 phone: contact_row.phone,
                 address: contact_row.address,
+                url: contact_row.url,
             });
         }
 
-        // Read event instances
-        let instance_rows = sqlx::query!(
-            "SELECT begin, end FROM event_instances WHERE event_id = ? ORDER BY begin",
-            event_id_str
-        )
-        .fetch_all(db())
-        .await?;
-
-        let instances = instance_rows
-            .into_iter()
-            .map(|row| {
-                Ok(EventInstance {
-                    begin: TimeString::try_from(row.begin)
-                        .map_err(|e| anyhow::anyhow!("Invalid begin TimeString: {}", e))?,
-                    end: TimeString::try_from(row.end)
-                        .map_err(|e| anyhow::anyhow!("Invalid end TimeString: {}", e))?,
-                })
-            })
-            .collect::<Result<Vec<_>, anyhow::Error>>()?
-            .into_boxed_slice();
+        let instances = crate::event::read_instances(db(), &event_id_str).await?;
 
         let formats = ChoiceValue::of_target(ChoiceList::EventFormat, &event_id_str).await?;
         let programs = ChoiceValue::of_target(ChoiceList::EventProgram, &event_id_str).await?;

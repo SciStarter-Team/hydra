@@ -2,7 +2,7 @@ use crate::{
     choice::{ChoiceList, ChoiceValue},
     component::{Component, Head, NumberedPagination, StandardLayout},
     form::QsQuery,
-    local_time::{TimeFormat, local_time},
+    local_time::{Clocks, TimeFormat, zoned_time},
     middleware::{
         analytics::{Device, Interaction},
         authorization::Authenticated,
@@ -623,9 +623,52 @@ impl FinderResult {
         self.distance_km.map(|km| km * 0.621371)
     }
 
-    pub fn event_date_html(&self, format: TimeFormat) -> String {
-        local_time(self.event_begin.as_deref().unwrap_or(""), format)
+    /// When the event begins, as `format` writes it on the clocks of its
+    /// venue's `zone`, or the viewer's when it has none.
+    pub fn event_date_html(&self, format: TimeFormat, zone: Option<&jiff::tz::TimeZone>) -> String {
+        zoned_time(
+            self.event_begin.as_deref().unwrap_or(""),
+            format,
+            Clocks::of(zone),
+        )
     }
+}
+
+/// The time zones of the venues of the events among `results`, by slug; an
+/// event without a venue has none.
+async fn event_zones(
+    results: &[FinderResult],
+) -> Result<std::collections::HashMap<String, jiff::tz::TimeZone>, Error> {
+    let slugs: Vec<&str> = results
+        .iter()
+        .filter(|result| result.entity_type == "Event")
+        .map(|result| result.slug.as_str())
+        .collect();
+    if slugs.is_empty() {
+        return Ok(Default::default());
+    }
+    let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
+        "SELECT e.slug, ST_Y(ev.point), ST_X(ev.point), ev.location_type, ev.entirely_online \
+         FROM entities e JOIN events ev ON ev.event_id = e.target \
+         WHERE e.kind = 'Event' AND e.slug IN (",
+    );
+    let mut separated = qb.separated(", ");
+    for slug in slugs {
+        separated.push_bind(slug);
+    }
+    qb.push(")");
+    Ok(qb
+        .build_query_as::<(String, Option<f64>, Option<f64>, String, bool)>()
+        .fetch_all(db())
+        .await?
+        .into_iter()
+        .filter_map(
+            |(slug, latitude, longitude, location_type, entirely_online)| {
+                crate::event::zone::of_venue(latitude, longitude, &location_type, entirely_online)
+                    .map(|zone| (slug, zone))
+            },
+        )
+        .collect())
 }
 
 #[derive(TemplateOnce)]
@@ -639,6 +682,9 @@ struct FinderPage {
 #[template(path = "pages/finder_content.stpl.html")]
 struct FinderContent {
     results: Vec<FinderResult>,
+    /// The time zones of the events' venues, by slug, which their dates are
+    /// told in.
+    event_zones: std::collections::HashMap<String, jiff::tz::TimeZone>,
     query: String,
     location_name: String,
     lat: String,
@@ -2006,6 +2052,7 @@ pub async fn handle_finder(
     let layout = StandardLayout::new(
         "/finder",
         FinderContent {
+            event_zones: event_zones(&search_result.results).await?,
             results: search_result.results,
             query: q,
             location_name,

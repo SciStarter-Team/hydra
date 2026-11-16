@@ -74,7 +74,7 @@
                         <% if event.is_ongoing { %>
                         Currently ongoing
                         <% } else if let Some(ref next) = event.next_instance { %>
-                        <%- local_time(next, TimeFormat::DateTime) %>
+                        <%- zoned_time(next, TimeFormat::DateTime, Clocks::of(event.zone.as_ref())) %>
                         <% } else { %>
                         No upcoming instances
                         <% } %>

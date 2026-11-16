@@ -14,7 +14,7 @@
                 <a href="<%= entity.link %>" class="font-semibold hover:text-primary"><%= entity.name %></a>
                 <% if let Some(begin) = &entity.begin { %>
                 <span class="text-xs opacity-60 mt-1">
-                    <%- local_time(begin, TimeFormat::DateTime) %><% if let Some(end) = &entity.end { %> to <%- local_time(end, TimeFormat::DateTime) %><% } %>
+                    <%- zoned_time_range(begin, entity.end.as_deref().unwrap_or(begin), TimeFormat::DateTime, Clocks::of(entity.zone.as_ref())) %>
                 </span>
                 <% } %>
             </div>

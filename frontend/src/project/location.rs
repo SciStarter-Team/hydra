@@ -22,6 +22,93 @@ pub const IN_A_RANGE: &str = "In a geographic location or range";
 /// The `location_type` of a project tied to its address.
 pub const AT_AN_ADDRESS: &str = "At a specific address";
 
+/// Where something is joined, as the add forms and orrery's event form ask
+/// it: "Is it in person or online?", and for in person, at an address, across
+/// an area, or wherever each participant is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LocationMode {
+    InPerson,
+    Online,
+    /// In person, wherever each participant is, as in a worldwide bioblitz:
+    /// no address and no region. An event's mode alone, offered only by the
+    /// event form's picker.
+    Anywhere,
+    Region,
+}
+
+impl LocationMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LocationMode::InPerson => "in_person",
+            LocationMode::Online => "online",
+            LocationMode::Anywhere => "anywhere",
+            LocationMode::Region => "region",
+        }
+    }
+
+    /// The mode a form names, as [`LocationMode::as_str`] writes it; `None`
+    /// for one it doesn't name.
+    pub fn parse(mode: &str) -> Option<Self> {
+        [
+            LocationMode::InPerson,
+            LocationMode::Online,
+            LocationMode::Anywhere,
+            LocationMode::Region,
+        ]
+        .into_iter()
+        .find(|candidate| candidate.as_str() == mode.trim())
+    }
+
+    /// The mode a saved event is in, read from its `location_type` and
+    /// whether it's joined only online, as orrery's event form reads it; `None`
+    /// for a `location_type` that names no mode.
+    pub fn of_event(location_type: &str, entirely_online: bool) -> Option<Self> {
+        if entirely_online {
+            return Some(LocationMode::Online);
+        }
+        match location_type {
+            AT_AN_ADDRESS => Some(LocationMode::InPerson),
+            IN_A_RANGE => Some(LocationMode::Region),
+            ANYWHERE => Some(LocationMode::Anywhere),
+            _ => None,
+        }
+    }
+
+    /// Whether an event in this mode is held at an address, and so at a kind
+    /// of venue.
+    pub fn at_address(self) -> bool {
+        self == LocationMode::InPerson
+    }
+
+    /// The `location_type` orrery's form gives an event in this mode, as
+    /// orrery's sync spells it here: an online event, and one in person
+    /// wherever each participant is, are both anywhere.
+    pub fn event_location_type(self) -> &'static str {
+        match self {
+            LocationMode::Online | LocationMode::Anywhere => ANYWHERE,
+            LocationMode::InPerson => AT_AN_ADDRESS,
+            LocationMode::Region => IN_A_RANGE,
+        }
+    }
+}
+
+/// Why an in-person event or project (`noun`) given neither an address nor a
+/// city can't be saved, or `None` when it has one. Words left in the place
+/// search (`place_query`) were never picked or used as the address, so the
+/// reason then says to do one or the other.
+pub fn missing_place(address: &str, city: &str, place_query: &str, noun: &str) -> Option<String> {
+    if !address.trim().is_empty() || !city.trim().is_empty() {
+        return None;
+    }
+    Some(if place_query.trim().is_empty() {
+        format!("Please provide an address or city for the in-person {noun}.")
+    } else {
+        "Please choose a place from the list, or choose to use what you typed as the address."
+            .to_string()
+    })
+}
+
 /// A project's location, as a reader should see it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Where {

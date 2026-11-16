@@ -14,9 +14,15 @@ pub struct Contact {
     pub role: ContactRole,
     pub name: Option<String>,
     pub affiliation: Option<String>,
+    /// Empty when the contact is reached only through `url`.
     pub email: String,
     pub phone: Option<String>,
     pub address: Option<String>,
+
+    /// A contact form or page through which staff can reach the contact,
+    /// beside or instead of `email`. Absent from peers that predate it.
+    #[serde(default)]
+    pub url: Option<String>,
 }
 
 impl Contact {
@@ -29,6 +35,50 @@ impl Contact {
             email: String::new(),
             phone: None,
             address: None,
+            url: None,
+        }
+    }
+}
+
+/// Why a contact's email and contact form link, given as entered, can't be
+/// saved: staff need at least one of them, and each that is given has to be
+/// usable. Orrery's event forms refuse the same.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unreachable {
+    /// Neither was given.
+    Neither,
+    /// The email isn't plausibly anyone's address; see [`plausible_email`].
+    Email,
+    /// The link isn't a whole http(s) address.
+    Url,
+}
+
+impl Unreachable {
+    /// Refuse an `email` and `url` (both already trimmed) that leave staff
+    /// no way to reach the contact.
+    pub fn check(email: &str, url: &str) -> Result<(), Unreachable> {
+        if email.is_empty() && url.is_empty() {
+            Err(Unreachable::Neither)
+        } else if !email.is_empty() && !plausible_email(email) {
+            Err(Unreachable::Email)
+        } else if !url.is_empty() && !crate::web_address::is_web_address(url) {
+            Err(Unreachable::Url)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn message(self) -> &'static str {
+        match self {
+            Unreachable::Neither => {
+                "Please add the contact person's email, or a link to a contact form."
+            }
+            Unreachable::Email => {
+                "Please check the contact person's email; it should look like name@example.org."
+            }
+            Unreachable::Url => {
+                "Please check the contact form link; it should be a whole web address, such as https://example.org/contact."
+            }
         }
     }
 }
@@ -174,6 +224,26 @@ pub async fn contact_person_email(project_id: Ulid) -> Result<String, anyhow::Er
 mod tests {
     use super::*;
     use assert2::check;
+
+    #[test]
+    fn staff_reach_a_contact_by_email_or_contact_form_link() {
+        check!(Unreachable::check("", "") == Err(Unreachable::Neither));
+        check!(Unreachable::check("name@example.org", "") == Ok(()));
+        check!(Unreachable::check("", "https://example.org/contact") == Ok(()));
+        check!(Unreachable::check("name@example.org", "https://example.org/contact") == Ok(()));
+    }
+
+    #[test]
+    fn whatever_is_given_has_to_be_usable() {
+        check!(
+            Unreachable::check("test@test", "https://example.org/contact")
+                == Err(Unreachable::Email)
+        );
+        check!(
+            Unreachable::check("name@example.org", "example.org/contact") == Err(Unreachable::Url)
+        );
+        check!(Unreachable::check("", "mailto:name@example.org") == Err(Unreachable::Url));
+    }
 
     fn contact(role: ContactRole, email: &str) -> Contact {
         Contact {

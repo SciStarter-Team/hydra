@@ -367,12 +367,9 @@ pub async fn mark_published(kind: SubmissionKind, id: Ulid) -> Result<(), Error>
             .await?
         }
         SubmissionKind::Event => {
-            sqlx::query_scalar!(
-                "SELECT published_at FROM events WHERE event_id = ?",
-                id_str
-            )
-            .fetch_one(db())
-            .await?
+            sqlx::query_scalar!("SELECT published_at FROM events WHERE event_id = ?", id_str)
+                .fetch_one(db())
+                .await?
         }
     };
 
@@ -404,7 +401,8 @@ pub async fn entity_published(entity: &Entity) -> Result<(), Error> {
         return Ok(());
     }
 
-    let (Some(kind), EntityTarget::Ulid(id)) = (SubmissionKind::of(*entity.kind()), entity.target())
+    let (Some(kind), EntityTarget::Ulid(id)) =
+        (SubmissionKind::of(*entity.kind()), entity.target())
     else {
         return Ok(());
     };
@@ -429,7 +427,11 @@ pub fn first_public(
         .map(TimeString::from)
 }
 
-async fn tell_submitter(trigger: TriggerEvent, kind: SubmissionKind, id: Ulid) -> Result<(), Error> {
+async fn tell_submitter(
+    trigger: TriggerEvent,
+    kind: SubmissionKind,
+    id: Ulid,
+) -> Result<(), Error> {
     let Some(submitter) = Submitter::of(kind, id).await? else {
         return Ok(());
     };

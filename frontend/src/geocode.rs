@@ -48,65 +48,77 @@ pub async fn locate(parts: &[&str]) -> Option<Point> {
     })
 }
 
-/// Read current address fields from DB and geocode to update the project's point column.
+/// Where a place is, as a GeoJSON point: from its whole address first, then,
+/// when that finds nowhere (a street the geocoder doesn't know, or words typed
+/// as the address), from its zip and locality alone.
+pub async fn geocode_address(
+    address: &str,
+    city: &str,
+    state: &str,
+    zip: &str,
+    country: &str,
+) -> Option<String> {
+    if let Some(point) = geocode_parts(&[address, city, state, zip, country]).await {
+        return Some(point);
+    }
+    if address.trim().is_empty() {
+        return None;
+    }
+    geocode_parts(&[city, state, zip, country]).await
+}
+
+/// Place the project at its address, read from the database, or leave it with
+/// no point when the address finds nowhere, so an edited address never keeps
+/// the point of the one it replaced.
 pub async fn geocode_and_update_project_point(project_id: Ulid) -> Result<(), Error> {
     let project_id_str = project_id.to_string();
 
     let row = sqlx::query!(
-        r#"SELECT city, state, country FROM projects WHERE project_id = ?"#,
+        r#"SELECT address, city, state, zip, country FROM projects WHERE project_id = ?"#,
         project_id_str
     )
     .fetch_one(db())
     .await?;
 
-    let city = row.city;
-    let state = row.state;
-    let country = row.country;
+    let point = geocode_address(&row.address, &row.city, &row.state, &row.zip, &row.country).await;
+    sqlx::query!(
+        r#"UPDATE projects SET point = SetSRID(GeomFromGeoJSON(?1), 4326) WHERE project_id = ?2"#,
+        point,
+        project_id_str
+    )
+    .execute(db())
+    .await?;
 
-    if let Some(geojson) = geocode_address_to_point(&city, &state, &country).await {
-        sqlx::query!(
-            r#"UPDATE projects SET point = SetSRID(GeomFromGeoJSON(?1), 4326) WHERE project_id = ?2"#,
-            geojson,
-            project_id_str
-        )
-        .execute(db())
-        .await?;
-
-        // A derived point still moves the footprint, and this writes it
-        // straight to the column rather than through the project save.
-        crate::region::refresh_project(&project_id_str).await?;
-    }
+    // A derived point still moves the footprint, and this writes it
+    // straight to the column rather than through the project save.
+    crate::region::refresh_project(&project_id_str).await?;
 
     Ok(())
 }
 
-/// Read current address fields from DB and geocode to update the event's point column.
+/// Place the event at its address, as [`geocode_and_update_project_point`]
+/// does a project.
 pub async fn geocode_and_update_event_point(event_id: Ulid) -> Result<(), Error> {
     let event_id_str = event_id.to_string();
 
     let row = sqlx::query!(
-        r#"SELECT city, state, country FROM events WHERE event_id = ?"#,
+        r#"SELECT address, city, state, zip, country FROM events WHERE event_id = ?"#,
         event_id_str
     )
     .fetch_one(db())
     .await?;
 
-    let city = row.city;
-    let state = row.state;
-    let country = row.country;
+    let point = geocode_address(&row.address, &row.city, &row.state, &row.zip, &row.country).await;
+    sqlx::query!(
+        r#"UPDATE events SET point = SetSRID(GeomFromGeoJSON(?1), 4326) WHERE event_id = ?2"#,
+        point,
+        event_id_str
+    )
+    .execute(db())
+    .await?;
 
-    if let Some(geojson) = geocode_address_to_point(&city, &state, &country).await {
-        sqlx::query!(
-            r#"UPDATE events SET point = SetSRID(GeomFromGeoJSON(?1), 4326) WHERE event_id = ?2"#,
-            geojson,
-            event_id_str
-        )
-        .execute(db())
-        .await?;
-
-        // As for a project's derived point.
-        crate::region::refresh_event(&event_id_str).await?;
-    }
+    // As for a project's derived point.
+    crate::region::refresh_event(&event_id_str).await?;
 
     Ok(())
 }

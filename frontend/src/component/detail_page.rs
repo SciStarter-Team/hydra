@@ -150,12 +150,6 @@ impl From<EventStatus> for DetailPageStatus {
 // Display structs
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
-pub struct EventInstanceDisplay {
-    pub begin: TimeString,
-    pub end: TimeString,
-}
-
 /// Review enriched with user display information for template rendering.
 #[derive(Debug, Clone)]
 pub struct ReviewForDisplay {
@@ -350,6 +344,8 @@ pub struct ContactDisplay {
     pub affiliation: String,
     pub email: String,
     pub phone: String,
+    /// The contact form or page staff can reach the contact through.
+    pub url: String,
 }
 
 /// One non-staff page manager (editor), for display on the event page (editors only).
@@ -439,7 +435,10 @@ pub struct DetailPageContent {
     pub member_count: i64,
 
     // Event-specific
-    pub instances: Vec<EventInstanceDisplay>,
+    pub instances: Box<[crate::event::EventInstance]>,
+    /// The event's venue's time zone, which its dates are shown on; `None`
+    /// shows them on the viewer's clocks.
+    pub event_zone: Option<jiff::tz::TimeZone>,
     pub ticketing_begins: Option<TimeString>,
     /// Where people get tickets or register, when that isn't `url`.
     pub ticket_url: String,
@@ -773,6 +772,10 @@ pub struct DetailPageWrapper {
     /// Absolute URL of the entity's uploaded image. Empty when none was uploaded.
     pub og_image: String,
     pub og_url: String,
+    /// Whether the viewer edits an event on the page, whose dates and
+    /// location are edited with the add event form's own controls and
+    /// scripts.
+    pub edits_event: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -990,19 +993,15 @@ impl DetailPage {
         let (like_count, user_has_liked) = likes;
         let (can_edit, is_staff_editor) = edit_permission;
 
-        // Hide internal `_`-prefixed tags from the public view; editors still see
-        // (and can manage) them in the editable field.
-        let tags = if can_edit {
-            tags
-        } else {
-            tags.into_iter()
-                .filter(|t| !crate::project::is_hidden_tag(t))
-                .collect::<Vec<_>>()
-        };
+        // Staff's own tags are shown to staff alone.
+        let tags = tags
+            .into_iter()
+            .filter(|tag| crate::tag::shown_to(tag, is_staff_editor))
+            .collect::<Vec<_>>();
 
         // Organizer contacts (rendered only for editors — see the template).
         let contacts = sqlx::query!(
-            r#"SELECT contact_id AS "contact_id!", name, affiliation, email AS "email!", phone
+            r#"SELECT contact_id AS "contact_id!", name, affiliation, email AS "email!", phone, url
                FROM project_contacts WHERE project_id = ? ORDER BY role"#,
             id_str
         )
@@ -1015,6 +1014,7 @@ impl DetailPage {
             affiliation: c.affiliation.unwrap_or_default(),
             email: c.email,
             phone: c.phone.unwrap_or_default(),
+            url: c.url.unwrap_or_default(),
         })
         .collect::<Vec<_>>();
 
@@ -1240,7 +1240,8 @@ impl DetailPage {
             tags,
             last_updated,
             member_count,
-            instances: Vec::new(),
+            instances: Box::new([]),
+            event_zone: None,
             ticketing_begins: None,
             ticket_url: String::new(),
             cost: String::new(),
@@ -1295,6 +1296,8 @@ impl DetailPage {
                 part_of,
                 AsGeoJSON(regions) as "region_geojson: Option<String>",
                 point IS NOT NULL as "has_point: bool",
+                ST_Y(point) as "latitude: f64",
+                ST_X(point) as "longitude: f64",
                 facebook_event as "facebook_event: bool",
                 facebook_event_url,
                 facebook_event_requested as "facebook_event_requested: bool"
@@ -1325,24 +1328,7 @@ impl DetailPage {
                 .map_err(Error::from)
             },
             // Instances
-            async {
-                let rows = sqlx::query!(
-                    "SELECT begin, end FROM event_instances WHERE event_id = ? ORDER BY begin",
-                    id_str3
-                )
-                .fetch_all(db())
-                .await?;
-
-                Ok::<_, Error>(
-                    rows.into_iter()
-                        .filter_map(|r| {
-                            let begin = TimeString::try_from(r.begin).ok()?;
-                            let end = TimeString::try_from(r.end).ok()?;
-                            Some(EventInstanceDisplay { begin, end })
-                        })
-                        .collect::<Vec<_>>(),
-                )
-            },
+            crate::event::read_instances(db(), &id_str3),
             // Likes: count is cached per-project; per-user liked is fetched live.
             async {
                 let count = cached_like_count(event_id).await?;
@@ -1363,15 +1349,11 @@ impl DetailPage {
         let (like_count, user_has_liked) = likes;
         let (can_edit, is_staff_editor) = edit_permission;
 
-        // Hide internal `_`-prefixed tags from the public view; editors still see
-        // (and can manage) them in the editable field.
-        let tags = if can_edit {
-            tags
-        } else {
-            tags.into_iter()
-                .filter(|t| !crate::project::is_hidden_tag(t))
-                .collect::<Vec<_>>()
-        };
+        // Staff's own tags are shown to staff alone.
+        let tags = tags
+            .into_iter()
+            .filter(|tag| crate::tag::shown_to(tag, is_staff_editor))
+            .collect::<Vec<_>>();
 
         // The umbrella event this one is part of (only linked if published).
         let (part_of_name, part_of_path) = if let Some(parent_id) = row.part_of.clone() {
@@ -1394,7 +1376,7 @@ impl DetailPage {
 
         // Organizer contacts (rendered only for editors — see the template).
         let contacts = sqlx::query!(
-            r#"SELECT contact_id AS "contact_id!", name, affiliation, email AS "email!", phone
+            r#"SELECT contact_id AS "contact_id!", name, affiliation, email AS "email!", phone, url
                FROM event_contacts WHERE event_id = ? ORDER BY role"#,
             id_str
         )
@@ -1407,6 +1389,7 @@ impl DetailPage {
             affiliation: c.affiliation.unwrap_or_default(),
             email: c.email,
             phone: c.phone.unwrap_or_default(),
+            url: c.url.unwrap_or_default(),
         })
         .collect::<Vec<_>>();
 
@@ -1528,6 +1511,13 @@ impl DetailPage {
             });
         }
 
+        let event_zone = crate::event::zone::of_venue(
+            row.latitude,
+            row.longitude,
+            &row.location_type,
+            row.entirely_online,
+        );
+
         Ok(DetailPageContent {
             kind: DetailPageKind::Event,
             editable_fields,
@@ -1580,6 +1570,7 @@ impl DetailPage {
             last_updated: None,
             member_count: 0,
             instances,
+            event_zone,
             ticketing_begins: row
                 .ticketing_begins
                 .and_then(|s| TimeString::try_from(s).ok()),

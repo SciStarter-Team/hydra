@@ -605,7 +605,7 @@ async fn search_and_save_project(
     .fetch_all(db())
     .await?
     .into_iter()
-    .filter(|t| !crate::project::is_hidden_tag(t))
+    .filter(|t| !crate::tag::is_hidden(t))
     .collect::<Vec<_>>();
 
     let project = ProjectDetail {

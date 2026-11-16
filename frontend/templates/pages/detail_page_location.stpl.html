@@ -1,0 +1,86 @@
+<%# Taken out of `self` up front: rendering them consumes them. %>
+<% let editing = self.editing; %>
+<% let parts = self.parts; %>
+<% let changed = self.changed; %>
+<% let error = self.error; %>
+<% let shown = self.can_edit || self.entirely_online || self.also_online || self.region_geojson.is_some() || parts.iter().any(|part| !part.empty); %>
+<div id="event-location">
+  <% if shown { %>
+  <div class="border border-linework rounded-sm bg-primary-light mb-4">
+    <dl>
+      <dt class="ribbon-project bg-primary-dark text-white">Where</dt>
+      <dd class="p-4 relative">
+        <% if let Some(picker) = editing { %>
+        <form class="edit-only space-y-3" novalidate
+              hx-put="/-detail/<%= &self.target_id %>/location"
+              hx-target="#event-location"
+              hx-swap="outerHTML">
+          <% if let Some(error) = &error { %>
+          <p id="<%= crate::component::floating_field::FormError::ELEMENT_ID %>" class="text-sm text-red-700" role="alert"><%= &error.message %></p>
+          <% } %>
+          <%+ picker %>
+          <div class="flex gap-2">
+            <button type="submit" class="btn btn-primary btn-xs">Save</button>
+            <button type="button" class="btn btn-secondary btn-xs"
+                    hx-get="/-detail/<%= &self.target_id %>/location"
+                    hx-target="#event-location"
+                    hx-swap="outerHTML">Cancel</button>
+          </div>
+        </form>
+        <% } else { %>
+        <% if self.can_edit { %>
+        <button class="edit-only absolute top-1 right-1 p-1 opacity-40 hover:opacity-100 cursor-pointer z-10"
+                title="Edit where the event is held" aria-label="Edit where the event is held"
+                hx-get="/-detail/<%= &self.target_id %>/location/edit"
+                hx-target="#event-location"
+                hx-swap="outerHTML">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3.5 h-3.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
+        </button>
+        <% } %>
+        <%# Only the parts the event has: the location form, which edits them
+            together, names each. The first part says whether it's online,
+            and an online event has no other parts to show. %>
+        <% for (i, part) in parts.into_iter().enumerate() { %>
+        <% if !part.empty && (i == 0 || !self.entirely_online) { %>
+        <%+ part %>
+        <% } %>
+        <% } %>
+        <% if self.also_online { %>
+        <p class="mb-2">and online</p>
+        <% } %>
+        <% if self.has_point { %>
+        <button class="btn btn-primary btn-thin btn-icon" hx-get="/-detail/<%= &self.target_id %>/map" hx-target="body" hx-swap="beforeend">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path d="M384 476.1L192 421.2l0-385.3L384 90.8l0 385.3zm32-1.2l0-386.5L543.1 37.5c15.8-6.3 32.9 5.3 32.9 22.3l0 334.8c0 9.8-6 18.6-15.1 22.3L416 474.8zM15.1 95.1L160 37.2l0 386.5L32.9 474.5C17.1 480.8 0 469.2 0 452.2L0 117.4c0-9.8 6-18.6 15.1-22.3z"/></svg>
+          View Map
+        </button>
+        <% } %>
+        <% if let Some(geojson) = &self.region_geojson { %>
+        <div id="detail-region-map" class="mt-3" style="height:320px;width:100%;border-radius:4px;overflow:hidden;"></div>
+        <script>
+          (function () {
+            if (typeof maplibregl === "undefined") return;
+            var data = <%- geojson %>;
+            if (!data || !data.coordinates) return;
+            var map = new maplibregl.Map({ container: "detail-region-map", style: "https://tiles.openfreemap.org/styles/liberty", center: [-98.5, 39.8], zoom: 3 });
+            map.on("load", function () {
+              map.addSource("region", { type: "geojson", data: { type: "Feature", geometry: data, properties: {} } });
+              map.addLayer({ id: "region-fill", type: "fill", source: "region", paint: { "fill-color": "#037F9B", "fill-opacity": 0.25 } });
+              map.addLayer({ id: "region-line", type: "line", source: "region", paint: { "line-color": "#037F9B", "line-width": 2 } });
+              try {
+                var b = new maplibregl.LngLatBounds();
+                (function ext(c) { if (typeof c[0] === "number") { b.extend(c); } else { c.forEach(ext); } })(data.coordinates);
+                map.fitBounds(b, { padding: 30, maxZoom: 12, duration: 0 });
+              } catch (e) {}
+            });
+          })();
+        </script>
+        <% } %>
+        <% } %>
+      </dd>
+    </dl>
+  </div>
+  <% } %>
+</div>
+<% for field in changed { %>
+<%+ field %>
+<% } %>

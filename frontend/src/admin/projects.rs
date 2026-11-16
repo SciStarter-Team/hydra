@@ -15,8 +15,8 @@ use crate::project::field::{
     STAKEHOLDERS_VOCABULARY, SUSTAINABLE_DEVELOPMENT_GOALS_VOCABULARY,
 };
 use crate::project::field_source::FieldSource;
-use crate::submission::{SubmissionKind, Submitter, notice_fields};
 use crate::project::{ProjectRejectionReason, SUBMISSION_REJECTION_NOTICES};
+use crate::submission::{SubmissionKind, Submitter, notice_fields};
 use common::insensitivestring::InsensitiveString;
 use common::message::log::Housekeeping;
 use common::shared::db;
@@ -1135,11 +1135,14 @@ impl ContactWidget {
 #[derive(Debug, Deserialize)]
 struct ContactForm {
     role: String,
+    #[serde(default)]
     email: String,
     name: Option<String>,
     affiliation: Option<String>,
     phone: Option<String>,
     address: Option<String>,
+    #[serde(default)]
+    url: String,
 }
 
 impl ContactForm {
@@ -1154,14 +1157,20 @@ impl ContactForm {
             _ => return Err(anyhow::anyhow!("Invalid contact role: {}", self.role)),
         };
 
+        let email = self.email.trim();
+        let url = self.url.trim();
+        crate::contact::Unreachable::check(email, url)
+            .map_err(|refusal| anyhow::anyhow!(refusal.message()))?;
+
         Ok(Contact {
             contact_id,
             role,
             name: self.name.clone().filter(|s| !s.is_empty()),
             affiliation: self.affiliation.clone().filter(|s| !s.is_empty()),
-            email: self.email.clone(),
+            email: email.to_string(),
             phone: self.phone.clone().filter(|s| !s.is_empty()),
             address: self.address.clone().filter(|s| !s.is_empty()),
+            url: (!url.is_empty()).then(|| url.to_string()),
         })
     }
 }
@@ -1489,8 +1498,12 @@ async fn notify_rejection(project_id: Ulid) -> Result<(), anyhow::Error> {
         return Ok(());
     };
 
-    let mut fields =
-        notice_fields(SubmissionKind::Project, project_id, Some(submitter.creator())).await?;
+    let mut fields = notice_fields(
+        SubmissionKind::Project,
+        project_id,
+        Some(submitter.creator()),
+    )
+    .await?;
     fields.push(("submission_type".to_string(), "project".to_string()));
     fields.push(("reason".to_string(), project.reason.message().to_string()));
 
@@ -3465,9 +3478,9 @@ async fn projects_add_contact(
     };
 
     // Create new contact with generated ULID
-    let new_contact = form
-        .to_contact(Ulid::new())
-        .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
+    let new_contact = form.to_contact(Ulid::new()).map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
+    })?;
     let new_contact_id = new_contact.contact_id;
 
     contacts.push(new_contact);
@@ -3531,9 +3544,9 @@ async fn projects_update_contact(
 
     // Find and update the contact
     if let Some(contact) = contacts.iter_mut().find(|c| c.contact_id == contact_ulid) {
-        *contact = form
-            .to_contact(contact_ulid)
-            .map_err(|_| poem::Error::from_status(poem::http::StatusCode::BAD_REQUEST))?;
+        *contact = form.to_contact(contact_ulid).map_err(|e| {
+            poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
+        })?;
     } else {
         return Err(poem::Error::from_status(poem::http::StatusCode::NOT_FOUND));
     }

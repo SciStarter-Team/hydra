@@ -59,7 +59,7 @@ async fn load_common_tags(
 
     Ok(tags
         .into_iter()
-        .filter(|tag| !duplicates_facet(tag))
+        .filter(|tag| !duplicates_facet(tag) && !crate::tag::is_hidden(tag))
         .take(60)
         .collect())
 }
@@ -900,7 +900,10 @@ async fn tags_for_results(results: &[FinderResult]) -> HashMap<String, Vec<Strin
             .await
         {
             Ok(rows) => {
-                for (slug, tag) in rows {
+                for (slug, tag) in rows
+                    .into_iter()
+                    .filter(|(_, tag)| !crate::tag::is_hidden(tag))
+                {
                     map.entry(slug).or_default().push(tag);
                 }
             }

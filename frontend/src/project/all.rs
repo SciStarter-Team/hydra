@@ -925,9 +925,11 @@ impl ProjectAll {
               "affiliation",
               "email",
               "phone",
-              "address"
+              "address",
+              "url"
             )
             values (
+              ?,
               ?,
               ?,
               ?,
@@ -945,6 +947,7 @@ impl ProjectAll {
                 contact.email,
                 contact.phone,
                 contact.address,
+                contact.url,
             )
             .execute(&mut tx)
             .await?;
@@ -1244,7 +1247,15 @@ impl ProjectAll {
 
         // Auto-geocode if point is missing but address fields exist
         if self.point.is_none()
-            && (!self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty())
+            && [
+                &self.address,
+                &self.city,
+                &self.state,
+                &self.zip,
+                &self.country,
+            ]
+            .iter()
+            .any(|part| !part.trim().is_empty())
         {
             if let Err(e) = crate::geocode::geocode_and_update_project_point(self.project_id).await
             {
@@ -1577,7 +1588,7 @@ impl LoadStorePeered for ProjectAll {
 
         // Read contacts
         let contact_rows = sqlx::query!(
-            "SELECT contact_id, role, name, affiliation, email, phone, address FROM project_contacts WHERE project_id = ?",
+            "SELECT contact_id, role, name, affiliation, email, phone, address, url FROM project_contacts WHERE project_id = ?",
             project_id_str
         )
         .fetch_all(db())
@@ -1604,6 +1615,7 @@ impl LoadStorePeered for ProjectAll {
                 email: contact_row.email,
                 phone: contact_row.phone,
                 address: contact_row.address,
+                url: contact_row.url,
             });
         }
 
@@ -2090,4 +2102,3 @@ pub async fn create_page_entity(
 
     Ok(slug)
 }
-

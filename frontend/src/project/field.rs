@@ -3795,7 +3795,17 @@ impl LoadStorePeered for ProjectField {
                 }
                 result
             }
-            ProjectFieldValue::Zip(zip) => self.save_zip(zip).await,
+            ProjectFieldValue::Zip(zip) => {
+                let result = self.save_zip(zip).await;
+                if result.is_ok() {
+                    if let Err(e) =
+                        crate::geocode::geocode_and_update_project_point(self.project_id).await
+                    {
+                        eprintln!("Geocoding after zip save failed: {e}");
+                    }
+                }
+                result
+            }
             ProjectFieldValue::Address(address) => {
                 let result = self.save_address(address).await;
                 if result.is_ok() {
@@ -4919,7 +4929,7 @@ impl ProjectField {
             };
 
             sqlx::query!(
-                "INSERT INTO project_contacts (contact_id, project_id, role, name, affiliation, email, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO project_contacts (contact_id, project_id, role, name, affiliation, email, phone, address, url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 contact_id_str,
                 project_id_str,
                 role_str,
@@ -4927,7 +4937,8 @@ impl ProjectField {
                 contact.affiliation,
                 contact.email,
                 contact.phone,
-                contact.address
+                contact.address,
+                contact.url
             )
             .execute(db())
             .await?;
@@ -4938,7 +4949,7 @@ impl ProjectField {
     async fn read_contacts(project_id: Ulid) -> Result<Self, Error> {
         let project_id_str = project_id.to_string();
         let rows = sqlx::query!(
-            "SELECT contact_id, role, name, affiliation, email, phone, address FROM project_contacts WHERE project_id = ? ORDER BY contact_id",
+            "SELECT contact_id, role, name, affiliation, email, phone, address, url FROM project_contacts WHERE project_id = ? ORDER BY contact_id",
             project_id_str
         )
         .fetch_all(db())
@@ -4967,6 +4978,7 @@ impl ProjectField {
                 email: row.email,
                 phone: row.phone,
                 address: row.address,
+                url: row.url,
             });
         }
 

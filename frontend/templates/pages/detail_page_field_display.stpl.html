@@ -1,4 +1,4 @@
-<div id="field-<%= &self.field_type %>" class="relative<% if !self.wrapper_extra.is_empty() { %> <%= self.wrapper_extra %><% } %><% if self.empty && self.can_edit { %> edit-only<% } %>">
+<div id="field-<%= &self.field_type %>" class="relative<% if !self.wrapper_extra.is_empty() { %> <%= self.wrapper_extra %><% } %><% if self.empty && self.can_edit { %> edit-only<% } %>"<% if self.oob { %> hx-swap-oob="true"<% } %>>
   <% if self.can_edit { %>
   <% if self.inline_button { %>
   <button class="edit-only p-0.5 opacity-40 hover:opacity-100 cursor-pointer align-middle"

@@ -39,8 +39,9 @@ pub struct ImportEvent {
     pub location: Option<ImportEventLocation>,
     pub tags: Vec<String>,
 
-    /// The names of the event's types, as the event type list has them or
-    /// as [`SUPERSEDED_EVENT_TYPES`] does, in any case.
+    /// The names of the event's types, as the event type lists have them, as
+    /// [`RENAMED_EVENT_TYPES`] had them, or as [`SUPERSEDED_EVENT_TYPES`]
+    /// does, in any case.
     pub event_types: Vec<String>,
 }
 
@@ -57,6 +58,12 @@ const SUPERSEDED_EVENT_TYPES: &[(&str, ChoiceList, &[&str])] = &[(
     ChoiceList::Audience,
     &["Families", "Elementary school (6 - 10 years)"],
 )];
+
+/// Event type names the scanner may still send for values that have since
+/// been renamed, with the name each has now. Orrery's events import maps
+/// the same names (its core 0294 renamed them).
+const RENAMED_EVENT_TYPES: &[(&str, &str)] =
+    &[("Museum event", "Museum"), ("School event", "School")];
 
 /// What the scanner's event type names stand for, as orrery reads them: an
 /// event type is named as it is called, in any case, in whichever of the
@@ -76,10 +83,19 @@ impl ScannerChoices {
         let mut elsewhere: BTreeMap<ChoiceList, BTreeSet<String>> = BTreeMap::new();
 
         for name in names {
+            // A renamed value is found by its old name until hydra's copy of
+            // the lists has the new one, and by its new name after.
+            let renamed = RENAMED_EVENT_TYPES
+                .iter()
+                .find(|(old, _)| same_name(old, name))
+                .map(|(_, new)| *new);
             if let Some(value) = ChoiceList::EVENT_TYPES
                 .iter()
                 .flat_map(|list| lists.get(*list))
-                .find(|value| same_name(&value.name, name))
+                .find(|value| {
+                    same_name(&value.name, name)
+                        || renamed.is_some_and(|new| same_name(&value.name, new))
+                })
             {
                 event_types
                     .entry(value.list)
@@ -386,6 +402,7 @@ mod tests {
             value(ChoiceList::EventFormat, "bioblitz", "BioBlitz"),
             value(ChoiceList::EventProgram, "ambassador", "Ambassador"),
             value(ChoiceList::EventVenue, "library", "library"),
+            value(ChoiceList::EventVenue, "museum-event", "Museum"),
             value(ChoiceList::Audience, "families", "Families"),
             value(
                 ChoiceList::Audience,
@@ -419,6 +436,31 @@ mod tests {
         check!(event.formats == slugs(&["bioblitz"]));
         check!(event.venues == slugs(&["library"]));
         check!(event.audience == slugs(&["elementary-school-6-10-years", "families"]));
+    }
+
+    #[test]
+    fn a_renamed_venue_is_found_by_its_old_name() {
+        let mut event = EventAll::default();
+
+        let read = ScannerChoices::read(&lists(), &names(&["museum event"]), "e");
+        read.apply(&mut event);
+
+        check!(event.venues == slugs(&["museum-event"]));
+    }
+
+    #[test]
+    fn a_renamed_venue_is_found_by_its_old_name_before_the_copy_renames_it() {
+        let lists = ChoiceLists::of([value(
+            ChoiceList::EventVenue,
+            "school-event",
+            "School event",
+        )]);
+        let mut event = EventAll::default();
+
+        let read = ScannerChoices::read(&lists, &names(&["School event"]), "e");
+        read.apply(&mut event);
+
+        check!(event.venues == slugs(&["school-event"]));
     }
 
     #[test]

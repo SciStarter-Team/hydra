@@ -73,6 +73,7 @@ pub mod ssrf;
 pub mod staff;
 pub mod staff_pick;
 pub mod submission;
+pub mod tag;
 pub mod thumbnail;
 pub mod training;
 pub mod ui;
@@ -430,9 +431,26 @@ fn user_facing() -> impl Endpoint {
                 .post(component::detail_page_edit::add_instance),
         )
         .at(
+            "/-detail/:id/location",
+            get(component::detail_page_edit::get_location_display)
+                .put(component::detail_page_edit::save_location),
+        )
+        .at(
+            "/-detail/:id/location/edit",
+            get(component::detail_page_edit::edit_location),
+        )
+        .at(
+            "/-detail/:id/instances/new",
+            get(component::detail_page_edit::new_instance),
+        )
+        .at(
             "/-detail/:id/instances/:index",
             put(component::detail_page_edit::update_instance)
                 .delete(component::detail_page_edit::delete_instance),
+        )
+        .at(
+            "/-detail/:id/instances/:index/edit",
+            get(component::detail_page_edit::edit_instance),
         )
         .at(
             "/-detail/:id/contacts",
@@ -1655,11 +1673,8 @@ mod sync {
                 proj.promotion_target = data.promotion_target.map(|ts| ts.into());
                 proj.admin_notes = data.admin_notes;
                 proj.created = data.created.into();
-                proj.published_at = crate::submission::first_public(
-                    data.published_at,
-                    data.publish,
-                    data.created,
-                );
+                proj.published_at =
+                    crate::submission::first_public(data.published_at, data.publish, data.created);
                 proj.wild_hope = data.wild_hope;
                 proj.exchange = data.exchange;
                 proj.origin = data.origin;
@@ -1740,6 +1755,7 @@ mod sync {
                         email: data.contact_email.clone(),
                         phone: data.contact_phone.clone().empty_as_none(),
                         address: data.contact_address.clone().empty_as_none(),
+                        url: None,
                     });
                 }
 
@@ -1752,6 +1768,7 @@ mod sync {
                         email: data.contact_email.clone(),
                         phone: data.contact_phone.clone().empty_as_none(),
                         address: data.contact_address.clone().empty_as_none(),
+                        url: None,
                     });
                 } else if !data.manager_email.is_empty() {
                     contacts.push(Contact {
@@ -1762,6 +1779,7 @@ mod sync {
                         email: data.manager_email,
                         phone: data.manager_phone.empty_as_none(),
                         address: data.manager_address.empty_as_none(),
+                        url: None,
                     });
                 }
 
@@ -1774,6 +1792,7 @@ mod sync {
                         email: data.additional_contact_email.clone(),
                         phone: data.additional_contact_phone.clone().empty_as_none(),
                         address: data.additional_contact_address.clone().empty_as_none(),
+                        url: None,
                     });
                 }
 
@@ -1786,6 +1805,7 @@ mod sync {
                         email: data.technical_contact_email.clone(),
                         phone: None,
                         address: None,
+                        url: None,
                     });
                 }
 
@@ -1798,6 +1818,7 @@ mod sync {
                         email: data.notification_email.clone(),
                         phone: None,
                         address: None,
+                        url: None,
                     });
                 }
 
@@ -2098,6 +2119,11 @@ mod sync {
         contact_name: String,
         contact_affiliation: String,
         contact_email: String,
+        /// A contact form or page staff can reach the organizer through,
+        /// beside or instead of `contact_email`. Absent from an orrery that
+        /// predates it.
+        #[serde(default)]
+        contact_url: String,
         contact_phone: String,
         contact_address: String,
         presenter: String,
@@ -2192,6 +2218,39 @@ mod sync {
         end19: Option<Timestamp>,
     }
 
+    /// The dates of the event `name`, from orrery's begin/end slots, in date
+    /// order. Orrery keeps whatever was saved: a slot with a start and no end
+    /// is a date with no end, which hydra stores as ending at its start, as
+    /// the add form saves one; an end before its start is kept as it is. A
+    /// slot with an end and no start can't be a date here, and is left out.
+    pub(crate) fn event_instances(
+        name: &str,
+        slots: [(Option<Timestamp>, Option<Timestamp>); 20],
+    ) -> Box<[EventInstance]> {
+        let mut instances = slots
+            .into_iter()
+            .enumerate()
+            .filter_map(|(slot, (begin, end))| match (begin, end) {
+                (Some(begin), end) => Some((begin, end.unwrap_or(begin))),
+                (None, Some(_)) => {
+                    tracing::warn!(
+                        "Event {name:?} has an end with no start in slot {slot}; left out"
+                    );
+                    None
+                }
+                (None, None) => None,
+            })
+            .collect::<Vec<_>>();
+        instances.sort_by_key(|(begin, _)| *begin);
+        instances
+            .into_iter()
+            .map(|(begin, end)| EventInstance {
+                begin: begin.into(),
+                end: end.into(),
+            })
+            .collect()
+    }
+
     #[tracing::instrument]
     pub async fn synchronize_events() -> Result<(), anyhow::Error> {
         loop {
@@ -2270,11 +2329,8 @@ mod sync {
                 };
 
                 evt.created = data.created.into();
-                evt.published_at = crate::submission::first_public(
-                    data.published_at,
-                    data.publish,
-                    data.created,
-                );
+                evt.published_at =
+                    crate::submission::first_public(data.published_at, data.publish, data.created);
                 evt.flagged = data.flagged;
                 evt.admin_notes = data.admin_notes;
                 evt.welcomed = data.welcomed;
@@ -2313,7 +2369,9 @@ mod sync {
 
                 let mut contacts = Vec::with_capacity(5);
 
-                if !data.contact_email.is_empty() {
+                // Orrery's event forms want an email or a contact form link,
+                // so a contact person may come with either alone.
+                if !data.contact_email.is_empty() || !data.contact_url.is_empty() {
                     contacts.push(Contact {
                         contact_id: Ulid::new(),
                         role: ContactRole::ContactPerson,
@@ -2322,6 +2380,7 @@ mod sync {
                         email: data.contact_email.clone(),
                         phone: data.contact_phone.clone().empty_as_none(),
                         address: data.contact_address.clone().empty_as_none(),
+                        url: data.contact_url.clone().empty_as_none(),
                     });
                 }
 
@@ -2334,6 +2393,7 @@ mod sync {
                         email: data.manager_email,
                         phone: data.manager_phone.empty_as_none(),
                         address: data.manager_address.empty_as_none(),
+                        url: None,
                     });
                 }
 
@@ -2388,16 +2448,31 @@ mod sync {
                     &data.facebook_event_requested,
                 );
 
-                let mut instances = Vec::with_capacity(20);
-
-                if let (Some(begin), Some(end)) = (data.begin0, data.end0) {
-                    instances.push(EventInstance {
-                        begin: begin.into(),
-                        end: end.into(),
-                    });
-                }
-
-                evt.instances = instances.into_boxed_slice();
+                evt.instances = event_instances(
+                    &evt.name,
+                    [
+                        (data.begin0, data.end0),
+                        (data.begin1, data.end1),
+                        (data.begin2, data.end2),
+                        (data.begin3, data.end3),
+                        (data.begin4, data.end4),
+                        (data.begin5, data.end5),
+                        (data.begin6, data.end6),
+                        (data.begin7, data.end7),
+                        (data.begin8, data.end8),
+                        (data.begin9, data.end9),
+                        (data.begin10, data.end10),
+                        (data.begin11, data.end11),
+                        (data.begin12, data.end12),
+                        (data.begin13, data.end13),
+                        (data.begin14, data.end14),
+                        (data.begin15, data.end15),
+                        (data.begin16, data.end16),
+                        (data.begin17, data.end17),
+                        (data.begin18, data.end18),
+                        (data.begin19, data.end19),
+                    ],
+                );
 
                 let before = Stored::of_event(evt.event_id).await;
 
@@ -3533,6 +3608,42 @@ mod sync {
     mod tests {
         use super::*;
         use assert2::check;
+
+        #[test]
+        fn every_date_slot_is_synchronized_in_date_order() {
+            let at = |s: &str| Some(s.parse::<Timestamp>().unwrap());
+            let mut slots = [(None, None); 20];
+            slots[0] = (at("2027-03-05T18:00:00Z"), at("2027-03-05T20:00:00Z"));
+            // A start with no end, saved before orrery asked for ends.
+            slots[3] = (at("2027-03-01T18:00:00Z"), None);
+            // An end with no start can't be a date.
+            slots[7] = (None, at("2027-03-09T18:00:00Z"));
+            // An end before its start is kept as it was saved.
+            slots[19] = (at("2027-03-12T18:00:00Z"), at("2027-03-12T17:00:00Z"));
+
+            let instances = event_instances("Bugs at dusk", slots);
+            let pairs = instances
+                .iter()
+                .map(|i| (i.begin.to_string(), i.end.to_string()))
+                .collect::<Vec<_>>();
+            check!(
+                pairs
+                    == [
+                        (
+                            "2027-03-01T18:00:00Z".to_string(),
+                            "2027-03-01T18:00:00Z".to_string()
+                        ),
+                        (
+                            "2027-03-05T18:00:00Z".to_string(),
+                            "2027-03-05T20:00:00Z".to_string()
+                        ),
+                        (
+                            "2027-03-12T18:00:00Z".to_string(),
+                            "2027-03-12T17:00:00Z".to_string()
+                        ),
+                    ]
+            );
+        }
 
         #[test]
         fn orrery_authority_names_become_protected_fields() {

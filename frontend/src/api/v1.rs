@@ -29,9 +29,9 @@ use crate::page_change::Stored;
 use crate::peering::LoadStorePeered;
 use crate::project::ProjectStatus;
 use crate::project::all::{ProjectAll, persist_new_project};
-use crate::submission::Submission;
 use crate::project::field_source::FieldSource;
 use crate::project::location::{ANYWHERE, AT_AN_ADDRESS, IN_A_RANGE};
+use crate::submission::Submission;
 
 #[derive(Debug, Deserialize)]
 struct ApiKeyQuery {

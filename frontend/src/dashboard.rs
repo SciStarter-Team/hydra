@@ -26,7 +26,7 @@ use poem::{Endpoint, EndpointExt, Route, get, post};
 use sailfish::TemplateOnce;
 
 use crate::dashboard::entity_summary::entity_link;
-use crate::local_time::{TimeFormat, local_time};
+use crate::local_time::{Clocks, TimeFormat, zoned_time_range};
 use crate::middleware::authorization::AuthOnly;
 use crate::middleware::rate_limit::{RateLimitConfig, RateLimitMiddleware};
 
@@ -219,6 +219,8 @@ pub struct EntityCardModel {
     pub created: String,
     pub begin: Option<String>,
     pub end: Option<String>,
+    /// The time zone `begin` and `end` are told in: the event's venue's.
+    pub zone: Option<jiff::tz::TimeZone>,
 }
 
 impl EntityCardModel {
@@ -233,6 +235,10 @@ impl EntityCardModel {
             created: summary.created.clone(),
             begin: summary.begin.clone(),
             end: summary.end.clone(),
+            zone: summary
+                .zone
+                .as_deref()
+                .and_then(|name| jiff::tz::TimeZone::get(name).ok()),
         }
     }
 

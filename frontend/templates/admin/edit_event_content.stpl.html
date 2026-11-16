@@ -458,6 +458,11 @@
          and change the answers through the same component -->
     <%+ crate::component::detail_page_edit::FacebookEventDisplay { target_id: self.event.id.clone(), facebook_event: self.event.facebook_event.clone(), refused: None } %>
 
+    <!-- Organizer Contacts Section: the card the event page shows its
+         editors, so staff read and change the contacts through the same
+         component -->
+    <%+ crate::component::detail_page_edit::ContactsDisplay { target_id: self.event.id.clone(), contacts: self.event.contacts.clone(), can_edit: true } %>
+
     <!-- Admin Section -->
     <div class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
       <h4 class="text-red-800 mb-4 text-lg font-semibold">Admin Settings</h4>

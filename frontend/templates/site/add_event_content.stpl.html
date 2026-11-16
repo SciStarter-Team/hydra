@@ -1,5 +1,6 @@
 <% use crate::component::floating_field::{FieldIcon, FieldKind, FloatingField}; %>
-<% use crate::add::{SectionIcon, SectionSummary, TimezoneField}; %>
+<% use crate::add::{SectionIcon, SectionSummary}; %>
+<% use crate::component::{date_row::DateRowFields, timezone_field::TimezoneField}; %>
 <% let error = self.error.as_ref(); %>
 <% let repeating = self.values.repeat_frequency != "once"; %>
 <div class="ss-container !pt-8 !pb-12 mx-auto">
@@ -27,28 +28,13 @@
       </div>
 
       <div class="add-area add-area-main">
-        <%+ FloatingField::new(FieldKind::Text, "name", "Event name", self.values.name.as_str()).id("event-name").required().limit(crate::add::EVENT_NAME_LIMIT).errors(error) %>
+        <%+ FloatingField::new(FieldKind::Text, "name", "Event name", self.values.name.as_str()).id("event-name").required().limit(crate::event::rules::NAME_LIMIT).errors(error) %>
 
         <div id="instances">
           <% for (i, inst) in self.values.instances.iter().enumerate() { %>
             <fieldset class="instance-row">
               <legend class="sr-only instance-legend">Date and time <%= i + 1 %></legend>
-              <div class="when-grid">
-                <%+ FloatingField::new(FieldKind::Date, format!("instances[{i}][begin_date]"), "Start date", inst.begin_date.as_str()).icon(FieldIcon::Calendar).required().errors(error) %>
-                <%+ FloatingField::new(FieldKind::Time, format!("instances[{i}][begin_time]"), "Start time", inst.begin_time.as_str()).icon(FieldIcon::Clock).required().errors(error) %>
-                <%+ TimezoneField::build(format!("instances[{i}][timezone]"), &inst.timezone, true).errors(error) %>
-              </div>
-
-              <input type="checkbox" class="has-end-toggle sr-only" name="instances[<%= i %>][has_end]" <% if inst.has_end { %>checked<% } %> tabindex="-1" aria-hidden="true">
-              <button type="button" class="link-btn end-toggle" <% if inst.has_end { %>hidden<% } %>>+ End date and time</button>
-
-              <div class="end-block" <% if !inst.has_end { %>hidden<% } %>>
-                <div class="field-pair">
-                  <%+ FloatingField::new(FieldKind::Date, format!("instances[{i}][end_date]"), "End date", inst.end_date.as_str()).icon(FieldIcon::Calendar).errors(error) %>
-                  <%+ FloatingField::new(FieldKind::Time, format!("instances[{i}][end_time]"), "End time", inst.end_time.as_str()).icon(FieldIcon::Clock).errors(error) %>
-                </div>
-                <button type="button" class="link-btn end-remove">Remove end date &amp; time</button>
-              </div>
+              <%+ DateRowFields::new(format!("instances[{i}]"), inst.clone()).errors(error) %>
 
               <button type="button" class="link-btn remove-instance" aria-label="Remove date and time <%= i + 1 %>" <% if i == 0 { %>hidden<% } %>>Remove this date</button>
             </fieldset>
@@ -104,9 +90,12 @@
           </fieldset>
           <p id="attendance-help" class="field-help">If your event is limited to a specific group, tell people who can attend. For example, &ldquo;Library cardholders only,&rdquo; &ldquo;Open to K&ndash;12 teachers,&rdquo; or &ldquo;For members of our book club.&rdquo;</p>
           <div data-limited-only <% if !self.values.limited { %>hidden<% } %>>
-            <%+ FloatingField::new(FieldKind::Text, "limited_to", "Who is eligible to attend?", self.values.limited_to.as_str()).id("limited-to").required().limit(crate::add::LIMITED_TO_LIMIT).described_by("attendance-help").errors(error) %>
+            <%+ FloatingField::new(FieldKind::Text, "limited_to", "Who is eligible to attend?", self.values.limited_to.as_str()).id("limited-to").required().limit(crate::event::rules::LIMITED_TO_LIMIT).described_by("attendance-help").errors(error) %>
           </div>
         </div>
+
+        <%# Who the event is for, asked with who can attend it. %>
+        <%+ self.audience %>
       </div>
 
       <div class="add-area add-area-details">
@@ -177,8 +166,14 @@
           <%+ SectionSummary::new(SectionIcon::Contact, "Organizer contact") %>
           <div class="add-section-body" role="group" aria-label="Organizer contact" aria-describedby="contact-help">
             <p id="contact-help" class="field-help">Who should SciStarter staff contact about this event? It isn&rsquo;t shown on the event page.</p>
-            <%+ FloatingField::new(FieldKind::Text, "contact_name", "Contact name", self.values.contact_name.as_str()).autocomplete("name").errors(error) %>
-            <%+ FloatingField::new(FieldKind::Email, "contact_email", "Email", self.values.contact_email.as_str()).autocomplete("email").errors(error) %>
+            <%+ FloatingField::new(FieldKind::Text, "contact_name", "Contact name", self.values.contact_name.as_str()).autocomplete("name").required().described_by("contact-help").errors(error) %>
+            <%# Either reaches them; an organization that publishes no address
+                may have a contact form instead. %>
+            <div class="field-pair">
+              <%+ FloatingField::new(FieldKind::Email, "contact_email", "Email", self.values.contact_email.as_str()).autocomplete("email").described_by("contact-reach-help").errors(error) %>
+              <%+ FloatingField::new(FieldKind::Url, "contact_url", "Contact form link", self.values.contact_url.as_str()).autocomplete("url").described_by("contact-reach-help").errors(error) %>
+            </div>
+            <p id="contact-reach-help" class="field-help">Please give an email address, a link to a contact form, or both.</p>
             <%+ FloatingField::new(FieldKind::Text, "contact_affiliation", "Affiliation", self.values.contact_affiliation.as_str()).autocomplete("organization") %>
             <%+ FloatingField::new(FieldKind::Tel, "contact_phone", "Phone", self.values.contact_phone.as_str()).autocomplete("tel") %>
             <%+ FloatingField::new(FieldKind::Text, "contact_address", "Mailing address", self.values.contact_address.as_str()).autocomplete("street-address") %>
@@ -218,76 +213,6 @@
       }
     });
 
-    // Preselect a sensible time zone: the zone of a venue picked in the
-    // location search when there is one, else the visitor's browser zone.
-    // Never overrides a zone the visitor chose themselves.
-    var browserTz = "";
-    try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
-    var placeTz = "";
-
-    function hasOption(select, tz) {
-      return Array.prototype.some.call(select.options, function (o) { return o.value === tz; });
-    }
-
-    // The field shows the zone's short name ("PDT", "GMT+3") over the full
-    // list, which lies invisibly across the field and opens on click.
-    function shortName(tz) {
-      try {
-        var parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "short" }).formatToParts(new Date());
-        var name = parts.find(function (p) { return p.type === "timeZoneName"; });
-        return name ? name.value : tz;
-      } catch (e) {
-        return tz;
-      }
-    }
-    function syncTz(select) {
-      if (!select) return;
-      var field = select.closest("[data-tz-field]");
-      if (!field) return;
-      field.classList.add("tz-enhanced");
-      var short = field.querySelector(".tz-short");
-      if (short) short.textContent = select.value ? shortName(select.value) : "";
-    }
-
-    function ensureTz(select) {
-      if (!select) return;
-      if (browserTz && !hasOption(select, browserTz)) {
-        var opt = document.createElement("option");
-        opt.value = browserTz;
-        opt.textContent = browserTz;
-        select.appendChild(opt);
-      }
-      if (!select.value) {
-        if (placeTz && hasOption(select, placeTz)) {
-          select.value = placeTz;
-        } else if (browserTz) {
-          select.value = browserTz;
-        }
-      }
-      syncTz(select);
-    }
-    document.querySelectorAll("select.tz-select").forEach(ensureTz);
-
-    // A hand-picked zone is an explicit choice; remember not to overwrite it.
-    document.addEventListener("change", function (e) {
-      if (e.target.matches && e.target.matches("select.tz-select")) {
-        if (e.isTrusted) e.target.dataset.userSet = "1";
-        syncTz(e.target);
-      }
-    });
-
-    // The location picker announces the zone of a picked venue; default every
-    // untouched select to it (regions and virtual events announce nothing).
-    document.addEventListener("ss:place-timezone", function (e) {
-      placeTz = e.detail.timezone;
-      document.querySelectorAll("select.tz-select").forEach(function (select) {
-        if (!select.dataset.userSet && hasOption(select, placeTz)) {
-          select.value = placeTz;
-          syncTz(select);
-        }
-      });
-    });
-
     // Events are added ahead of time, so dates the event itself happens on
     // start from today (the visitor's today; the server checks again in the
     // event's own zone). A fresh form proposes today at the next full hour.
@@ -312,35 +237,6 @@
       firstDate.value = isoDate(start);
       firstTime.value = pad(start.getHours()) + ":00";
     }
-
-    // "+ End date and time" reveals a row's end fields (and checks the hidden
-    // has_end box that carries the state to the server); "Remove" undoes it.
-    // Each hides the control that was used, so focus moves to the one that
-    // takes its place.
-    function setEnd(row, on) {
-      var toggle = row.querySelector(".has-end-toggle");
-      var block = row.querySelector(".end-block");
-      var link = row.querySelector(".end-toggle");
-      if (toggle) toggle.checked = on;
-      if (block) block.hidden = !on;
-      if (link) link.hidden = on;
-      if (!on && block) {
-        block.querySelectorAll("input").forEach(function (el) { el.value = ""; });
-      }
-      if (on && block) {
-        var endDate = block.querySelector("input");
-        if (endDate) endDate.focus();
-      } else if (!on && link) {
-        link.focus();
-      }
-    }
-    container.addEventListener("click", function (e) {
-      if (e.target.classList.contains("end-toggle")) {
-        setEnd(e.target.closest(".instance-row"), true);
-      } else if (e.target.classList.contains("end-remove")) {
-        setEnd(e.target.closest(".instance-row"), false);
-      }
-    });
 
     // Keep instance rows numbered contiguously (instances[0], instances[1], ...),
     // along with the "Date and time 2" names assistive software gives each row
@@ -383,7 +279,7 @@
       var endToggle = clone.querySelector(".end-toggle");
       if (endToggle) endToggle.hidden = false;
       container.appendChild(clone);
-      ensureTz(clone.querySelector("select.tz-select"));
+      window.DateRows.ensureTz(clone.querySelector("select.tz-select"));
       setMinDates(clone);
       renumber();
       clone.querySelector('input[name$="[begin_date]"]').focus();

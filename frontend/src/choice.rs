@@ -75,9 +75,9 @@ impl ChoiceList {
     /// What the list is called, for staff.
     pub fn label(self) -> &'static str {
         match self {
-            ChoiceList::EventFormat => "Event formats",
-            ChoiceList::EventProgram => "Event programs and campaigns",
-            ChoiceList::EventVenue => "Event venues",
+            ChoiceList::EventFormat => "Types of event",
+            ChoiceList::EventProgram => "Programs and campaigns",
+            ChoiceList::EventVenue => "Kinds of venue",
             ChoiceList::Topic => "Topics",
             ChoiceList::Activity => "Activities",
             ChoiceList::Audience => "Audience",
@@ -88,9 +88,9 @@ impl ChoiceList {
     /// from it.
     pub fn heading(self) -> &'static str {
         match self {
-            ChoiceList::EventFormat => "Format",
+            ChoiceList::EventFormat => "Type of event",
             ChoiceList::EventProgram => "Program or campaign",
-            ChoiceList::EventVenue => "Venue",
+            ChoiceList::EventVenue => "Kind of venue",
             ChoiceList::Topic => "Topics",
             ChoiceList::Activity => "Activities",
             ChoiceList::Audience => "Audience",
@@ -677,6 +677,24 @@ pub async fn assign(
     }
 
     Ok(())
+}
+
+/// The slugs of what `target` picks from `list`, read inside the caller's
+/// transaction.
+pub async fn assigned(
+    tx: &mut Immediate,
+    target: &str,
+    list: ChoiceList,
+) -> Result<BTreeSet<String>, Error> {
+    Ok(sqlx::query_scalar!(
+        r#"SELECT "value" FROM choice_assignments WHERE "target" = ? AND "list" = ?"#,
+        target,
+        list
+    )
+    .fetch_all(&mut *tx)
+    .await?
+    .into_iter()
+    .collect())
 }
 
 /// Take away every value the list's `slug` is picked by, inside the caller's

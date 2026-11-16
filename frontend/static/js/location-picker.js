@@ -56,6 +56,8 @@
       if (common) common.hidden = mode === "";
       var note = root.querySelector(".location-note");
       if (note && mode === "region") note.open = true;
+      // An online event has no location note; the server drops one anyway.
+      if (note && note.hasAttribute("data-no-online-note")) note.hidden = mode === "online";
       applyUrlText(mode);
     }
 
@@ -124,8 +126,10 @@
     var summaryAction = root.querySelector("[data-place-summary-action]");
     var timer = null;
     var seq = 0;
-    // The suggestions on offer, and which one the arrow keys have reached
-    // (-1: none; typing stays in the input either way).
+    // The options on offer, and which one the arrow keys have reached (-1:
+    // none; typing stays in the input either way). Each is a place
+    // suggestion, except the last, `{ typed: "..." }`, which uses the words
+    // typed as the address.
     var current = [];
     var active = -1;
 
@@ -212,44 +216,77 @@
       }
     }
 
-    function render(suggestions) {
-      list.innerHTML = "";
-      if (!suggestions.length) {
-        close();
-        announce("No places found");
-        return;
+    // Use the words typed as the street address, for a place the search
+    // doesn't know: the other components and the coordinates are cleared,
+    // since they belonged to whatever was there before (the save geocodes the
+    // address), and the details open so the rest can be filled in.
+    function useTyped(words) {
+      ["location_name", "city", "state", "zip", "country", "latitude", "longitude"].forEach(function (key) {
+        if (fields[key]) fields[key].value = "";
+      });
+      if (fields.address) fields.address.value = words;
+      syncSummary();
+      close();
+      var details = root.querySelector(".place-details");
+      if (details) details.open = true;
+      announce("Using " + words + " as the address");
+    }
+
+    function choose(option) {
+      if (option.typed !== undefined) {
+        useTyped(option.typed);
+      } else {
+        pick(option);
       }
-      current = suggestions;
+    }
+
+    function option(id, name, contextText, onChoose) {
+      var li = document.createElement("li");
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", "false");
+      li.id = id;
+      var label = document.createElement("span");
+      label.className = "place-name";
+      label.textContent = name;
+      li.appendChild(label);
+      if (contextText) {
+        var context = document.createElement("span");
+        context.className = "place-context";
+        context.textContent = contextText;
+        li.appendChild(context);
+      }
+      // Keep focus in the input while the pointer picks.
+      li.addEventListener("mousedown", function (e) { e.preventDefault(); });
+      li.addEventListener("click", onChoose);
+      return li;
+    }
+
+    // Once a search answers, the list always ends with the option to use the
+    // words typed as the address, found places or not.
+    function render(suggestions, words) {
+      list.innerHTML = "";
+      var typed = { typed: words };
+      current = suggestions.concat([typed]);
       active = -1;
       input.removeAttribute("aria-activedescendant");
       suggestions.forEach(function (s, i) {
-        var li = document.createElement("li");
-        li.setAttribute("role", "option");
-        li.setAttribute("aria-selected", "false");
-        li.id = list.id + "-" + i;
-        var name = document.createElement("span");
-        name.className = "place-name";
-        name.textContent = s.name;
-        li.appendChild(name);
         // The kind ("City", "County") is often the only difference between
         // same-named places, so it leads the context line.
         var contextText = [s.kind, s.context].filter(Boolean).join(" · ");
-        if (contextText) {
-          var context = document.createElement("span");
-          context.className = "place-context";
-          context.textContent = contextText;
-          li.appendChild(context);
-        }
-        // Keep focus in the input while the pointer picks.
-        li.addEventListener("mousedown", function (e) { e.preventDefault(); });
-        li.addEventListener("click", function () { pick(s); });
-        list.appendChild(li);
+        list.appendChild(option(list.id + "-" + i, s.name, contextText, function () { pick(s); }));
       });
+      var last = option(list.id + "-" + suggestions.length,
+        "Use \u201c" + words + "\u201d as the address", "",
+        function () { useTyped(words); });
+      last.classList.add("place-typed");
+      list.appendChild(last);
       list.hidden = false;
       input.setAttribute("aria-expanded", "true");
-      announce(suggestions.length === 1
-        ? "1 place found; use the arrow keys to choose it"
-        : suggestions.length + " places found; use the arrow keys to choose one");
+      announce(suggestions.length === 0
+        ? "No places found; use the arrow keys to use what you typed as the address"
+        : suggestions.length === 1
+          ? "1 place found; use the arrow keys to choose it, or to use what you typed as the address"
+          : suggestions.length + " places found; use the arrow keys to choose one, or to use what you typed as the address");
     }
 
     function search() {
@@ -262,7 +299,7 @@
       fetch("/add/place-search?q=" + encodeURIComponent(q), { headers: { Accept: "application/json" } })
         .then(function (r) { return r.ok ? r.json() : []; })
         .then(function (suggestions) {
-          if (current === seq) render(suggestions || []);
+          if (current === seq) render(suggestions || [], q);
         })
         .catch(function () {});
     }
@@ -280,10 +317,10 @@
         e.preventDefault();
         setActive(active - 1);
       } else if (e.key === "Enter") {
-        // Enter never submits the form from here; it picks the highlighted
-        // place, or the first when none is highlighted.
+        // Enter never submits the form from here; it chooses the highlighted
+        // option, or the first when none is highlighted.
         e.preventDefault();
-        if (open) pick(current[active >= 0 ? active : 0]);
+        if (open) choose(current[active >= 0 ? active : 0]);
       } else if (e.key === "Escape" && open) {
         e.preventDefault();
         close();
@@ -323,4 +360,11 @@
   } else {
     initAll();
   }
+  // Swapped in later, as the event page's location editor is: htmx fires
+  // this on each root of the new content once it's in the page.
+  document.addEventListener("htmx:after:process", function (e) {
+    if (!e.target || !e.target.querySelectorAll) return;
+    if (e.target.matches && e.target.matches("[data-location-picker]")) init(e.target);
+    e.target.querySelectorAll("[data-location-picker]").forEach(init);
+  });
 })();

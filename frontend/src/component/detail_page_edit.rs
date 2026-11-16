@@ -1,10 +1,12 @@
 use anyhow::Error;
 use common::{message::user::BasicInfo, service::log_activity, shared::db, timestring::TimeString};
+use jiff::{Zoned, tz::TimeZone};
 use poem::{
     IntoResponse, handler,
-    web::{Html, Path},
+    web::{Html, Path, Query},
 };
 use sailfish::TemplateOnce;
+use std::sync::Arc;
 use ulid::Ulid;
 
 use std::collections::HashMap;
@@ -14,13 +16,19 @@ use common::message::user::{UserByEmailRequest, UserByEmailResponse};
 use common::service::request;
 
 use crate::admin::autocomplete::resolve_user_names;
-use crate::choice::{ChoiceCheckboxes, ChoiceList, ChoiceValue, limited_heading};
+use crate::choice::{ChoiceCheckboxes, ChoiceList, ChoiceValue, OrreryValue, limited_heading};
+use crate::component::date_row::{DateRowFields, DateRowValues};
 use crate::component::facebook_questions::FacebookAnswers;
 use crate::component::floating_field::FormError;
-use crate::contact::{Contact, ContactRole};
+use crate::component::location_picker::LocationPicker;
+use crate::contact::{Contact, ContactRole, Unreachable};
 use crate::event::facebook::FacebookEvent;
 use crate::event::field::{EventField, EventFieldType, EventFieldValue};
-use crate::local_time::{TimeFormat, local_time};
+use crate::event::location::{EventLocation, LocationInput, SavedAddress};
+use crate::event::rules::{self, DateRow, Field as RulesField, Refusal, RowReading};
+use crate::event::{EventInstance, read_instances};
+use crate::project::location::LocationMode;
+
 use crate::middleware::authorization::Authenticated;
 use crate::page_change::record_edit;
 use crate::participant_file::ParticipantFile;
@@ -97,6 +105,27 @@ fn pick_limit(kind: DetailPageKind, list: ChoiceList) -> Option<usize> {
     }
 }
 
+/// Whether `field_type` is part of where an event is held, which is edited as
+/// a whole (see [`EventLocationDisplay`]), as orrery's event form edits it:
+/// its parts depend on one another. The event page shows each part as it
+/// shows a field, but no part is edited on its own.
+pub fn edited_as_location(field_type: &str, kind: DetailPageKind) -> bool {
+    kind == DetailPageKind::Event
+        && (LOCATION_PARTS.contains(&field_type) || field_type == "venues")
+}
+
+/// The parts of an event's location the event page shows, in order.
+const LOCATION_PARTS: &[&str] = &[
+    "entirely_online",
+    "location_name",
+    "location_description",
+    "address",
+    "city",
+    "state",
+    "zip",
+    "country",
+];
+
 /// Why the values submitted for a field cannot be saved, or `None` when they
 /// can.
 fn refuse_values(field_type: &str, kind: DetailPageKind, values: &[String]) -> Option<String> {
@@ -111,6 +140,72 @@ fn refuse_values(field_type: &str, kind: DetailPageKind, values: &[String]) -> O
         DetailPageKind::Event => crate::event::refuse_picks(list, picked),
         DetailPageKind::Project => None,
     }
+}
+
+/// The field `field_type` of a `kind` of page, when it's edited on its own.
+fn inline_field_meta(field_type: &str, kind: DetailPageKind) -> poem::Result<FieldMeta> {
+    if edited_as_location(field_type, kind) {
+        return Err(poem::Error::from_string(
+            "This is changed with the rest of where the event is held.",
+            poem::http::StatusCode::BAD_REQUEST,
+        ));
+    }
+    field_meta(field_type, kind).ok_or_else(|| {
+        poem::Error::from_string("Unknown field", poem::http::StatusCode::BAD_REQUEST)
+    })
+}
+
+/// Why `values` can't be saved as the event `id`'s `field_type`, by the rules
+/// orrery's event form keeps (see [`crate::event::rules`]), or `None` when
+/// they can. A value left as it was saved isn't refused for a rule made
+/// since.
+async fn refuse_event_value(
+    id: &str,
+    field_type: &str,
+    values: &[String],
+) -> Result<Option<String>, Error> {
+    let value = values.first().map(String::as_str).unwrap_or("");
+    let stored = || read_event_field(id, field_type);
+    let checked = match field_type {
+        "name" => rules::name(value, Some(&stored().await?)),
+        "description" => rules::description(&rich_text_words(value)),
+        "image" => rules::image_link(value, Some(&stored().await?)),
+        "url" => {
+            let stored_url = stored().await?;
+            let mode = event_mode(id).await?;
+            mode.map_or(Ok(()), |mode| rules::join_link(value, mode))
+                .and_then(|()| rules::link(value, Some(&stored_url)))
+        }
+        "ticket_url" => rules::ticket_link(value, Some(&stored().await?)),
+        // Saying who is eligible limits the event to them; saying no one
+        // opens it to everyone.
+        "limited_to" => rules::limited_to(value, !value.trim().is_empty()),
+        _ => Ok(()),
+    };
+    Ok(checked.err().map(|refusal| refusal.message.into_owned()))
+}
+
+/// The words of rich text as the editor submits it (Quill Delta, or older
+/// HTML or Markdown), without its markup.
+fn rich_text_words(value: &str) -> String {
+    common::quill::to_delta(value, None)
+        .map(|delta| common::quill::delta_to_excerpt(&delta, 80))
+        .unwrap_or_else(|_| value.to_string())
+}
+
+/// Where the event `id` is held, as orrery's event form asks it.
+async fn event_mode(id: &str) -> Result<Option<LocationMode>, Error> {
+    let row = sqlx::query!(
+        r#"SELECT location_type, entirely_online AS "entirely_online: bool"
+           FROM events WHERE event_id = ?"#,
+        id
+    )
+    .fetch_one(db())
+    .await?;
+    Ok(LocationMode::of_event(
+        &row.location_type,
+        row.entirely_online,
+    ))
 }
 
 /// Options whose values are their own labels.
@@ -128,6 +223,60 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
     }
 
     match (field_type, kind) {
+        // An event's fields, in the words orrery's event form settled on.
+        ("name", DetailPageKind::Event) => Some(FieldMeta {
+            label: "Event name",
+            input_kind: FieldInputKind::Text,
+        }),
+        ("presenter", DetailPageKind::Event) => Some(FieldMeta {
+            label: "Organizer / presenter",
+            input_kind: FieldInputKind::Text,
+        }),
+        ("image", DetailPageKind::Event) => Some(FieldMeta {
+            label: "Image link",
+            input_kind: FieldInputKind::Image,
+        }),
+        ("image_credit", DetailPageKind::Event) => Some(FieldMeta {
+            label: "Image credit",
+            input_kind: FieldInputKind::Text,
+        }),
+        ("url", DetailPageKind::Event) => Some(FieldMeta {
+            label: "Link / URL",
+            input_kind: FieldInputKind::Url,
+        }),
+        ("description", DetailPageKind::Event) => Some(FieldMeta {
+            label: "What are the details?",
+            input_kind: FieldInputKind::RichText,
+        }),
+        ("how_to_join", DetailPageKind::Event) => Some(FieldMeta {
+            label: "How to join / participate",
+            input_kind: FieldInputKind::RichText,
+        }),
+        ("location_name", DetailPageKind::Event) => Some(FieldMeta {
+            label: "Venue name",
+            input_kind: FieldInputKind::Text,
+        }),
+        ("location_description", DetailPageKind::Event) => Some(FieldMeta {
+            label: "Location note",
+            input_kind: FieldInputKind::Textarea,
+        }),
+        ("address", DetailPageKind::Event) => Some(FieldMeta {
+            label: "Street address",
+            input_kind: FieldInputKind::Text,
+        }),
+        ("state", DetailPageKind::Event) => Some(FieldMeta {
+            label: "State / Province",
+            input_kind: FieldInputKind::Text,
+        }),
+        ("zip", DetailPageKind::Event) => Some(FieldMeta {
+            label: "ZIP / Postal code",
+            input_kind: FieldInputKind::Text,
+        }),
+        ("entirely_online", DetailPageKind::Event) => Some(FieldMeta {
+            label: "Is it in person or online?",
+            input_kind: FieldInputKind::Boolean,
+        }),
+
         // Common fields (both projects and events)
         ("name", _) => Some(FieldMeta {
             label: "Name",
@@ -251,7 +400,7 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
             label: "Instagram Page",
             input_kind: FieldInputKind::Text,
         }),
-        ("tags", DetailPageKind::Project) => Some(FieldMeta {
+        ("tags", _) => Some(FieldMeta {
             label: "Tags",
             input_kind: FieldInputKind::Text,
         }),
@@ -368,7 +517,7 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
 
         // Event-only fields
         ("ticket_url", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Tickets",
+            label: "Ticket / registration link",
             input_kind: FieldInputKind::Url,
         }),
         ("cost", DetailPageKind::Event) => Some(FieldMeta {
@@ -376,7 +525,7 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
             input_kind: FieldInputKind::Text,
         }),
         ("limited_to", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Who is eligible to attend (empty if it's open to everyone)",
+            label: "Who is eligible to attend? (empty if anyone can attend)",
             input_kind: FieldInputKind::Text,
         }),
 
@@ -807,6 +956,15 @@ async fn read_project_field(id: &str, field_type: &str) -> Result<String, Error>
 
 async fn read_event_field(id: &str, field_type: &str) -> Result<String, Error> {
     match field_type {
+        "tags" => {
+            let mut tags: Vec<String> = crate::event::read_tags(db(), id)
+                .await?
+                .into_iter()
+                .map(|tag| tag.to_string())
+                .collect();
+            tags.sort();
+            Ok(tags.join(", "))
+        }
         "name" => Ok(
             sqlx::query_scalar!("SELECT name FROM events WHERE event_id = ?", id)
                 .fetch_one(db())
@@ -1065,12 +1223,24 @@ async fn save_event_field(
 ) -> Result<(), Error> {
     let value = values.first().map(|s| s.as_str()).unwrap_or("");
     let field_value = if let Some(list) = choice_field(field_type, DetailPageKind::Event) {
-        let slugs = ChoiceValue::known(list, values.iter().cloned()).await?;
+        let mut slugs = ChoiceValue::known(list, values.iter().cloned()).await?;
+        // Online comes from where the event is held alone.
+        if let Some(online) = OrreryValue::EVENT_ONLINE.find().await?
+            && online.list == list
+        {
+            let online_now = event_mode(&event_id.to_string()).await? == Some(LocationMode::Online);
+            crate::event::location::settle_online(&mut slugs, &online, online_now);
+        }
         EventFieldValue::choices(list, slugs)
             .ok_or_else(|| anyhow::anyhow!("Events pick nothing from {list:?}"))?
     } else {
         match field_type {
             "name" => EventFieldValue::Name(value.to_string()),
+            "tags" => EventFieldValue::Tags(
+                crate::tag::split(value)
+                    .map(common::insensitivestring::InsensitiveString::from)
+                    .collect(),
+            ),
             "presenter" => EventFieldValue::Presenter(value.to_string()),
             "image" => EventFieldValue::Image(value.to_string()),
             "image_credit" => EventFieldValue::ImageCredit(value.to_string()),
@@ -1159,9 +1329,29 @@ impl FieldEditForm {
                     .filter(|slug| !slug.is_empty())
                     .map(str::to_string)
                     .collect();
+                let (heading, values) = match (kind, list) {
+                    // Online is answered by where the event is held, not
+                    // picked.
+                    (DetailPageKind::Event, ChoiceList::EventFormat) => (
+                        crate::event::choice_legend(list),
+                        crate::event::in_format_order(crate::event::offered_types(list).await?),
+                    ),
+                    (DetailPageKind::Event, ChoiceList::EventProgram | ChoiceList::EventVenue) => (
+                        crate::event::choice_legend(list),
+                        crate::event::offered_types(list).await?,
+                    ),
+                    (DetailPageKind::Event, _) => (
+                        crate::event::choice_legend(list),
+                        ChoiceValue::all(list).await?,
+                    ),
+                    (DetailPageKind::Project, _) => (
+                        limited_heading(meta.label, limit),
+                        ChoiceValue::all(list).await?,
+                    ),
+                };
                 (
-                    limited_heading(meta.label, limit),
-                    Some(ChoiceCheckboxes::load("value", list, picked, limit).await?),
+                    heading,
+                    Some(ChoiceCheckboxes::new("value", values, picked, limit)),
                 )
             }
             _ => (meta.label.into(), None),
@@ -1198,6 +1388,9 @@ pub struct FieldDisplay {
     /// rendered content already includes a heading (ribbon boxes, the online
     /// toggle) or that are icon-only adornments.
     pub show_label: bool,
+    /// Whether the display replaces the one on the page out of band, beside a
+    /// response to a change that changed this field too.
+    pub oob: bool,
 }
 
 impl FieldDisplay {
@@ -1220,7 +1413,14 @@ impl FieldDisplay {
             can_edit,
             content_html,
             empty,
+            oob: false,
         }
+    }
+
+    /// Replace the field's display on the page out of band.
+    pub fn out_of_band(mut self) -> Self {
+        self.oob = true;
+        self
     }
 }
 
@@ -1327,11 +1527,11 @@ pub fn editable_field_list(kind: DetailPageKind) -> &'static [&'static str] {
             "programs",
             "venues",
             "topics",
+            "limited_to",
             "audience",
             "url",
             "ticket_url",
             "cost",
-            "limited_to",
             "description",
             "entirely_online",
             "location_name",
@@ -1359,6 +1559,7 @@ pub async fn render_fields(
 ) -> std::collections::HashMap<String, FieldDisplay> {
     let mut out = std::collections::HashMap::new();
     for &field_type in editable_field_list(kind) {
+        let can_edit = can_edit && !edited_as_location(field_type, kind);
         let value = values.get(field_type).map(String::as_str).unwrap_or("");
         let content_html = format_display_value(field_type, value, target_id, kind, can_edit).await;
         let label = field_meta(field_type, kind)
@@ -1416,7 +1617,7 @@ pub async fn get_edit_form(
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
 
-    let (can_edit, _is_staff) = check_edit_permission(&id, &user, kind).await.map_err(|e| {
+    let (can_edit, is_staff) = check_edit_permission(&id, &user, kind).await.map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
 
@@ -1427,15 +1628,14 @@ pub async fn get_edit_form(
         ));
     }
 
-    let meta = field_meta(&field_type, kind).ok_or_else(|| {
-        poem::Error::from_string("Unknown field", poem::http::StatusCode::BAD_REQUEST)
-    })?;
+    let meta = inline_field_meta(&field_type, kind)?;
 
     let current_value = read_field_value(&id, &field_type, kind)
         .await
         .map_err(|e| {
             poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
         })?;
+    let current_value = shown_value(&field_type, current_value, is_staff);
 
     // For rich text fields, normalize the value to Delta JSON for the Quill editor
     let current_value = if meta.input_kind == FieldInputKind::RichText {
@@ -1452,7 +1652,9 @@ pub async fn get_edit_form(
                 .unwrap_or_default();
             Some(SupplementalField {
                 name: "image_credit".to_string(),
-                label: "Image Credit".to_string(),
+                label: field_meta("image_credit", kind)
+                    .map_or("Image Credit", |meta| meta.label)
+                    .to_string(),
                 input_kind: FieldInputKind::Text,
                 current_value: credit,
                 placeholder: String::new(),
@@ -1526,17 +1728,22 @@ pub async fn save_field(
         ));
     }
 
-    // Validate field type is known
-    let meta = field_meta(&field_type, kind).ok_or_else(|| {
-        poem::Error::from_string("Unknown field", poem::http::StatusCode::BAD_REQUEST)
-    })?;
+    let meta = inline_field_meta(&field_type, kind)?;
 
     let target_ulid = Ulid::from_string(&id).map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
     })?;
 
+    let refusal = match refuse_values(&field_type, kind, &form.value) {
+        Some(refusal) => Some(refusal),
+        None if kind == DetailPageKind::Event => refuse_event_value(&id, &field_type, &form.value)
+            .await
+            .map_err(internal_error)?,
+        None => None,
+    };
+
     // Refused, the form comes back as submitted, beside the reason.
-    if let Some(refusal) = refuse_values(&field_type, kind, &form.value) {
+    if let Some(refusal) = refusal {
         let html = FieldEditForm::new(
             id,
             field_type,
@@ -1560,11 +1767,32 @@ pub async fn save_field(
 
     let source = edit_source(is_staff);
 
+    // Staff's own tags stay through anyone else's change to the tags.
+    let values = match field_type.as_str() {
+        "tags" => {
+            let typed = form.value.join(",");
+            let stored = read_field_value(&id, "tags", kind)
+                .await
+                .map_err(internal_error)?;
+            let mut tags: Vec<String> = crate::tag::as_set_by(
+                crate::tag::split(&typed),
+                crate::tag::split(&stored),
+                is_staff,
+            )
+            .into_iter()
+            .map(|tag| tag.to_string())
+            .collect();
+            tags.sort();
+            vec![tags.join(", ")]
+        }
+        _ => form.value.clone(),
+    };
+
     match kind {
         DetailPageKind::Project => {
-            save_project_field(target_ulid, &field_type, &form.value, source).await
+            save_project_field(target_ulid, &field_type, &values, source).await
         }
-        DetailPageKind::Event => save_event_field(target_ulid, &field_type, &form.value).await,
+        DetailPageKind::Event => save_event_field(target_ulid, &field_type, &values).await,
     }
     .map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -1591,28 +1819,11 @@ pub async fn save_field(
     let _ = log_activity(None, action, user.user_id, target_ulid, field_type.clone()).await;
 
     // Return updated display
-    let current_value = read_field_value(&id, &field_type, kind)
+    let html = current_field_display(&id, &field_type, kind, true, is_staff)
         .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    let empty = current_value.is_empty();
-    let display_html = format_display_value(&field_type, &current_value, &id, kind, true).await;
-
-    let html = FieldDisplay::build(
-        id,
-        &field_type,
-        kind,
-        meta.label.to_string(),
-        true,
-        display_html,
-        empty,
-    )
-    .render_once()
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+        .map_err(internal_error)?
+        .render_once()
+        .map_err(internal_error)?;
 
     Ok(Html(html).into_response())
 }
@@ -1627,43 +1838,68 @@ pub async fn get_display(
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
     })?;
 
-    let can_edit = if let Some(ref user) = user_info {
-        check_edit_permission(&id, user, kind)
+    let (can_edit, is_staff) = match user_info.as_deref() {
+        Some(user) => check_edit_permission(&id, user, kind)
             .await
-            .map(|(c, _)| c)
-            .unwrap_or(false)
-    } else {
-        false
+            .unwrap_or((false, false)),
+        None => (false, false),
     };
 
-    let meta = field_meta(&field_type, kind).ok_or_else(|| {
-        poem::Error::from_string("Unknown field", poem::http::StatusCode::BAD_REQUEST)
-    })?;
+    if field_meta(&field_type, kind).is_none() {
+        return Err(poem::Error::from_string(
+            "Unknown field",
+            poem::http::StatusCode::BAD_REQUEST,
+        ));
+    }
 
-    let current_value = read_field_value(&id, &field_type, kind)
+    let html = current_field_display(&id, &field_type, kind, can_edit, is_staff)
         .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    let empty = current_value.is_empty();
-    let display_html = format_display_value(&field_type, &current_value, &id, kind, can_edit).await;
-
-    let html = FieldDisplay::build(
-        id,
-        &field_type,
-        kind,
-        meta.label.to_string(),
-        can_edit,
-        display_html,
-        empty,
-    )
-    .render_once()
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+        .map_err(internal_error)?
+        .render_once()
+        .map_err(internal_error)?;
 
     Ok(Html(html).into_response())
+}
+
+/// The display of the `kind` of page `id`'s field `field_type` as it now
+/// stands to someone, staff or not (`is_staff`), offered for editing when
+/// `can_edit` and it's edited on its own.
+async fn current_field_display(
+    id: &str,
+    field_type: &str,
+    kind: DetailPageKind,
+    can_edit: bool,
+    is_staff: bool,
+) -> Result<FieldDisplay, Error> {
+    let can_edit = can_edit && !edited_as_location(field_type, kind);
+    let label = field_meta(field_type, kind).map_or("", |meta| meta.label);
+    let value = shown_value(
+        field_type,
+        read_field_value(id, field_type, kind).await?,
+        is_staff,
+    );
+    let html = format_display_value(field_type, &value, id, kind, can_edit).await;
+    Ok(FieldDisplay::build(
+        id.to_string(),
+        field_type,
+        kind,
+        label.to_string(),
+        can_edit,
+        html,
+        value.is_empty(),
+    ))
+}
+
+/// The stored `value` of `field_type` as someone, staff or not (`is_staff`),
+/// is shown it: staff's own tags are shown to staff alone.
+fn shown_value(field_type: &str, value: String, is_staff: bool) -> String {
+    match field_type {
+        "tags" if !is_staff => crate::tag::split(&value)
+            .filter(|tag| crate::tag::shown_to(tag, is_staff))
+            .collect::<Vec<_>>()
+            .join(", "),
+        _ => value,
+    }
 }
 
 /// The words of the link to a project's How-To Video when its editors chose none.
@@ -2141,21 +2377,175 @@ async fn format_display_value(
 // Event instance management
 // ---------------------------------------------------------------------------
 
+/// The event's dates, each on the venue's clocks, naming the zone. To an
+/// editor, each can be changed or removed, and another added, one at a time;
+/// `editing` is the one being changed or added, open in its form.
 #[derive(TemplateOnce)]
 #[template(path = "pages/detail_page_instances.stpl.html")]
 pub struct InstancesDisplay {
-    pub target_id: String,
-    pub instances: Vec<super::detail_page::EventInstanceDisplay>,
-    pub can_edit: bool,
+    target_id: String,
+    instances: Box<[EventInstance]>,
+    can_edit: bool,
+    zone: Option<TimeZone>,
+    editing: Option<InstanceEditor>,
 }
 
+impl InstancesDisplay {
+    pub fn new(
+        target_id: impl Into<String>,
+        instances: Box<[EventInstance]>,
+        can_edit: bool,
+        zone: Option<TimeZone>,
+    ) -> Self {
+        InstancesDisplay {
+            target_id: target_id.into(),
+            instances,
+            can_edit,
+            zone,
+            editing: None,
+        }
+    }
+
+    /// Read the event `id`'s dates and zone.
+    async fn load(id: &str, can_edit: bool) -> Result<Self, Error> {
+        Ok(InstancesDisplay::new(
+            id,
+            read_instances(db(), id).await?,
+            can_edit,
+            crate::event::zone::of_event(id).await?,
+        ))
+    }
+
+    /// The query naming the saved date in row `index`, which a request to
+    /// change or remove it carries, so that the date it acts on is the one
+    /// that was shown.
+    pub fn row_query(instance: &EventInstance) -> String {
+        format!(
+            "begin={}&end={}",
+            urlencoding::encode(&instance.begin),
+            urlencoding::encode(&instance.end)
+        )
+    }
+
+    fn respond(self) -> poem::Result<poem::Response> {
+        Ok(Html(self.render_once().map_err(internal_error)?).into_response())
+    }
+}
+
+/// One date being changed (`row` is its index) or added (`row` is `None`).
+#[derive(TemplateOnce)]
+#[template(path = "pages/detail_page_instance_edit.stpl.html")]
+pub struct InstanceEditor {
+    target_id: String,
+    row: Option<usize>,
+    /// The query naming the saved date being changed.
+    row_query: String,
+    fields: DateRowFields,
+    error: Option<FormError>,
+}
+
+/// A date's row as an editor submits it. Its controls are named as the
+/// shared date row names them without a prefix.
 #[derive(serde::Deserialize)]
 struct InstanceForm {
+    #[serde(default)]
+    begin_date: String,
+    #[serde(default)]
+    begin_time: String,
+    #[serde(default)]
+    timezone: String,
+    #[serde(default)]
+    has_end: Option<String>,
+    #[serde(default)]
+    end_date: String,
+    #[serde(default)]
+    end_time: String,
+}
+
+impl InstanceForm {
+    fn row(&self) -> DateRow<'_> {
+        DateRow {
+            begin_date: &self.begin_date,
+            begin_time: &self.begin_time,
+            end: self
+                .has_end
+                .is_some()
+                .then_some((self.end_date.as_str(), self.end_time.as_str())),
+            timezone: &self.timezone,
+        }
+    }
+
+    /// The row as submitted, to show again beside why it was refused.
+    fn values(&self) -> DateRowValues {
+        DateRowValues {
+            begin_date: self.begin_date.clone(),
+            begin_time: self.begin_time.clone(),
+            timezone: self.timezone.clone(),
+            has_end: self.has_end.is_some(),
+            end_date: self.end_date.clone(),
+            end_time: self.end_time.clone(),
+        }
+    }
+}
+
+/// The saved date a request to change or remove one names.
+#[derive(serde::Deserialize)]
+struct RowKey {
     begin: String,
     end: String,
 }
 
-/// GET /-detail/:id/instances — full instances list
+impl RowKey {
+    /// The saved date in row `index`, if it is still the date the request
+    /// names; a date changed since it was shown is refused rather than
+    /// overwritten.
+    fn find<'a>(
+        &self,
+        instances: &'a [EventInstance],
+        index: usize,
+    ) -> poem::Result<&'a EventInstance> {
+        instances
+            .get(index)
+            .filter(|instance| *instance.begin == self.begin && *instance.end == self.end)
+            .ok_or_else(|| {
+                poem::Error::from_string(
+                    "That date changed while you were editing it. Reload the page to see the dates as they are now.",
+                    poem::http::StatusCode::CONFLICT,
+                )
+            })
+    }
+}
+
+/// Who may edit the event `id`'s dates: the signed-in `user`, when they may
+/// edit the event. Returns whether they edit as staff.
+async fn instance_editor(id: &str, user: Option<&BasicInfo>) -> poem::Result<bool> {
+    let user = user.ok_or_else(|| {
+        poem::Error::from_string(
+            "Authentication required",
+            poem::http::StatusCode::UNAUTHORIZED,
+        )
+    })?;
+    let (can_edit, is_staff) = check_edit_permission(id, user, DetailPageKind::Event)
+        .await
+        .map_err(internal_error)?;
+    if !can_edit {
+        return Err(poem::Error::from_string(
+            "Forbidden",
+            poem::http::StatusCode::FORBIDDEN,
+        ));
+    }
+    Ok(is_staff)
+}
+
+/// The rules' refusal, about the date row's control it names.
+fn row_refusal(refusal: Refusal) -> FormError {
+    match refusal.field {
+        RulesField::Date(part) => FormError::at(part.name(), refusal.message),
+        _ => FormError::general(refusal.message),
+    }
+}
+
+/// GET /-detail/:id/instances — the event's dates
 #[handler]
 pub async fn get_instances_display(
     Path(id): Path<String>,
@@ -2170,341 +2560,519 @@ pub async fn get_instances_display(
         false
     };
 
-    let instances = load_instances(&id).await.map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    let html = InstancesDisplay {
-        target_id: id,
-        instances,
-        can_edit,
-    }
-    .render_once()
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    Ok(Html(html).into_response())
+    InstancesDisplay::load(&id, can_edit)
+        .await
+        .map_err(internal_error)?
+        .respond()
 }
 
-/// POST /-detail/:id/instances — add a new instance
+/// GET /-detail/:id/instances/new — the dates, with a form to add another
+#[handler]
+pub async fn new_instance(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    instance_editor(&id, user_info.as_deref()).await?;
+    let mut display = InstancesDisplay::load(&id, true)
+        .await
+        .map_err(internal_error)?;
+    let values = DateRowValues {
+        timezone: display
+            .zone
+            .as_ref()
+            .and_then(TimeZone::iana_name)
+            .unwrap_or_default()
+            .to_string(),
+        ..DateRowValues::default()
+    };
+    display.editing = Some(InstanceEditor {
+        target_id: id,
+        row: None,
+        row_query: String::new(),
+        fields: DateRowFields::new("", values),
+        error: None,
+    });
+    display.respond()
+}
+
+/// GET /-detail/:id/instances/:index/edit — the dates, with one open to change
+#[handler]
+pub async fn edit_instance(
+    Path((id, index)): Path<(String, usize)>,
+    Query(key): Query<RowKey>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    instance_editor(&id, user_info.as_deref()).await?;
+    let mut display = InstancesDisplay::load(&id, true)
+        .await
+        .map_err(internal_error)?;
+    let instance = key.find(&display.instances, index)?;
+    display.editing = Some(InstanceEditor {
+        target_id: id,
+        row: Some(index),
+        row_query: InstancesDisplay::row_query(instance),
+        fields: DateRowFields::stored(instance, display.zone.as_ref()),
+        error: None,
+    });
+    display.respond()
+}
+
+/// POST /-detail/:id/instances — add a date
 #[handler]
 pub async fn add_instance(
     Path(id): Path<String>,
     Authenticated(user_info): Authenticated,
     poem::web::Form(form): poem::web::Form<InstanceForm>,
 ) -> poem::Result<poem::Response> {
-    let user = user_info.ok_or_else(|| {
-        poem::Error::from_string(
-            "Authentication required",
-            poem::http::StatusCode::UNAUTHORIZED,
-        )
-    })?;
-
-    let (can_edit, is_staff) = check_edit_permission(&id, &user, DetailPageKind::Event)
-        .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    if !can_edit {
-        return Err(poem::Error::from_string(
-            "Forbidden",
-            poem::http::StatusCode::FORBIDDEN,
-        ));
-    }
-
-    let begin = TimeString::try_from(form.begin).map_err(|e| {
-        poem::Error::from_string(
-            format!("Invalid begin: {}", e),
-            poem::http::StatusCode::BAD_REQUEST,
-        )
-    })?;
-    let end = TimeString::try_from(form.end).map_err(|e| {
-        poem::Error::from_string(
-            format!("Invalid end: {}", e),
-            poem::http::StatusCode::BAD_REQUEST,
-        )
-    })?;
-
-    let begin_str: String = begin.into();
-    let end_str: String = end.into();
-
-    sqlx::query!(
-        r#"INSERT INTO event_instances (event_id, "begin", "end") VALUES (?, ?, ?)"#,
-        id,
-        begin_str,
-        end_str,
-    )
-    .execute(db())
-    .await
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    // Log activity
-    let target_ulid = Ulid::from_string(&id).map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
-    })?;
-    let _ = log_activity(
-        None,
-        record_edit(DetailPageKind::Event, is_staff),
-        user.user_id,
-        target_ulid,
-        "instances".to_string(),
-    )
-    .await;
-
-    // Return updated display
-    let instances = load_instances(&id).await.map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    let html = InstancesDisplay {
-        target_id: id,
-        instances,
-        can_edit: true,
-    }
-    .render_once()
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    Ok(Html(html).into_response())
+    save_instance(id, None, None, user_info, form).await
 }
 
-/// PUT /-detail/:id/instances/:index — update an instance
+/// PUT /-detail/:id/instances/:index — change a date
 #[handler]
 pub async fn update_instance(
     Path((id, index)): Path<(String, usize)>,
+    Query(key): Query<RowKey>,
     Authenticated(user_info): Authenticated,
     poem::web::Form(form): poem::web::Form<InstanceForm>,
 ) -> poem::Result<poem::Response> {
-    let user = user_info.ok_or_else(|| {
-        poem::Error::from_string(
-            "Authentication required",
-            poem::http::StatusCode::UNAUTHORIZED,
-        )
-    })?;
-
-    let (can_edit, is_staff) = check_edit_permission(&id, &user, DetailPageKind::Event)
-        .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    if !can_edit {
-        return Err(poem::Error::from_string(
-            "Forbidden",
-            poem::http::StatusCode::FORBIDDEN,
-        ));
-    }
-
-    let new_begin = TimeString::try_from(form.begin).map_err(|e| {
-        poem::Error::from_string(
-            format!("Invalid begin: {}", e),
-            poem::http::StatusCode::BAD_REQUEST,
-        )
-    })?;
-    let new_end = TimeString::try_from(form.end).map_err(|e| {
-        poem::Error::from_string(
-            format!("Invalid end: {}", e),
-            poem::http::StatusCode::BAD_REQUEST,
-        )
-    })?;
-
-    // Read all instances, update the one at index, rewrite all
-    let rows = sqlx::query!(
-        r#"SELECT "begin", "end" FROM event_instances WHERE event_id = ? ORDER BY "begin""#,
-        id
-    )
-    .fetch_all(db())
-    .await
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    if index >= rows.len() {
-        return Err(poem::Error::from_string(
-            "Instance not found",
-            poem::http::StatusCode::NOT_FOUND,
-        ));
-    }
-
-    // Delete all and re-insert with the update applied
-    sqlx::query!("DELETE FROM event_instances WHERE event_id = ?", id)
-        .execute(db())
-        .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    for (i, row) in rows.iter().enumerate() {
-        let (b, e) = if i == index {
-            let b: String = new_begin.clone().into();
-            let e: String = new_end.clone().into();
-            (b, e)
-        } else {
-            (row.begin.clone(), row.end.clone())
-        };
-        sqlx::query!(
-            r#"INSERT INTO event_instances (event_id, "begin", "end") VALUES (?, ?, ?)"#,
-            id,
-            b,
-            e,
-        )
-        .execute(db())
-        .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-    }
-
-    let target_ulid = Ulid::from_string(&id).map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
-    })?;
-    let _ = log_activity(
-        None,
-        record_edit(DetailPageKind::Event, is_staff),
-        user.user_id,
-        target_ulid,
-        "instances".to_string(),
-    )
-    .await;
-
-    let instances = load_instances(&id).await.map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    let html = InstancesDisplay {
-        target_id: id,
-        instances,
-        can_edit: true,
-    }
-    .render_once()
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    Ok(Html(html).into_response())
+    save_instance(id, Some(index), Some(key), user_info, form).await
 }
 
-/// DELETE /-detail/:id/instances/:index — remove an instance
+/// Add a date, or change the one in row `index`, named by `key`. A date left
+/// as it was saved is kept just so; one refused comes back in its form,
+/// beside the reason.
+async fn save_instance(
+    id: String,
+    index: Option<usize>,
+    key: Option<RowKey>,
+    user_info: Option<Arc<BasicInfo>>,
+    form: InstanceForm,
+) -> poem::Result<poem::Response> {
+    let is_staff = instance_editor(&id, user_info.as_deref()).await?;
+    let user = user_info.expect("an editor is signed in");
+    let target = Ulid::from_string(&id).map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
+    })?;
+
+    let mut display = InstancesDisplay::load(&id, true)
+        .await
+        .map_err(internal_error)?;
+    let stored = match (index, &key) {
+        (Some(index), Some(key)) => Some(key.find(&display.instances, index)?.clone()),
+        _ => None,
+    };
+
+    let reading =
+        rules::date_row(form.row(), stored.as_ref(), &Zoned::now()).and_then(
+            |reading| match reading {
+                RowReading::Blank => Err(rules::some_date(false).unwrap_err()),
+                reading => Ok(reading),
+            },
+        );
+    let instance = match reading {
+        Ok(RowReading::Dated(instance)) => instance.stored(),
+        Ok(_) => return display.respond(), // left as it was
+        Err(refusal) => {
+            display.editing = Some(InstanceEditor {
+                target_id: id,
+                row: index,
+                row_query: stored
+                    .as_ref()
+                    .map(InstancesDisplay::row_query)
+                    .unwrap_or_default(),
+                fields: DateRowFields::new("", form.values()),
+                error: Some(row_refusal(refusal)),
+            });
+            return display.respond();
+        }
+    };
+
+    let mut instances = display.instances.into_vec();
+    match index {
+        Some(index) => instances[index] = instance,
+        None => instances.push(instance),
+    }
+    store_instances(target, instances, &user, is_staff).await?;
+
+    InstancesDisplay::load(&id, true)
+        .await
+        .map_err(internal_error)?
+        .respond()
+}
+
+/// DELETE /-detail/:id/instances/:index — remove a date
 #[handler]
 pub async fn delete_instance(
     Path((id, index)): Path<(String, usize)>,
+    Query(key): Query<RowKey>,
     Authenticated(user_info): Authenticated,
 ) -> poem::Result<poem::Response> {
-    let user = user_info.ok_or_else(|| {
-        poem::Error::from_string(
-            "Authentication required",
-            poem::http::StatusCode::UNAUTHORIZED,
-        )
-    })?;
-
-    let (can_edit, is_staff) = check_edit_permission(&id, &user, DetailPageKind::Event)
-        .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    if !can_edit {
-        return Err(poem::Error::from_string(
-            "Forbidden",
-            poem::http::StatusCode::FORBIDDEN,
-        ));
-    }
-
-    let rows = sqlx::query!(
-        r#"SELECT "begin", "end" FROM event_instances WHERE event_id = ? ORDER BY "begin""#,
-        id
-    )
-    .fetch_all(db())
-    .await
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    if index >= rows.len() {
-        return Err(poem::Error::from_string(
-            "Instance not found",
-            poem::http::StatusCode::NOT_FOUND,
-        ));
-    }
-
-    // Delete all and re-insert without the deleted one
-    sqlx::query!("DELETE FROM event_instances WHERE event_id = ?", id)
-        .execute(db())
-        .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-
-    for (i, row) in rows.iter().enumerate() {
-        if i == index {
-            continue;
-        }
-        sqlx::query!(
-            r#"INSERT INTO event_instances (event_id, "begin", "end") VALUES (?, ?, ?)"#,
-            id,
-            row.begin,
-            row.end,
-        )
-        .execute(db())
-        .await
-        .map_err(|e| {
-            poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
-    }
-
-    let target_ulid = Ulid::from_string(&id).map_err(|e| {
+    let is_staff = instance_editor(&id, user_info.as_deref()).await?;
+    let user = user_info.expect("an editor is signed in");
+    let target = Ulid::from_string(&id).map_err(|e| {
         poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
     })?;
+
+    let display = InstancesDisplay::load(&id, true)
+        .await
+        .map_err(internal_error)?;
+    key.find(&display.instances, index)?;
+    let mut instances = display.instances.into_vec();
+    instances.remove(index);
+    rules::some_date(!instances.is_empty()).map_err(|refusal| {
+        poem::Error::from_string(refusal.message, poem::http::StatusCode::BAD_REQUEST)
+    })?;
+    store_instances(target, instances, &user, is_staff).await?;
+
+    InstancesDisplay::load(&id, true)
+        .await
+        .map_err(internal_error)?
+        .respond()
+}
+
+/// Save the event `target`'s dates, in date order, and log the change.
+async fn store_instances(
+    target: Ulid,
+    mut instances: Vec<EventInstance>,
+    user: &BasicInfo,
+    is_staff: bool,
+) -> poem::Result<()> {
+    instances.sort_by(|a, b| a.begin.cmp(&b.begin));
+    EventField::new(
+        target,
+        EventFieldValue::Instances(instances.into_boxed_slice()),
+    )
+    .store()
+    .await
+    .map_err(internal_error)?;
     let _ = log_activity(
         None,
         record_edit(DetailPageKind::Event, is_staff),
         user.user_id,
-        target_ulid,
+        target,
         "instances".to_string(),
     )
     .await;
-
-    let instances = load_instances(&id).await.map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    let html = InstancesDisplay {
-        target_id: id,
-        instances,
-        can_edit: true,
-    }
-    .render_once()
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    Ok(Html(html).into_response())
+    Ok(())
 }
 
-/// Load event instances for display
-async fn load_instances(
-    event_id: &str,
-) -> Result<Vec<super::detail_page::EventInstanceDisplay>, Error> {
-    let rows = sqlx::query!(
-        r#"SELECT "begin", "end" FROM event_instances WHERE event_id = ? ORDER BY "begin""#,
-        event_id
-    )
-    .fetch_all(db())
-    .await?;
+// ---------------------------------------------------------------------------
+// Where an event is held, edited as a whole, as orrery's event form edits it
+// ---------------------------------------------------------------------------
 
-    Ok(rows
-        .into_iter()
-        .filter_map(|r| {
-            let begin = TimeString::try_from(r.begin).ok()?;
-            let end = TimeString::try_from(r.end).ok()?;
-            Some(super::detail_page::EventInstanceDisplay { begin, end })
+/// The event page's "Where": each part of the event's location shown as the
+/// page shows a field, and, to an editor, one control to change them all
+/// together, with the add event form's location section. Changing where the
+/// event is held can change its link, its kinds of venue and whether it is of
+/// the Online type too, so a change also replaces those fields' displays
+/// (`changed`) out of band.
+#[derive(TemplateOnce)]
+#[template(path = "pages/detail_page_location.stpl.html")]
+pub struct EventLocationDisplay {
+    target_id: String,
+    can_edit: bool,
+    parts: Vec<FieldDisplay>,
+    entirely_online: bool,
+    also_online: bool,
+    has_point: bool,
+    region_geojson: Option<String>,
+    editing: Option<LocationPicker>,
+    error: Option<FormError>,
+    changed: Vec<FieldDisplay>,
+}
+
+/// The fields a change to where an event is held can change besides its
+/// location's own parts.
+const CHANGED_WITH_LOCATION: &[&str] = &["url", "formats", "programs", "venues"];
+
+impl EventLocationDisplay {
+    /// The display of an event's location from the event page's own values;
+    /// `field` gives the display of each of its parts.
+    pub fn new(
+        target_id: String,
+        can_edit: bool,
+        field: impl Fn(&str) -> FieldDisplay,
+        entirely_online: bool,
+        also_online: bool,
+        has_point: bool,
+        region_geojson: Option<String>,
+    ) -> Self {
+        EventLocationDisplay {
+            target_id,
+            can_edit,
+            parts: LOCATION_PARTS.iter().map(|part| field(part)).collect(),
+            entirely_online,
+            also_online,
+            has_point,
+            region_geojson,
+            editing: None,
+            error: None,
+            changed: Vec::new(),
+        }
+    }
+
+    /// Read the event `id`'s location as it now stands, as someone, staff or
+    /// not (`is_staff`), is shown it.
+    async fn load(id: &str, can_edit: bool, is_staff: bool) -> Result<Self, Error> {
+        let row = sqlx::query!(
+            r#"SELECT entirely_online AS "entirely_online: bool",
+                      also_online AS "also_online: bool",
+                      point IS NOT NULL AS "has_point: bool",
+                      AsGeoJSON(regions) AS "region_geojson: String"
+               FROM events WHERE event_id = ?"#,
+            id
+        )
+        .fetch_one(db())
+        .await?;
+        let mut parts = Vec::with_capacity(LOCATION_PARTS.len());
+        for part in LOCATION_PARTS {
+            parts.push(
+                current_field_display(id, part, DetailPageKind::Event, can_edit, is_staff).await?,
+            );
+        }
+        Ok(EventLocationDisplay {
+            target_id: id.to_string(),
+            can_edit,
+            parts,
+            entirely_online: row.entirely_online,
+            also_online: row.also_online,
+            has_point: row.has_point,
+            region_geojson: row.region_geojson,
+            editing: None,
+            error: None,
+            changed: Vec::new(),
         })
-        .collect())
+    }
+
+    fn respond(self) -> poem::Result<poem::Response> {
+        Ok(Html(self.render_once().map_err(internal_error)?).into_response())
+    }
+}
+
+/// Where an event is held, as its editor submits it: the add event form's
+/// location section, named as there.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(default)]
+struct LocationForm {
+    location_mode: String,
+    location_name: String,
+    address: String,
+    city: String,
+    state: String,
+    zip: String,
+    country: String,
+    latitude: String,
+    longitude: String,
+    location_description: String,
+    url: String,
+    regions: String,
+    place_query: String,
+    venues: Vec<String>,
+}
+
+impl LocationForm {
+    /// The event `id`'s location as it's saved, to edit.
+    async fn of_event(id: &str) -> Result<Self, Error> {
+        let event_id = Ulid::from_string(id)?;
+        let location = EventLocation::read(event_id).await?;
+        let saved = SavedAddress::of_event(id).await?;
+        let (latitude, longitude) = saved
+            .coordinates
+            .map(|(latitude, longitude)| (latitude.to_string(), longitude.to_string()))
+            .unwrap_or_default();
+        Ok(LocationForm {
+            location_mode: LocationMode::of_event(
+                &location.location_type,
+                location.entirely_online,
+            )
+            .map(LocationMode::as_str)
+            .unwrap_or_default()
+            .to_string(),
+            location_name: location.location_name,
+            address: location.address,
+            city: location.city,
+            state: location.state,
+            zip: location.zip,
+            country: location.country,
+            latitude,
+            longitude,
+            location_description: location.location_description,
+            url: location.url,
+            regions: location.regions.unwrap_or_default(),
+            place_query: String::new(),
+            venues: location.venues.into_iter().collect(),
+        })
+    }
+
+    /// The add event form's location section, holding this location.
+    async fn picker(&self, error: Option<&FormError>) -> Result<LocationPicker, Error> {
+        Ok(LocationPicker::build(
+            &self.location_mode,
+            &self.location_name,
+            &self.address,
+            &self.city,
+            &self.state,
+            &self.zip,
+            &self.country,
+            &self.latitude,
+            &self.longitude,
+            &self.location_description,
+            &self.url,
+            &self.regions,
+        )
+        .with_place_query(&self.place_query)
+        .for_events()
+        .with_venues(ChoiceCheckboxes::new(
+            "venues",
+            crate::event::offered_types(ChoiceList::EventVenue).await?,
+            self.venues.iter().cloned().collect(),
+            crate::event::pick_limit(ChoiceList::EventVenue),
+        ))
+        .errors(error))
+    }
+
+    /// The location this settles on, by the rules orrery's event form
+    /// keeps, or why it can't be saved. `stored_url` is the link the event
+    /// was saved with, `saved` its address, and `venues` the kinds of venue
+    /// picked that are known.
+    fn settle(
+        &self,
+        stored_url: &str,
+        saved: &SavedAddress,
+        venues: &[String],
+    ) -> Result<EventLocation, FormError> {
+        let refused = |refusal: Refusal| {
+            let field = match refusal.field {
+                RulesField::LocationMode => "location_mode",
+                RulesField::Address => "address",
+                RulesField::LocationDescription => "location_description",
+                RulesField::Url => "url",
+                _ => return FormError::general(refusal.message),
+            };
+            FormError::at(field, refusal.message)
+        };
+        let mode = rules::mode(LocationMode::parse(&self.location_mode)).map_err(refused)?;
+        rules::place(mode, &self.address, &self.city, &self.place_query).map_err(refused)?;
+        rules::join_link(&self.url, mode).map_err(refused)?;
+        rules::link(&self.url, Some(stored_url)).map_err(refused)?;
+        rules::location_note(mode, &self.location_description).map_err(refused)?;
+
+        Ok(EventLocation::settle(
+            LocationInput {
+                mode,
+                location_name: &self.location_name,
+                address: &self.address,
+                city: &self.city,
+                state: &self.state,
+                zip: &self.zip,
+                country: &self.country,
+                latitude: &self.latitude,
+                longitude: &self.longitude,
+                location_description: &self.location_description,
+                url: &self.url,
+                regions: &self.regions,
+                venues,
+            },
+            Some(saved),
+        ))
+    }
+}
+
+/// GET /-detail/:id/location — where the event is held
+#[handler]
+pub async fn get_location_display(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    let (can_edit, is_staff) = match user_info.as_deref() {
+        Some(user) => check_edit_permission(&id, user, DetailPageKind::Event)
+            .await
+            .unwrap_or((false, false)),
+        None => (false, false),
+    };
+    EventLocationDisplay::load(&id, can_edit, is_staff)
+        .await
+        .map_err(internal_error)?
+        .respond()
+}
+
+/// GET /-detail/:id/location/edit — where the event is held, open to change
+#[handler]
+pub async fn edit_location(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    let is_staff = instance_editor(&id, user_info.as_deref()).await?;
+    let mut display = EventLocationDisplay::load(&id, true, is_staff)
+        .await
+        .map_err(internal_error)?;
+    let form = LocationForm::of_event(&id).await.map_err(internal_error)?;
+    display.editing = Some(form.picker(None).await.map_err(internal_error)?);
+    display.respond()
+}
+
+/// PUT /-detail/:id/location — change where the event is held
+#[handler]
+pub async fn save_location(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    crate::form::QsForm(form): crate::form::QsForm<LocationForm>,
+) -> poem::Result<poem::Response> {
+    let is_staff = instance_editor(&id, user_info.as_deref()).await?;
+    let user = user_info.expect("an editor is signed in");
+    let target = Ulid::from_string(&id).map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
+    })?;
+
+    let stored = EventLocation::read(target).await.map_err(internal_error)?;
+    let saved = SavedAddress::of_event(&id).await.map_err(internal_error)?;
+    let venues = ChoiceValue::known(ChoiceList::EventVenue, form.venues.iter().cloned())
+        .await
+        .map_err(internal_error)?
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    let location = match form.settle(&stored.url, &saved, &venues) {
+        Ok(location) => location,
+        Err(error) => {
+            let mut display = EventLocationDisplay::load(&id, true, is_staff)
+                .await
+                .map_err(internal_error)?;
+            display.editing = Some(form.picker(Some(&error)).await.map_err(internal_error)?);
+            display.error = Some(error);
+            return display.respond();
+        }
+    };
+
+    if location != stored {
+        EventField::new(target, EventFieldValue::Location(location))
+            .store()
+            .await
+            .map_err(internal_error)?;
+        let _ = log_activity(
+            None,
+            record_edit(DetailPageKind::Event, is_staff),
+            user.user_id,
+            target,
+            "location".to_string(),
+        )
+        .await;
+    }
+
+    let mut display = EventLocationDisplay::load(&id, true, is_staff)
+        .await
+        .map_err(internal_error)?;
+    for field in CHANGED_WITH_LOCATION {
+        if editable_field_list(DetailPageKind::Event).contains(field) {
+            display.changed.push(
+                current_field_display(&id, field, DetailPageKind::Event, true, is_staff)
+                    .await
+                    .map_err(internal_error)?
+                    .out_of_band(),
+            );
+        }
+    }
+    display.respond()
 }
 
 // ---------------------------------------------------------------------------
@@ -2536,6 +3104,41 @@ struct ContactForm {
     phone: String,
     #[serde(default)]
     address: String,
+    #[serde(default)]
+    url: String,
+}
+
+impl ContactForm {
+    /// The email and contact form link, trimmed, when the contact can be
+    /// saved for a `kind` of page; otherwise why not, for the editor. An
+    /// event's contact is held to orrery's event form's rules: it is named,
+    /// and an email or link it was `stored` with and that's left as it was
+    /// still reaches it, though it wouldn't pass the checks made since.
+    fn reach(&self, kind: DetailPageKind, stored: Option<&Contact>) -> poem::Result<(&str, &str)> {
+        let email = self.email.trim();
+        let url = self.url.trim();
+        let refusal = match kind {
+            DetailPageKind::Event => rules::contact(
+                &self.name,
+                email,
+                url,
+                stored
+                    .map(|contact| (contact.email.as_str(), contact.url.as_deref().unwrap_or(""))),
+            )
+            .err()
+            .map(|refusal| refusal.message.into_owned()),
+            DetailPageKind::Project => Unreachable::check(email, url)
+                .err()
+                .map(|refusal| refusal.message().to_string()),
+        };
+        match refusal {
+            Some(message) => Err(poem::Error::from_string(
+                message,
+                poem::http::StatusCode::BAD_REQUEST,
+            )),
+            None => Ok((email, url)),
+        }
+    }
 }
 
 fn parse_contact_role(role: &str) -> ContactRole {
@@ -2566,7 +3169,7 @@ fn trimmed_option(value: &str) -> Option<String> {
     }
 }
 
-fn contacts_to_display(contacts: &[Contact]) -> Vec<super::detail_page::ContactDisplay> {
+pub fn contacts_to_display(contacts: &[Contact]) -> Vec<super::detail_page::ContactDisplay> {
     contacts
         .iter()
         .map(|c| super::detail_page::ContactDisplay {
@@ -2575,6 +3178,7 @@ fn contacts_to_display(contacts: &[Contact]) -> Vec<super::detail_page::ContactD
             affiliation: c.affiliation.clone().unwrap_or_default(),
             email: c.email.clone(),
             phone: c.phone.clone().unwrap_or_default(),
+            url: c.url.clone().unwrap_or_default(),
         })
         .collect()
 }
@@ -2700,13 +3304,7 @@ pub async fn add_contact(
     let user = user_info.ok_or_else(auth_required)?;
     let (kind, target, source) = require_editor(&id, &user).await?;
 
-    let email = form.email.trim();
-    if email.is_empty() {
-        return Err(poem::Error::from_string(
-            "A contact email is required.",
-            poem::http::StatusCode::BAD_REQUEST,
-        ));
-    }
+    let (email, url) = form.reach(kind, None)?;
 
     let mut contacts = load_contacts(kind, target).await.map_err(internal_error)?;
     contacts.push(Contact {
@@ -2717,6 +3315,7 @@ pub async fn add_contact(
         email: email.to_string(),
         phone: trimmed_option(&form.phone),
         address: trimmed_option(&form.address),
+        url: trimmed_option(url),
     });
 
     store_contacts(kind, target, &contacts, source)
@@ -2778,6 +3377,7 @@ pub struct ContactEditForm {
     pub email: String,
     pub phone: String,
     pub address: String,
+    pub url: String,
 }
 
 /// GET /-detail/:id/contacts — full contacts card (used to refresh / cancel an edit).
@@ -2819,6 +3419,7 @@ pub async fn get_contact_edit_form(
         email: contact.email,
         phone: contact.phone.unwrap_or_default(),
         address: contact.address.unwrap_or_default(),
+        url: contact.url.unwrap_or_default(),
     }
     .render_once()
     .map_err(internal_error)?;
@@ -2835,14 +3436,6 @@ pub async fn update_contact(
     let user = user_info.ok_or_else(auth_required)?;
     let (kind, target, source) = require_editor(&id, &user).await?;
 
-    let email = form.email.trim();
-    if email.is_empty() {
-        return Err(poem::Error::from_string(
-            "A contact email is required.",
-            poem::http::StatusCode::BAD_REQUEST,
-        ));
-    }
-
     let mut contacts = load_contacts(kind, target).await.map_err(internal_error)?;
 
     let found = contacts
@@ -2854,12 +3447,14 @@ pub async fn update_contact(
             poem::http::StatusCode::NOT_FOUND,
         ));
     };
+    let (email, url) = form.reach(kind, Some(contact))?;
     contact.role = parse_contact_role(&form.role);
     contact.name = trimmed_option(&form.name);
     contact.affiliation = trimmed_option(&form.affiliation);
     contact.email = email.to_string();
     contact.phone = trimmed_option(&form.phone);
     contact.address = trimmed_option(&form.address);
+    contact.url = trimmed_option(url);
 
     store_contacts(kind, target, &contacts, source)
         .await
@@ -3679,7 +4274,7 @@ mod choice_field_tests {
             .render_once()
             .unwrap();
 
-        check!(html.contains("<legend>Venue</legend>"));
+        check!(html.contains("<legend>Kind of venue</legend>"));
         check!(html.contains(r#"name="venues[]" value="library">"#));
     }
 
@@ -3751,7 +4346,7 @@ mod choice_field_tests {
         ];
         let html = choice_row(ChoiceList::EventFormat, &picked, false);
 
-        check!(html.find(">Format</span>").unwrap() < html.find("BioBlitz").unwrap());
+        check!(html.find(">Type of event</span>").unwrap() < html.find("BioBlitz").unwrap());
         check!(html.find("BioBlitz").unwrap() < html.find("Webinar").unwrap());
         check!(html.matches("<div ").count() == 1);
 
