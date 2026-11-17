@@ -420,7 +420,28 @@ pub struct OneoffEmail {
     pub reply_to_noreply: bool, // Direct replies to NOREPLY_ADDRESS
     pub created_at: TimeString,
     pub archived: bool,
+    /// The slug of the orrery message template this was copied from.
     pub legacy_slug: Option<String>,
+
+    /// Orrery's id for the message template this is a copy of, kept up to
+    /// date with it by the sync; see `common::primary::CopyKeeper`. None for
+    /// one made here.
+    pub orrery_id: Option<i64>,
+
+    /// Whether orrery sends the template without an Unsubscribe link. A
+    /// one-off is sent here as a mailing, which always offers one; a stored
+    /// email made from it carries this over.
+    pub no_unsubscribe: bool,
+}
+
+#[cfg(feature = "database")]
+impl OneoffEmail {
+    /// Whether this is a copy orrery keeps, whose subject, body and reply-to
+    /// the sync overwrites, and which is not to be edited or deleted here.
+    /// Its data sets and whether it is archived are hydra's alone.
+    pub fn kept_by_orrery(&self) -> bool {
+        crate::primary::CopyKeeper::NOW.orrery_owns(self.orrery_id)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

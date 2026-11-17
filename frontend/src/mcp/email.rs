@@ -389,6 +389,8 @@ async fn tool_list_imported(arguments: Value) -> Result<String, Error> {
             json!({
                 "oneoff_email_id": email.oneoff_email_id.to_string(),
                 "legacy_slug": email.legacy_slug,
+                "orrery_id": email.orrery_id,
+                "archived": email.archived,
                 "subject": email.subject,
             })
         })
@@ -409,6 +411,9 @@ async fn tool_get_imported(arguments: Value) -> Result<String, Error> {
     Ok(serde_json::to_string_pretty(&json!({
         "oneoff_email_id": response.email.oneoff_email_id.to_string(),
         "legacy_slug": response.email.legacy_slug,
+        "orrery_id": response.email.orrery_id,
+        "archived": response.email.archived,
+        "no_unsubscribe": response.email.no_unsubscribe,
         "subject": response.email.subject,
         "body_html": body_html_of(&response.email.body_delta),
     }))?)
@@ -524,7 +529,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "list_imported_orrery_emails",
-            "description": "List orrery's message templates as the emailer imported them: one-off emails carrying the orrery slug they came from, with merge fields already converted and bodies already in Delta. This is where to find the copy for an email being ported, rather than retyping it.",
+            "description": "List orrery's message templates as the emailer imported them: one-off emails carrying the orrery slug they came from, with merge fields already converted and bodies already in Delta. This is where to find the copy for an email being ported, rather than retyping it. The sync keeps each copy up to date with orrery's edits and renames; a copy whose template orrery has deleted, or that no template claims, is archived.",
             "inputSchema": {
                 "type": "object",
                 "properties": {

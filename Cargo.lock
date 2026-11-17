@@ -3001,6 +3001,7 @@ version = "0.1.0"
 dependencies = [
  "aho-corasick",
  "anyhow",
+ "assert2",
  "async-nats",
  "async-trait",
  "aws-config",

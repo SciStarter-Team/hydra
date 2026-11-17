@@ -872,6 +872,7 @@ pub async fn handle_trigger_event(req: &Request) -> Result<TriggerEmailResponse,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::migrated;
 
     const USER: &str = "01JGEDS64C0ECBWR472V7788BF";
     const ADDRESS: &str = "ada@example.invalid";
@@ -1066,21 +1067,6 @@ mod tests {
         assert!(TriggerEvent::ProjectRejected.is_project_notice());
         assert!(!TriggerEvent::UserWelcome.is_project_notice());
         assert!(!TriggerEvent::StaffNotification.is_project_notice());
-    }
-
-    async fn migrated() -> sqlx::SqlitePool {
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .expect("pool");
-
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await
-            .expect("migrations");
-
-        pool
     }
 
     const SEED: &str =

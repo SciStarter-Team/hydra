@@ -10,6 +10,50 @@ pub mod user;
 pub mod v1;
 pub mod v2;
 
+/// The participation origins the API endpoints record, numbered as orrery
+/// numbers them (`affiliate.Event.ORIGIN_CHOICES` is the reference list).
+/// Each endpoint records its own, so the data says which one a partner calls.
+pub(crate) mod origin {
+    /// A request its caller marks as coming from a widget, on any endpoint.
+    pub const WIDGET: i16 = 2;
+
+    /// v2 `/api/participation/hashed/:slug`.
+    pub const HASH_API: i16 = 3;
+
+    /// v2 `/api/participation/openid` and `/api/participation/openid/:slug`.
+    pub const OPENID: i16 = 6;
+
+    /// v2 `/api/participation/opaque/:slug`.
+    pub const OPAQUE: i16 = 7;
+
+    /// v2 `/api/participation/email/:slug`.
+    pub const EMAIL: i16 = 8;
+
+    /// v2 `/api/participation/link-token/:slug`, by a token the account
+    /// holder gave the partner.
+    pub const LINK_TOKEN: i16 = 9;
+
+    /// v1 `/api/record_event`, by legacy profile id.
+    pub const PROFILE_ID_API: i16 = 11;
+
+    /// v1 `/api/record_event_by_email`, by an email or its hash.
+    pub const EMAIL_LOOKUP_API: i16 = 12;
+
+    /// v2 `/api/participation/ulid/:slug`.
+    pub const ULID_API: i16 = 13;
+
+    /// The origin to record for a request to the endpoint whose origin is
+    /// `endpoint`, given the `origin` its caller sent. "widget" is the only
+    /// value a caller may send that means anything.
+    pub fn recorded(caller: Option<&str>, endpoint: i16) -> i16 {
+        if caller == Some("widget") {
+            WIDGET
+        } else {
+            endpoint
+        }
+    }
+}
+
 /// Check if an API key is valid and its user may write to a project. Shared
 /// by the v1 and v2 participation endpoints to decide the `authenticated`
 /// flag.

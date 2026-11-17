@@ -23,6 +23,8 @@ mod ses;
 mod stored_emails;
 mod sync;
 mod template;
+#[cfg(test)]
+mod testing;
 mod triggers;
 
 #[tokio::main]
@@ -289,7 +291,7 @@ async fn main() {
     toplevel.spawn(sync::synchronize_unsubscribes());
 
     // Spawn message template sync background task
-    toplevel.spawn(sync::synchronize_message_templates());
+    toplevel.spawn(sync::templates::synchronize());
 
     println!("Emailer service ready");
 

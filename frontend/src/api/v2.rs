@@ -68,7 +68,7 @@ async fn get_entity_id_for_slug(slug: &str) -> Result<String, Error> {
     Ok(row.target)
 }
 
-use super::check_api_key_permission;
+use super::{check_api_key_permission, origin};
 use crate::training::dataethics::DataEthicsLanguage;
 
 /// 404 JSON response for an unknown project slug (matches orrery).
@@ -170,13 +170,7 @@ async fn emit_participation(
         .into_response());
     }
 
-    // The only meaningful caller-supplied origin is "widget" (forces origin 2);
-    // otherwise the endpoint's own origin is used. Numeric overrides are ignored.
-    let origin = if form.origin.as_deref() == Some("widget") {
-        2
-    } else {
-        origin_override
-    };
+    let origin = origin::recorded(form.origin.as_deref(), origin_override);
 
     // Apply orrery's v2 defaults at this (API) layer, since the log-service
     // handler's defaults differ (duration 1.0 / fidelity 1.0).
@@ -242,7 +236,7 @@ pub async fn record_event_hashed(
         IdentifierType::Hashed,
         form,
         api_key,
-        3, // origin 3 = hashed email
+        origin::HASH_API,
     )
     .await
 }
@@ -272,7 +266,7 @@ pub async fn record_event_ulid(
         IdentifierType::Ulid,
         form,
         api_key,
-        3, // origin 3 = same as hashed/ulid identification
+        origin::ULID_API,
     )
     .await
 }
@@ -428,7 +422,7 @@ pub async fn record_event_opaque(
         IdentifierType::Opaque,
         form,
         api_key,
-        7, // origin 7 = opaque ID
+        origin::OPAQUE,
     )
     .await
 }
@@ -465,7 +459,7 @@ pub async fn record_event_email(
         IdentifierType::Email,
         form,
         api_key,
-        8, // origin 8 = plaintext email
+        origin::EMAIL,
     )
     .await
 }
@@ -573,8 +567,14 @@ pub async fn record_event_link_token(
         };
         let user_id = Ulid::from_string(&user_id_str)?;
 
-        response =
-            emit_participation(user_id, entity_id.clone(), authenticated, form.clone(), 9).await?;
+        response = emit_participation(
+            user_id,
+            entity_id.clone(),
+            authenticated,
+            form.clone(),
+            origin::LINK_TOKEN,
+        )
+        .await?;
     }
 
     Ok(response)
@@ -838,8 +838,8 @@ pub async fn record_event_openid(
         }
     };
 
-    // OAuth2-authenticated; origin 6 (OpenID) unless the caller marks "widget".
-    emit_participation(user_id, project_id, true, form, 6).await
+    // OAuth2-authenticated.
+    emit_participation(user_id, project_id, true, form, origin::OPENID).await
 }
 
 /// Helper to extract Bearer token from Authorization header

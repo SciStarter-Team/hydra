@@ -25,13 +25,21 @@
             </div>
         <% } %>
 
+        <% if self.kept_body_html.is_some() { %>
+            <div class="mx-6 mt-4 p-3 text-sm text-blue-800 bg-blue-50 rounded-lg border border-blue-200">
+                A copy of orrery's message template <strong><%= self.legacy_slug.as_deref().unwrap_or_default() %></strong>.
+                Until scistarter.org moves here, its subject, body and reply-to are edited in orrery, and changes made there arrive here within a quarter of an hour.
+                Its data sets are set here.
+            </div>
+        <% } %>
+
         <!-- Page Body -->
         <div class="p-6">
             <form
                 id="edit-email-form"
                 hx-post="/-admin/email/oneoff/<%= self.oneoff_email_id|disp %>"
                 hx-trigger="submit, saveAndSend from:body"
-                hx-vals:inherited='{"action": "save"}'
+                hx-vals:inherited='{"action": "<% if self.kept_body_html.is_some() { %>datasets<% } else { %>save<% } %>"}'
                 hx-swap:inherited="none"
                 hx-on:htmx:after:request="if(event.detail.ctx.response.status < 400 && event.target.dataset.openModal) { document.getElementById('send-dialog').showModal(); delete event.target.dataset.openModal; }"
             >
@@ -41,6 +49,15 @@
                         <label for="subject" class="block text-sm font-medium text-gray-700 mb-2">
                             Subject <span class="text-red-500">*</span>
                         </label>
+                        <% if self.kept_body_html.is_some() { %>
+                        <input
+                            type="text"
+                            id="subject"
+                            value="<%= self.subject %>"
+                            readonly
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 sm:text-sm"
+                        >
+                        <% } else { %>
                         <input
                             type="text"
                             id="subject"
@@ -51,6 +68,7 @@
                             class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             placeholder="Enter email subject..."
                         >
+                        <% } %>
                     </div>
 
                     <!-- Reply-To -->
@@ -61,6 +79,7 @@
                                 name="reply_to_noreply"
                                 value="true"
                                 <% if self.reply_to_noreply { %>checked<% } %>
+                                <% if self.kept_body_html.is_some() { %>disabled<% } %>
                                 hx-on:input="data.dirty = true"
                                 class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mt-1"
                             >
@@ -76,12 +95,18 @@
                         <label for="body_delta" class="block text-sm font-medium text-gray-700 mb-2">
                             Email Body
                         </label>
+                        <% if let Some(body_html) = &self.kept_body_html { %>
+                        <div class="prose max-w-none px-3 py-2 border border-gray-300 rounded-md bg-gray-100">
+                            <%- body_html %>
+                        </div>
+                        <% } else { %>
                         <ss-rich-text
                             name="body_delta"
                             value='<%= self.body_delta %>'
                             placeholder="Compose your email..."
                             hx-on:input="data.dirty = true">
                         </ss-rich-text>
+                        <% } %>
                     </div>
 
                     <!-- Dataset Selection -->
@@ -141,6 +166,7 @@
                     <div class="flex items-center space-x-2">
                         <%# Each of these issues its own request: the form's inherited hx-vals sets action=save on anything the form itself submits, overwriting a submit button's own value. %>
                         <%# Archiving reloads the editor to show the new state, so it asks first when there are edits it would discard. %>
+                        <% if self.kept_body_html.is_none() { %>
                         <button
                             type="button"
                             class="relative px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
@@ -150,6 +176,7 @@
                         >
                             <span>Delete</span>
                         </button>
+                        <% } %>
                         <% if self.archived { %>
                             <button
                                 type="button"

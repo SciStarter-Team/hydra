@@ -22,7 +22,7 @@ use poem::{
 use serde::Deserialize;
 use ulid::Ulid;
 
-use super::check_api_key_permission;
+use super::{check_api_key_permission, origin};
 use crate::choice::{ChoiceList, ChoiceLists, ChoiceValue};
 use crate::contact::{edit_contact_person, edit_manager};
 use crate::page_change::Stored;
@@ -261,17 +261,13 @@ struct RecordCore {
 }
 
 impl RecordCore {
-    fn from_form(form: &RecordEventForm, api_key: Option<String>) -> Self {
+    /// `endpoint` is the origin of the endpoint the form came to.
+    fn from_form(form: &RecordEventForm, endpoint: i16, api_key: Option<String>) -> Self {
         RecordCore {
             event_type: form.event_type.clone(),
             where_point: form.where_point.clone(),
             when: form.when.clone(),
-            // Default origin 3 (web); 2 for widgets (matches orrery).
-            origin: if form.origin.as_deref() == Some("widget") {
-                2
-            } else {
-                3
-            },
+            origin: origin::recorded(form.origin.as_deref(), endpoint),
             duration: form.duration.unwrap_or(0.0),
             magnitude: form.magnitude.unwrap_or(1),
             extra: truncate_extra(form.extra.clone()),
@@ -368,7 +364,7 @@ pub async fn record_event(
         return Ok(record_error("project_id required"));
     }
 
-    let core = RecordCore::from_form(&form, query.key.clone());
+    let core = RecordCore::from_form(&form, origin::PROFILE_ID_API, query.key.clone());
     let mut errors = Vec::<String>::new();
     let mut notes = Vec::<String>::new();
     let mut seen = std::collections::HashSet::new();
@@ -465,7 +461,7 @@ pub async fn record_event_by_email(
         return Ok(record_success(errors, notes));
     }
 
-    let core = RecordCore::from_form(&form, query.key.clone());
+    let core = RecordCore::from_form(&form, origin::EMAIL_LOOKUP_API, query.key.clone());
     let user_id: Ulid = user_id_str.parse()?;
     record_user_events(user_id, &project_ids_str, &core, &mut errors, &mut notes).await?;
 

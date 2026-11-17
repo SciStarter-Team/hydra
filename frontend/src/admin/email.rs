@@ -659,6 +659,9 @@ pub struct EditOneoffEmailPage {
     pub error_message: Option<String>,
     pub available_datasets: Vec<common::message::email::DatasetInfo>,
     pub legacy_slug: Option<String>,
+    /// The body as it is sent, shown in place of the editor for a copy
+    /// orrery keeps (`OneoffEmail::kept_by_orrery`), which is edited there.
+    pub kept_body_html: Option<String>,
 }
 
 #[handler]
@@ -689,6 +692,11 @@ async fn email_oneoff_edit(
     {
         Ok(response) => {
             let email = response.email;
+            let kept_body_html = if email.kept_by_orrery() {
+                Some(common::quill::delta_to_html(&email.body_delta)?)
+            } else {
+                None
+            };
             let content = EditOneoffEmailPage {
                 oneoff_email_id: email.oneoff_email_id,
                 subject: email.subject,
@@ -699,6 +707,7 @@ async fn email_oneoff_edit(
                 error_message: None,
                 available_datasets: datasets_response.datasets,
                 legacy_slug: email.legacy_slug,
+                kept_body_html,
             };
             AdminLayout::new("Edit One-off Email", content)
                 .with_breadcrumb("One-off Emails", Some("/-admin/email/oneoff"))
@@ -717,6 +726,8 @@ async fn email_oneoff_edit(
 #[serde(rename_all = "lowercase")]
 enum OneoffEmailAction {
     Save,
+    /// Save only the data sets: all a copy orrery keeps takes here.
+    DataSets,
     Delete,
     Archive,
     Unarchive,
@@ -793,6 +804,21 @@ async fn email_oneoff_update(
                 // Always sent: the edit form posts the full checkbox state, so
                 // an absent field means "unchecked", not "leave unchanged".
                 reply_to_noreply: Some(form.reply_to_noreply),
+            };
+            common::service::request::<common::message::email::UpdateOneoffEmailResponse>(
+                "emailer.oneoff.update",
+                request,
+            )
+            .await?;
+            AfterEdit::Stay
+        }
+        OneoffEmailAction::DataSets => {
+            let request = common::message::email::UpdateOneoffEmailRequest {
+                oneoff_email_id,
+                subject: None,
+                body_delta: None,
+                datasets: Some(form.datasets),
+                reply_to_noreply: None,
             };
             common::service::request::<common::message::email::UpdateOneoffEmailResponse>(
                 "emailer.oneoff.update",
@@ -1694,6 +1720,7 @@ async fn email_oneoff_to_stored(
     .await?;
 
     let email = response.email;
+    let kept_by_orrery = email.kept_by_orrery();
 
     // Create new stored email
     let create_response: common::message::email::CreateStoredEmailResponse =
@@ -1705,19 +1732,20 @@ async fn email_oneoff_to_stored(
                 body_delta: email.body_delta,
                 datasets: email.datasets,
                 reply_to_noreply: email.reply_to_noreply,
-                // A one-off is a mailing, which always offers to unsubscribe,
-                // so there is no setting to carry over.
-                no_unsubscribe: false,
+                no_unsubscribe: email.no_unsubscribe,
             },
         )
         .await?;
 
-    // Delete the one-off email
-    let _: common::message::email::DeleteOneoffEmailResponse = common::service::request(
-        "emailer.oneoff.delete",
-        common::message::email::DeleteOneoffEmailRequest { oneoff_email_id },
-    )
-    .await?;
+    // The one-off becomes the stored email, unless it is a copy orrery
+    // keeps, which stays until orrery deletes its template.
+    if !kept_by_orrery {
+        let _: common::message::email::DeleteOneoffEmailResponse = common::service::request(
+            "emailer.oneoff.delete",
+            common::message::email::DeleteOneoffEmailRequest { oneoff_email_id },
+        )
+        .await?;
+    }
 
     let redirect_url = format!("/-admin/email/stored/{}", create_response.stored_email_id);
 
