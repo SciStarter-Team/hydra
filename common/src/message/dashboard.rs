@@ -830,6 +830,28 @@ pub struct AmbassadorStageRow {
     pub since: String,
 }
 
+/// Where the accounts holding some addresses stand in the Ambassador funnel
+/// (`user.ambassador.standings`).
+///
+/// Backs the staff page that finds the Champions and Ambassadors among an
+/// event's Zoom registrants: the addresses are the ones registrants gave Zoom.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct AmbassadorStandingsRequest {
+    /// Addresses to look up. Matched regardless of case, against any of an
+    /// account's addresses, as sign-in matches them.
+    pub addresses: Vec<String>,
+}
+
+/// The funnel standing of the account holding one of the requested
+/// addresses. Addresses whose account is at no stage, or is a test account,
+/// or that belong to no account at all, have none.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AmbassadorStanding {
+    /// The address as it was requested.
+    pub address: String,
+    pub person: AmbassadorStageRow,
+}
+
 /// One row of the staff CSV export (`user.ambassador.export`). Wider than the
 /// grid row: it carries the applicant's long-form answers too, matching what
 /// orrery's export produces.

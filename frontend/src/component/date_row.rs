@@ -1,5 +1,6 @@
 //! One date/time row: a start date and time, an optional end, and the time
-//! zone whose clocks they're on. The add event form repeats it for each of a
+//! zone whose clocks they're on, the end and the zone offered, as Facebook
+//! offers them, as small links under the start. The add event form repeats it for each of a
 //! new event's dates, and the event page's date editor shows one to change a
 //! date or add another; `js/date-rows.js` drives both.
 
@@ -64,6 +65,18 @@ pub struct DateRowFields {
     /// Whether the row is shown on UTC's clocks only because the server
     /// doesn't know the viewer's: the script moves it to theirs.
     follow_viewer: bool,
+    /// Whether the row offers "Repeat event" among the links under its
+    /// start, and whether that is already open, so not offered again.
+    repeat: Option<RepeatChip>,
+}
+
+/// "Repeat event", under the first of the add form's dates: repetition
+/// repeats every date, so it is offered once.
+#[derive(Debug, Clone, Copy)]
+pub struct RepeatChip {
+    /// Whether the repetition is already shown (the event repeats), so the
+    /// chip is hidden.
+    pub shown: bool,
 }
 
 impl DateRowFields {
@@ -74,7 +87,14 @@ impl DateRowFields {
             error: None,
             stored: None,
             follow_viewer: false,
+            repeat: None,
         }
+    }
+
+    /// Offer "Repeat event" under the row's start.
+    pub fn with_repeat(mut self, chip: RepeatChip) -> Self {
+        self.repeat = Some(chip);
+        self
     }
 
     /// Mark the control `error` is about, when it is one of this row's.

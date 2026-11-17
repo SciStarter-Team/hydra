@@ -74,7 +74,8 @@ form .pill-body {
     padding: 0.5rem 0;
 }
 form .pill-body .pill-label {
-    @apply block text-neutral-mid;
+    @apply block;
+    color: var(--color-field-label);
     font-size: 0.8125rem;
     line-height: 1rem;
     overflow-wrap: anywhere;
@@ -88,6 +89,15 @@ form .tz-pill.tz-enhanced .pill-body:has(> select:invalid) .pill-label {
 }
 form .pill-body > input:placeholder-shown:not(:focus) {
     height: 0;
+}
+/* A field's hint ("https://") shows only while it has focus, once the label
+   has moved up out of its way. */
+form .pill-body > :is(input, textarea)::placeholder {
+    color: var(--color-neutral-mid);
+    opacity: 1;
+}
+form .pill-body > :is(input, textarea):not(:focus)::placeholder {
+    color: transparent;
 }
 /* A select keeps its height even while its label stands in the value's place:
    folded away, the first click would land on the label and only focus it,
@@ -141,6 +151,11 @@ form .pill-counter-over {
    assistive software. */
 form .pill-required {
     @apply text-alert;
+}
+/* One of a group of fields any of which will do is marked only while it's
+   required: until another of them is given. */
+form [data-one-required] .pill-body:has(> :is(input, textarea):not([required])) .pill-required {
+    display: none;
 }
 
 /* A field the refused submission was about: a heavier red edge, alongside
@@ -239,15 +254,74 @@ form .pill-field :is(input, select, textarea) {
 form .instance-row {
     @apply flex flex-col gap-2 items-start;
 }
-form .instance-row > .when-grid,
-form .instance-row > .end-block {
+form .instance-row > :is(.when-pair, .end-block) {
     @apply self-stretch;
 }
 form .end-block {
     @apply flex flex-col gap-2 items-start;
 }
-form .end-block > .field-pair {
+form .end-block > .when-pair {
     @apply self-stretch;
+}
+
+/* A date and its time, side by side as Facebook has them, at any width they
+   fit at. */
+form .when-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.5rem;
+}
+@container (max-width: 18rem) {
+    form .when-pair {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* Facebook's small links under a date's start (an end time, repeating, the
+   time zone): grey rounded buttons in a row that wraps. */
+form .when-chips {
+    @apply flex flex-wrap items-start gap-2;
+}
+form .chip {
+    @apply inline-flex items-center gap-2 m-0 px-3.5 border-0 rounded-lg text-sm font-semibold text-neutral-dark cursor-pointer;
+    min-height: 2.5rem;
+    background-color: #e4e6eb;
+}
+form .chip:hover {
+    background-color: var(--color-neutral-light);
+}
+form .chip-icon {
+    @apply w-5 h-5 shrink-0;
+}
+
+/* The time zone chip: its short name over the full list, which lies
+   invisibly across it, as the time zone field's does. */
+form .tz-chip {
+    position: relative;
+}
+form .tz-chip .tz-chip-body {
+    @apply m-0 cursor-pointer;
+    font-weight: inherit;
+}
+form .tz-chip .tz-short {
+    white-space: nowrap;
+}
+form .tz-chip select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+form .tz-chip:has(select:focus-visible) {
+    outline: 2px solid var(--color-primary-action);
+    outline-offset: 2px;
+}
+form .tz-chip:has([aria-invalid="true"]) {
+    outline: 2px solid var(--color-alert);
+    outline-offset: -2px;
 }
 
 /* Time zone: once the form script has written the zone's short name into the
@@ -358,6 +432,14 @@ form .add-section > summary::after {
 }
 form .add-section[open] > summary::after {
     transform: translateY(25%) rotate(-135deg);
+}
+/* What a section holds, beside its title, where that's worth seeing without
+   opening it (who can attend); it takes the chevron's place at the right. */
+form .add-section-summary {
+    @apply min-w-0 ml-auto truncate text-sm text-neutral-mid;
+}
+form .add-section > summary:has(.add-section-summary)::after {
+    margin-left: 0;
 }
 .add-section-icon {
     @apply w-5 h-5 shrink-0 text-neutral-dark;
@@ -568,6 +650,76 @@ form .add-more-fields {
 /* Place type-ahead suggestions, anchored under the search field. */
 .place-search {
     position: relative;
+}
+/* The search box, with the location button beside it. */
+form .place-search-row {
+    @apply flex items-center gap-2;
+}
+form .place-search-row > .pill-field {
+    flex: 1 1 auto;
+}
+form .locate-btn {
+    @apply inline-flex items-center justify-center shrink-0 m-0 p-0 border-0 rounded-full text-neutral-dark cursor-pointer;
+    width: 3rem;
+    height: 3rem;
+    background-color: #e4e6eb;
+}
+form .locate-btn svg {
+    @apply w-5 h-5;
+}
+form .locate-btn:hover {
+    background-color: var(--color-neutral-light);
+}
+form .locate-btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+/* How people join a virtual event: Facebook's choices, each a row with its
+   icon, its name and what it means, and its radio button at the end. The
+   whole row is the choice; a chosen one's field follows it. */
+form .option-cards {
+    @apply gap-2;
+}
+form .option-card {
+    @apply grid items-center gap-3 m-0 p-3 rounded-lg bg-white cursor-pointer;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    border: 1px solid var(--color-field-border);
+    font-weight: normal;
+}
+form .option-card input {
+    @apply m-0 cursor-pointer;
+    width: 1.25rem;
+    height: 1.25rem;
+    accent-color: var(--color-primary-action);
+}
+form .option-card:has(input:checked) {
+    border-color: var(--color-primary-action);
+    background-color: var(--color-primary-light);
+}
+form .option-card:has(input:focus-visible) {
+    outline: 2px solid var(--color-primary-action);
+    outline-offset: 2px;
+}
+form .option-card-icon {
+    @apply inline-flex items-center justify-center rounded-full;
+    width: 2.75rem;
+    height: 2.75rem;
+    background-color: #e4e6eb;
+    color: #050505;
+}
+form .option-card-icon svg {
+    width: 1.375rem;
+    height: 1.375rem;
+}
+form .option-card-text {
+    @apply flex flex-col;
+}
+form .option-card-title {
+    @apply font-semibold;
+}
+form .option-card-description {
+    @apply text-sm text-neutral-mid;
 }
 .place-search-results {
     @apply absolute inset-x-0 z-40 mt-1 bg-white border border-linework rounded-md shadow-lg overflow-y-auto;

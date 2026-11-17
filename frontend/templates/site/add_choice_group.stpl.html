@@ -5,5 +5,8 @@
     <% for checkboxes in self.checkboxes { %>
     <%+ checkboxes %>
     <% } %>
+    <% if let Some(tags) = self.tags { %>
+    <%+ tags %>
+    <% } %>
   </div>
 </details>

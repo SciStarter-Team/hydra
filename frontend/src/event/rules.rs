@@ -13,7 +13,7 @@ use jiff::{Timestamp, Zoned, civil, tz::TimeZone};
 
 use crate::{
     contact::Unreachable,
-    event::EventInstance,
+    event::{EventInstance, location::VirtualJoin},
     project::location::{LocationMode, missing_place},
     upload::storage::untracked_file_id,
     web_address::is_web_address,
@@ -35,6 +35,9 @@ pub enum Field {
     Description,
     ImageLink,
     Url,
+    /// Whether a virtual event is joined at a link or by instructions.
+    VirtualJoin,
+    HowToJoin,
     TicketUrl,
     LimitedTo,
     LocationMode,
@@ -74,6 +77,9 @@ impl RowPart {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refusal {
     pub field: Field,
+    /// The other controls the problem is about, any of which would fix it:
+    /// marked with `field`, though the message is told once, at `field`.
+    pub also: Vec<Field>,
     pub message: Cow<'static, str>,
 }
 
@@ -81,8 +87,15 @@ impl Refusal {
     fn new(field: Field, message: impl Into<Cow<'static, str>>) -> Self {
         Refusal {
             field,
+            also: Vec::new(),
             message: message.into(),
         }
+    }
+
+    /// Implicate `field` in the problem as well.
+    fn also(mut self, field: Field) -> Self {
+        self.also.push(field);
+        self
     }
 }
 
@@ -144,16 +157,53 @@ pub fn image_link(image: &str, stored: Option<&str>) -> Checked {
     Ok(())
 }
 
-/// An online event is joined at its link, so it has one.
-pub fn join_link(url: &str, mode: LocationMode) -> Checked {
-    if mode == LocationMode::Online && url.trim().is_empty() {
-        return Err(Refusal::new(
-            Field::Url,
-            "Please provide a link where people can join the online event.",
-        ));
+/// How people join an event, for a form that asks it: an event held
+/// somewhere keeps the link it was given, while a virtual one is joined at
+/// its link or, by Facebook's "Other", by instructions in place of one. The
+/// link the event is saved with, which is none for a virtual event joined by
+/// instructions, or why it can't be saved.
+pub fn join<'a>(
+    mode: LocationMode,
+    choice: Option<VirtualJoin>,
+    url: &'a str,
+    how_to_join: &str,
+) -> Checked<&'a str> {
+    if mode != LocationMode::Online {
+        return Ok(url);
+    }
+    match choice {
+        None => Err(Refusal::new(
+            Field::VirtualJoin,
+            "Please choose how people join the virtual event.",
+        )),
+        Some(VirtualJoin::Link) if url.trim().is_empty() => {
+            Err(Refusal::new(Field::Url, JOIN_LINK))
+        }
+        Some(VirtualJoin::Link) => Ok(url),
+        Some(VirtualJoin::Other) if how_to_join.trim().is_empty() => {
+            Err(Refusal::new(Field::HowToJoin, JOIN_INSTRUCTIONS))
+        }
+        Some(VirtualJoin::Other) => Ok(""),
+    }
+}
+
+/// A virtual event keeps a way to join, its link or its instructions, when
+/// one of them is changed on its own (`edited`, [`Field::Url`] or
+/// [`Field::HowToJoin`]), where the form's choice between them isn't asked.
+pub fn way_to_join(mode: LocationMode, url: &str, how_to_join: &str, edited: Field) -> Checked {
+    if mode == LocationMode::Online && url.trim().is_empty() && how_to_join.trim().is_empty() {
+        let message = if edited == Field::HowToJoin {
+            JOIN_INSTRUCTIONS
+        } else {
+            JOIN_LINK
+        };
+        return Err(Refusal::new(edited, message));
     }
     Ok(())
 }
+
+const JOIN_LINK: &str = "Please provide a link where people can join the virtual event.";
+const JOIN_INSTRUCTIONS: &str = "Please add instructions on how people join the virtual event.";
 
 /// The event's link, when it has one.
 pub fn link(url: &str, stored: Option<&str>) -> Checked {
@@ -262,13 +312,16 @@ pub fn contact(name: &str, email: &str, url: &str, stored: Option<(&str, &str)>)
     match Unreachable::check(email, url) {
         Ok(()) => Ok(()),
         Err(Unreachable::Neither) if reachable_as_stored => Ok(()),
-        Err(refusal) => Err(Refusal::new(
-            match refusal {
-                Unreachable::Neither | Unreachable::Email => Field::ContactEmail,
-                Unreachable::Url => Field::ContactUrl,
-            },
-            refusal.message(),
-        )),
+        // Neither is given: either field would do, so both are at fault.
+        Err(Unreachable::Neither) => Err(Refusal::new(
+            Field::ContactEmail,
+            Unreachable::Neither.message(),
+        )
+        .also(Field::ContactUrl)),
+        Err(refusal @ Unreachable::Email) => {
+            Err(Refusal::new(Field::ContactEmail, refusal.message()))
+        }
+        Err(refusal @ Unreachable::Url) => Err(Refusal::new(Field::ContactUrl, refusal.message())),
     }
 }
 
@@ -585,10 +638,88 @@ mod tests {
     }
 
     #[test]
-    fn an_online_event_needs_its_link() {
-        let refusal = join_link(" ", LocationMode::Online).unwrap_err();
-        check!(refusal.message == "Please provide a link where people can join the online event.");
-        check!(join_link("", LocationMode::InPerson).is_ok());
+    fn a_virtual_event_says_how_people_join() {
+        let refusal = join(LocationMode::Online, None, "https://example.org", "").unwrap_err();
+        check!(refusal.field == Field::VirtualJoin);
+        check!(refusal.message == "Please choose how people join the virtual event.");
+    }
+
+    #[test]
+    fn a_virtual_event_joined_at_a_link_has_one() {
+        let refusal = join(
+            LocationMode::Online,
+            Some(VirtualJoin::Link),
+            " ",
+            "Dial in",
+        )
+        .unwrap_err();
+        check!(refusal.field == Field::Url);
+        check!(refusal.message == "Please provide a link where people can join the virtual event.");
+        check!(
+            join(
+                LocationMode::Online,
+                Some(VirtualJoin::Link),
+                "https://example.org",
+                ""
+            ) == Ok("https://example.org")
+        );
+    }
+
+    #[test]
+    fn a_virtual_event_joined_otherwise_has_instructions_and_no_link() {
+        let refusal = join(
+            LocationMode::Online,
+            Some(VirtualJoin::Other),
+            "https://example.org",
+            " ",
+        )
+        .unwrap_err();
+        check!(refusal.field == Field::HowToJoin);
+        check!(refusal.message == "Please add instructions on how people join the virtual event.");
+        check!(
+            join(
+                LocationMode::Online,
+                Some(VirtualJoin::Other),
+                "https://example.org",
+                "Dial in"
+            ) == Ok("")
+        );
+    }
+
+    #[test]
+    fn an_event_held_somewhere_keeps_its_link_unasked() {
+        check!(join(LocationMode::InPerson, None, "", "") == Ok(""));
+        check!(
+            join(
+                LocationMode::Region,
+                Some(VirtualJoin::Other),
+                "https://example.org",
+                ""
+            ) == Ok("https://example.org")
+        );
+    }
+
+    #[test]
+    fn a_virtual_event_keeps_a_link_or_instructions() {
+        let refusal = way_to_join(LocationMode::Online, " ", "", Field::Url).unwrap_err();
+        check!(refusal.field == Field::Url);
+        check!(refusal.message == "Please provide a link where people can join the virtual event.");
+
+        let refusal = way_to_join(LocationMode::Online, "", " ", Field::HowToJoin).unwrap_err();
+        check!(refusal.field == Field::HowToJoin);
+        check!(refusal.message == "Please add instructions on how people join the virtual event.");
+
+        check!(way_to_join(LocationMode::Online, "", "Dial in", Field::Url).is_ok());
+        check!(
+            way_to_join(
+                LocationMode::Online,
+                "https://example.org",
+                "",
+                Field::HowToJoin
+            )
+            .is_ok()
+        );
+        check!(way_to_join(LocationMode::InPerson, "", "", Field::Url).is_ok());
     }
 
     #[test]
@@ -607,6 +738,10 @@ mod tests {
         check!(refusal.field == Field::ContactEmail);
         let refusal = contact("Ada", "", "", Some(("ada@example.org", ""))).unwrap_err();
         check!(refusal.field == Field::ContactEmail);
+        // Either would reach them, so both are at fault.
+        check!(refusal.also == [Field::ContactUrl]);
+        let refusal = contact("Ada", "ada at example", "", None).unwrap_err();
+        check!(refusal.also.is_empty());
         check!(contact("", "ada@example.org", "", None).unwrap_err().field == Field::ContactName);
     }
 }

@@ -86,8 +86,8 @@ pub fn pending_review_fragment() -> Response {
 }
 
 /// Confirmation shown when a message is delivered immediately with no review —
-/// used for trusted, entity-authored sends (a manager replying or broadcasting
-/// as the project). `message` is the already-escaped/plain confirmation text.
+/// a member's answer, or a trusted, entity-authored send (a manager replying
+/// or broadcasting as the project). `message` is the already-escaped/plain confirmation text.
 pub fn sent_fragment(message: &str) -> Response {
     Html(format!(
         "<div class=\"ss-card !p-4 text-sm\">\
@@ -423,21 +423,26 @@ pub async fn reply(
         }
     }
 
-    let _: ReplyToMessageResponse = request(
+    let reply: ReplyToMessageResponse = request(
         "forum.messaging.reply",
         ReplyToMessage {
             user_id: user_info.user_id,
             topic_id: topic_ulid,
             body: form.body,
-            // A member's reply is held for staff review.
+            // A member's reply is delivered at once only as an answer to
+            // what they were sent; forum-service decides.
             pre_approved: false,
         },
     )
     .await?;
 
-    // The reply is held for staff review, not delivered yet — tell the sender.
-    // (The reply form posts via HTMX, so this renders inline.)
-    Ok(pending_review_fragment())
+    // Tell the sender whether it went, or waits for staff review. (The reply
+    // form posts via HTMX, so this renders inline.)
+    Ok(if reply.delivered {
+        sent_fragment("Your reply has been sent.")
+    } else {
+        pending_review_fragment()
+    })
 }
 
 #[handler]

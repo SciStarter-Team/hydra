@@ -10,7 +10,7 @@ use common::{
         AmbassadorMessageForm, AmbassadorMessageReview, AmbassadorMessageRow, AmbassadorMilestones,
         AmbassadorProfile, AmbassadorProfileQuery, AmbassadorReviewUpdate,
         AmbassadorScreeningStatus, AmbassadorStage, AmbassadorStageRow, AmbassadorStagesRequest,
-        DatePresence, TriState,
+        AmbassadorStanding, AmbassadorStandingsRequest, DatePresence, TriState,
     },
     message::email::EmailRecipient,
     message::user::{
@@ -18,12 +18,14 @@ use common::{
         UserAndBadge,
     },
     service::{TriggerEvent, decode_structured_message, send, send_email, trigger_email},
-    shared::db,
+    shared::{db, hash_identifier_lower},
     timestring::TimeString,
     transaction::Immediate,
     ulid::AsUlid,
 };
-use sqlx::{QueryBuilder, Row, Sqlite};
+use std::collections::HashMap;
+
+use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
 use ulid::Ulid;
 
 /// A way the route past Champion can close, and the milestone that dates it.
@@ -1671,15 +1673,124 @@ pub async fn message_review(req: &Request) -> Result<(), Error> {
     Ok(())
 }
 
+/// What the funnel stage of one account is derived from: the account itself,
+/// its progress milestones, and its application, if any.
+struct FunnelRow {
+    user_id: String,
+    first_name: String,
+    last_name: String,
+    handle: String,
+    primary_email: String,
+    ambassador: Option<String>,
+    tutorial_completed_at: Option<String>,
+    rejected_at: Option<String>,
+    international_at: Option<String>,
+    screening_failed_at: Option<String>,
+    app_status: Option<i64>,
+    screening_status: Option<i64>,
+    verified: Option<String>,
+    submitted: Option<String>,
+    draft: Option<i64>,
+}
+
+impl FunnelRow {
+    /// Every account that has reached any milestone at all, or only those of
+    /// `user_ids` when it is given. Those who have reached none are at no
+    /// stage, so nothing asked of the funnel can match them. Test accounts are
+    /// left out; staff accounts are not, because a staff member who took the
+    /// training is a real person who took the training — the same rule orrery
+    /// applies.
+    async fn fetch(
+        pool: &SqlitePool,
+        user_ids: Option<&[String]>,
+    ) -> Result<Vec<FunnelRow>, Error> {
+        let user_ids = user_ids.map(serde_json::to_string).transpose()?;
+
+        Ok(sqlx::query_as!(
+            FunnelRow,
+            r#"SELECT u."user_id" AS "user_id!",
+                      u."first_name" AS "first_name!",
+                      u."last_name" AS "last_name!",
+                      u."handle" AS "handle!",
+                      u."primary_email" AS "primary_email!",
+                      u."ambassador" AS "ambassador?",
+                      p."tutorial_completed_at" AS "tutorial_completed_at?",
+                      p."rejected_at" AS "rejected_at?",
+                      p."international_at" AS "international_at?",
+                      p."screening_failed_at" AS "screening_failed_at?",
+                      a."app_status" AS "app_status?",
+                      a."screening_status" AS "screening_status?",
+                      a."verified" AS "verified?",
+                      a."submitted" AS "submitted?",
+                      a."draft" AS "draft?"
+                 FROM "ambassador_progress" p
+                 JOIN "users" u ON u."user_id" = p."user_id"
+                 LEFT JOIN "ambassador_applications" a ON a."user_id" = p."user_id"
+                WHERE u."is_test" = 0
+                  AND (?1 IS NULL OR u."user_id" IN (SELECT "value" FROM json_each(?1)))
+                  AND (p."tutorial_completed_at" IS NOT NULL
+                       OR p."rejected_at" IS NOT NULL
+                       OR p."international_at" IS NOT NULL
+                       OR p."screening_failed_at" IS NOT NULL
+                       OR u."ambassador" IS NOT NULL
+                       OR a."user_id" IS NOT NULL)"#,
+            user_ids
+        )
+        .fetch_all(pool)
+        .await?)
+    }
+
+    /// Where this account stands, or `None` when it is at no stage.
+    ///
+    /// The stage is derived by [`AmbassadorStage::derive`] rather than read
+    /// from a column, so it cannot disagree with the milestones it is made of;
+    /// the "since" date is the date of the milestone that decided the stage.
+    fn standing(self) -> Option<AmbassadorStageRow> {
+        let submitted = self.submitted.filter(|_| self.draft == Some(0));
+
+        let milestones = AmbassadorMilestones {
+            tutorial_completed: self.tutorial_completed_at.is_some(),
+            application_submitted: submitted.is_some(),
+            verified: self.verified.is_some(),
+            in_directory: self.ambassador.is_some(),
+            app_status: AmbassadorAppStatus::from_i64(self.app_status.unwrap_or_default()),
+            screening_status: AmbassadorScreeningStatus::from_i64(
+                self.screening_status.unwrap_or_default(),
+            ),
+        };
+
+        let stage = AmbassadorStage::derive(&milestones)?;
+
+        // The date of the milestone that decided the stage, so that the
+        // export reports when the person arrived where they are rather than
+        // when their record was last touched.
+        let since = match stage {
+            AmbassadorStage::Tutorial => self.tutorial_completed_at,
+            AmbassadorStage::Application => submitted,
+            AmbassadorStage::Verified => self.verified,
+            AmbassadorStage::Passed => self.ambassador,
+            AmbassadorStage::Rejected => self.rejected_at,
+            AmbassadorStage::International => self.international_at,
+            AmbassadorStage::Failed => self.screening_failed_at,
+        }
+        .unwrap_or_default();
+
+        Some(AmbassadorStageRow {
+            first_name: self.first_name,
+            last_name: self.last_name,
+            handle: self.handle,
+            email: self.primary_email,
+            stage,
+            // Stored as a full timestamp; the export wants the date.
+            since: since.get(0..10).unwrap_or_default().to_string(),
+        })
+    }
+}
+
 /// Everyone currently at one of the requested funnel stages
 /// (`user.ambassador.stages`), newest arrival first.
 ///
-/// Backs the staff funnel exports. The stage is derived per person by
-/// [`AmbassadorStage::derive`] rather than read from a column, so it cannot
-/// disagree with the milestones it is made of; the "since" date is the date of
-/// the milestone that decided the stage. Test accounts are left out; staff
-/// accounts are not, because a staff member who took the training is a real
-/// person who took the training — the same rule orrery applies.
+/// Backs the staff funnel exports.
 pub async fn stages(req: &Request) -> Result<Vec<AmbassadorStageRow>, Error> {
     let request: AmbassadorStagesRequest =
         decode_structured_message(req.message.clone()).unwrap_or_default();
@@ -1688,83 +1799,11 @@ pub async fn stages(req: &Request) -> Result<Vec<AmbassadorStageRow>, Error> {
         return Ok(Vec::new());
     }
 
-    // Everybody who has reached any milestone at all. Those who have reached
-    // none are at no stage, so they cannot match whatever was asked for.
-    let rows = sqlx::query!(
-        r#"SELECT u."first_name" AS "first_name!",
-                  u."last_name" AS "last_name!",
-                  u."handle" AS "handle!",
-                  u."primary_email" AS "primary_email!",
-                  u."ambassador" AS "ambassador?",
-                  p."tutorial_completed_at" AS "tutorial_completed_at?",
-                  p."rejected_at" AS "rejected_at?",
-                  p."international_at" AS "international_at?",
-                  p."screening_failed_at" AS "screening_failed_at?",
-                  a."app_status" AS "app_status?",
-                  a."screening_status" AS "screening_status?",
-                  a."verified" AS "verified?",
-                  a."submitted" AS "submitted?",
-                  a."draft" AS "draft?"
-             FROM "ambassador_progress" p
-             JOIN "users" u ON u."user_id" = p."user_id"
-             LEFT JOIN "ambassador_applications" a ON a."user_id" = p."user_id"
-            WHERE u."is_test" = 0
-              AND (p."tutorial_completed_at" IS NOT NULL
-                   OR p."rejected_at" IS NOT NULL
-                   OR p."international_at" IS NOT NULL
-                   OR p."screening_failed_at" IS NOT NULL
-                   OR u."ambassador" IS NOT NULL
-                   OR a."user_id" IS NOT NULL)"#
-    )
-    .fetch_all(db())
-    .await?;
-
-    let mut stages: Vec<AmbassadorStageRow> = rows
+    let mut stages: Vec<AmbassadorStageRow> = FunnelRow::fetch(db(), None)
+        .await?
         .into_iter()
-        .filter_map(|row| {
-            let submitted = row.submitted.filter(|_| row.draft == Some(0));
-
-            let milestones = AmbassadorMilestones {
-                tutorial_completed: row.tutorial_completed_at.is_some(),
-                application_submitted: submitted.is_some(),
-                verified: row.verified.is_some(),
-                in_directory: row.ambassador.is_some(),
-                app_status: AmbassadorAppStatus::from_i64(row.app_status.unwrap_or_default()),
-                screening_status: AmbassadorScreeningStatus::from_i64(
-                    row.screening_status.unwrap_or_default(),
-                ),
-            };
-
-            let stage = AmbassadorStage::derive(&milestones)?;
-
-            if !request.stages.contains(&stage) {
-                return None;
-            }
-
-            // The date of the milestone that decided the stage, so that the
-            // export reports when the person arrived where they are rather
-            // than when their record was last touched.
-            let since = match stage {
-                AmbassadorStage::Tutorial => row.tutorial_completed_at,
-                AmbassadorStage::Application => submitted,
-                AmbassadorStage::Verified => row.verified,
-                AmbassadorStage::Passed => row.ambassador,
-                AmbassadorStage::Rejected => row.rejected_at,
-                AmbassadorStage::International => row.international_at,
-                AmbassadorStage::Failed => row.screening_failed_at,
-            }
-            .unwrap_or_default();
-
-            Some(AmbassadorStageRow {
-                first_name: row.first_name,
-                last_name: row.last_name,
-                handle: row.handle,
-                email: row.primary_email,
-                stage,
-                // Stored as a full timestamp; the export wants the date.
-                since: since.get(0..10).unwrap_or_default().to_string(),
-            })
-        })
+        .filter_map(FunnelRow::standing)
+        .filter(|row| request.stages.contains(&row.stage))
         .collect();
 
     stages.sort_by(|a, b| b.since.cmp(&a.since).then_with(|| b.email.cmp(&a.email)));
@@ -1772,9 +1811,78 @@ pub async fn stages(req: &Request) -> Result<Vec<AmbassadorStageRow>, Error> {
     Ok(stages)
 }
 
+/// The funnel standing of the account holding each requested address
+/// (`user.ambassador.standings`).
+///
+/// An address is matched regardless of case against every address of every
+/// account, through the lowercase hash each one is stored with. That hash is
+/// unique, so an address reaches at most one account.
+pub async fn standings(req: &Request) -> Result<Vec<AmbassadorStanding>, Error> {
+    let request: AmbassadorStandingsRequest = decode_structured_message(req.message.clone())?;
+
+    standings_in(db(), &request.addresses).await
+}
+
+async fn standings_in(
+    pool: &SqlitePool,
+    addresses: &[String],
+) -> Result<Vec<AmbassadorStanding>, Error> {
+    if addresses.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let by_hash: HashMap<String, &String> = addresses
+        .iter()
+        .map(|address| (hash_identifier_lower(address), address))
+        .collect();
+
+    let hashes = serde_json::to_string(&by_hash.keys().collect::<Vec<_>>())?;
+
+    let holders = sqlx::query!(
+        r#"SELECT "hash_lower" AS "hash_lower!", "user_id" AS "user_id!"
+             FROM "emails"
+            WHERE "hash_lower" IN (SELECT "value" FROM json_each(?))"#,
+        hashes
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut addresses_of: HashMap<String, Vec<&String>> = HashMap::new();
+
+    for holder in &holders {
+        if let Some(address) = by_hash.get(&holder.hash_lower) {
+            addresses_of
+                .entry(holder.user_id.clone())
+                .or_default()
+                .push(address);
+        }
+    }
+
+    let user_ids: Vec<String> = addresses_of.keys().cloned().collect();
+    let mut standings = Vec::new();
+
+    for row in FunnelRow::fetch(pool, Some(&user_ids)).await? {
+        let addresses = addresses_of.remove(&row.user_id).unwrap_or_default();
+
+        let Some(person) = row.standing() else {
+            continue;
+        };
+
+        for address in addresses {
+            standings.push(AmbassadorStanding {
+                address: address.clone(),
+                person: person.clone(),
+            });
+        }
+    }
+
+    Ok(standings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert2::check;
 
     /// The directory view names the Champion verdict by its number.
     ///
@@ -1818,5 +1926,117 @@ mod tests {
     fn contains_pattern_takes_wildcards_literally() {
         assert_eq!(contains_pattern("Doe"), "%Doe%");
         assert_eq!(contains_pattern("50%_\\"), "%50\\%\\_\\\\%");
+    }
+
+    /// The tables the funnel standing is read from, cut down to the columns
+    /// it reads, with three accounts:
+    ///
+    /// - Ada finished the training and holds a second address.
+    /// - Tess finished it too, but is a test account.
+    /// - Nora holds an address and has reached no milestone.
+    async fn standings_fixture() -> SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("pool");
+
+        sqlx::raw_sql(
+            r#"create table "users" (
+                 "user_id" text primary key not null,
+                 "first_name" text not null,
+                 "last_name" text not null,
+                 "handle" text not null,
+                 "primary_email" text not null,
+                 "ambassador" text,
+                 "is_test" integer not null default 0
+               );
+               create table "emails" (
+                 "user_id" text not null,
+                 "email" text not null unique,
+                 "hash_lower" text unique
+               );
+               create table "ambassador_progress" (
+                 "user_id" text primary key not null,
+                 "tutorial_completed_at" text,
+                 "rejected_at" text,
+                 "international_at" text,
+                 "screening_failed_at" text
+               );
+               create table "ambassador_applications" (
+                 "user_id" text primary key not null,
+                 "app_status" integer not null default 0,
+                 "screening_status" integer not null default 0,
+                 "verified" text,
+                 "submitted" text,
+                 "draft" integer not null default 1
+               );
+               insert into "users" values
+                 ('ada', 'Ada', 'Lovelace', 'ada', 'ada@example.invalid', null, 0),
+                 ('tess', 'Tess', 'Case', 'tess', 'tess@example.invalid', null, 1),
+                 ('nora', 'Nora', 'None', 'nora', 'nora@example.invalid', null, 0);
+               insert into "ambassador_progress" ("user_id", "tutorial_completed_at") values
+                 ('ada', '2026-03-04T05:06:07Z'),
+                 ('tess', '2026-03-04T05:06:07Z');"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("schema");
+
+        for (user_id, email) in [
+            ("ada", "ada@example.invalid"),
+            ("ada", "Ada.Lovelace@Example.Invalid"),
+            ("tess", "tess@example.invalid"),
+            ("nora", "nora@example.invalid"),
+        ] {
+            sqlx::query(
+                r#"insert into "emails" ("user_id", "email", "hash_lower") values (?, ?, ?)"#,
+            )
+            .bind(user_id)
+            .bind(email)
+            .bind(hash_identifier_lower(email))
+            .execute(&pool)
+            .await
+            .expect("email");
+        }
+
+        pool
+    }
+
+    async fn standings_of(addresses: &[&str]) -> Vec<AmbassadorStanding> {
+        let pool = standings_fixture().await;
+        let addresses: Vec<String> = addresses.iter().map(|a| a.to_string()).collect();
+
+        standings_in(&pool, &addresses).await.expect("standings")
+    }
+
+    #[tokio::test]
+    async fn any_address_of_an_account_finds_it_regardless_of_case() {
+        let found = standings_of(&["ada.lovelace@example.invalid"]).await;
+
+        check!(found.len() == 1);
+        check!(found[0].address == "ada.lovelace@example.invalid");
+        check!(found[0].person.handle == "ada");
+        check!(found[0].person.stage == AmbassadorStage::Tutorial);
+        check!(found[0].person.since == "2026-03-04");
+    }
+
+    #[tokio::test]
+    async fn every_address_of_one_account_is_answered() {
+        let found = standings_of(&["ada@example.invalid", "ada.lovelace@example.invalid"]).await;
+
+        check!(found.len() == 2);
+    }
+
+    #[tokio::test]
+    async fn test_accounts_unstarted_accounts_and_strangers_have_no_standing() {
+        let found = standings_of(&[
+            "tess@example.invalid",
+            "nora@example.invalid",
+            "stranger@example.invalid",
+        ])
+        .await;
+
+        check!(found.is_empty());
     }
 }

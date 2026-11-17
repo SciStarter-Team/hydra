@@ -1,6 +1,6 @@
 // Date/time rows (site/date_row.stpl.html), in the add event form and the
-// event page's date editor: the time-zone field, the end toggle, and a saved
-// date shown on the clocks of whichever zone is chosen.
+// event page's date editor: the time-zone chip, the end-time chip, and a
+// saved date shown on the clocks of whichever zone is chosen.
 (function () {
   // Preselect a sensible time zone: the zone of a venue picked in the
   // location search when there is one, else the visitor's browser zone.
@@ -48,7 +48,12 @@
     field.classList.add("tz-enhanced");
     var short = field.querySelector(".tz-short");
     var row = select.closest("[data-date-row]");
-    if (short) short.textContent = select.value ? shortName(select.value, row && rowMoment(row)) : "";
+    // A chip names the field until a zone is chosen.
+    if (short) {
+      short.textContent = select.value
+        ? shortName(select.value, row && rowMoment(row))
+        : short.getAttribute("data-placeholder") || "";
+    }
   }
 
   function addOption(select, tz) {
@@ -126,8 +131,8 @@
     });
   }
 
-  // "+ End date and time" reveals a row's end fields (and checks the hidden
-  // has_end box that carries the state to the server); "Remove" undoes it.
+  // "Add end time" reveals a row's end fields (and checks the hidden has_end
+  // box that carries the state to the server); "Remove end time" undoes it.
   // Each hides the control that was used, so focus moves to the one that
   // takes its place.
   function setEnd(row, on) {
@@ -150,9 +155,10 @@
   document.addEventListener("click", function (e) {
     var row = e.target.closest && e.target.closest("[data-date-row]");
     if (!row) return;
-    if (e.target.classList.contains("end-toggle")) {
+    // The chips hold icons, which a click can land on.
+    if (e.target.closest(".end-toggle")) {
       setEnd(row, true);
-    } else if (e.target.classList.contains("end-remove")) {
+    } else if (e.target.closest(".end-remove")) {
       row.dataset.touched = "1";
       setEnd(row, false);
     }

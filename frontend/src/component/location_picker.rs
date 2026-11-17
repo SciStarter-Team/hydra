@@ -1,6 +1,7 @@
 //! The location section of the add forms, which the event page's location
-//! editor shows too: "Is it in person or online?", a place search, the
-//! address, the region editor, the location note and the link.
+//! editor shows too: "Is it in person or virtual?", a place search, the
+//! address, the region editor, the location note and the link, and, for a
+//! virtual event, how people join it.
 
 use crate::{
     choice::{ChoiceCheckboxes, ChoiceList},
@@ -41,6 +42,11 @@ pub struct LocationPicker {
     longitude: String,
     location_description: String,
     url: String,
+    /// How people join a virtual event, `link` or `other`, or empty until it
+    /// is chosen, and the instructions "other" asks for. Asked of events
+    /// alone.
+    virtual_join: String,
+    how_to_join: String,
     /// What was left typed in the place search, kept when the form is
     /// refused so it can still be picked or used as the address.
     place_query: String,
@@ -86,6 +92,8 @@ impl LocationPicker {
             longitude: longitude.to_string(),
             location_description: location_description.to_string(),
             url: url.to_string(),
+            virtual_join: String::new(),
+            how_to_join: String::new(),
             place_query: String::new(),
             region_editor: RegionEditor {
                 field_name: "regions".to_string(),
@@ -106,10 +114,14 @@ impl LocationPicker {
     }
 
     /// Ask what an event's location is: offer the modes only an event has
-    /// besides the others, and ask no location note of an online one.
-    pub fn for_events(mut self) -> Self {
+    /// besides the others, ask no location note of a virtual one, and ask
+    /// how people join it, `virtual_join` (`link` or `other`) with the
+    /// instructions `how_to_join` that "other" asks for.
+    pub fn for_events(mut self, virtual_join: &str, how_to_join: &str) -> Self {
         self.offers_event_modes = true;
         self.notes_online = false;
+        self.virtual_join = virtual_join.to_string();
+        self.how_to_join = how_to_join.to_string();
         self
     }
 

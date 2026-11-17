@@ -3,8 +3,9 @@
 <% let described_by = self.description_ids(); %>
 <%# A field with a limit keeps its character count current as it's typed into. %>
 <% let count_on_input = self.limit.map(|limit| format!(r#" hx-on:input="var count = document.getElementById('{}'), length = Array.from(this.value).length; count.textContent = length + ' / {limit}'; count.classList.toggle('pill-counter-over', length > {limit})""#, self.counter_id())).unwrap_or_default(); %>
-<%# The blank placeholder is what `:placeholder-shown` keys the label's
-    resting (placeholder-sized) position on; see components/add-form.css. %>
+<%# The placeholder, blank or the hint, is what `:placeholder-shown` keys the
+    label's resting (placeholder-sized) position on, and the hint shows only
+    while the field has focus; see components/add-form.css. %>
 <div class="pill-field<% if matches!(control, Control::TextArea { .. }) { %> pill-field-multiline<% } %>">
   <% match self.icon { Some(FieldIcon::Calendar) => { %>
     <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
@@ -14,9 +15,9 @@
   <label class="pill-body">
     <span class="pill-label"><%= self.label %><% if self.required { %><span class="pill-required" aria-hidden="true"> *</span><% } %></span>
     <% match control { Control::Input(input_type) => { %>
-      <input type="<%= input_type %>" name="<%= self.name %>" value="<%= self.value %>" placeholder=" "<% if let Some(id) = &self.id { %> id="<%= id %>"<% } %><% if self.required { %> required<% } %><% if let Some(token) = self.autocomplete { %> autocomplete="<%= token %>"<% } %><% if self.invalid { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %><%- count_on_input %>>
+      <input type="<%= input_type %>" name="<%= self.name %>" value="<%= self.value %>" placeholder="<%= self.placeholder() %>"<% if let Some(id) = &self.id { %> id="<%= id %>"<% } %><% if self.required && !self.waived { %> required<% } %><% if let Some(token) = self.autocomplete { %> autocomplete="<%= token %>"<% } %><% if self.invalid { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %><%- count_on_input %>>
     <% } Control::TextArea { rows } => { %>
-      <textarea name="<%= self.name %>" rows="<%= rows %>" placeholder=" "<% if let Some(id) = &self.id { %> id="<%= id %>"<% } %><% if self.required { %> required<% } %><% if self.invalid { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %><%- count_on_input %>><%= self.value %></textarea>
+      <textarea name="<%= self.name %>" rows="<%= rows %>" placeholder="<%= self.placeholder() %>"<% if let Some(id) = &self.id { %> id="<%= id %>"<% } %><% if self.required && !self.waived { %> required<% } %><% if self.invalid { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %><%- count_on_input %>><%= self.value %></textarea>
     <% } } %>
   </label>
   <% if let Some(limit) = self.limit { %>

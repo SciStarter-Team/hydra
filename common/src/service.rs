@@ -928,7 +928,9 @@ impl TriggerEvent {
             Self::ForumPostReply => "When someone replies to a forum post",
             Self::ForumPostEdited => "When a forum post is edited",
             Self::FirstContribution => "When a user makes their first contribution to a project",
-            Self::PeopleFinderConfirmation => "When a People Finder message is approved and delivered",
+            Self::PeopleFinderConfirmation => {
+                "When a People Finder message is approved and delivered"
+            }
             Self::PeopleFinderNewRequest => "When a new People Finder message needs approval",
             Self::ActsOfScienceApplication => {
                 "When an Acts of Science Connected application is submitted"

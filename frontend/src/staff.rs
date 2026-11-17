@@ -61,6 +61,14 @@ pub fn routes() -> impl poem::Endpoint {
         .at("/events/events.html", get(events::form))
         .at("/events/events.csv", get(events::export_csv))
         .at(
+            "/ambassadors/registrants",
+            get(ambassadors::registrants::form)
+                .post(ambassadors::registrants::download)
+                .with(poem::middleware::SizeLimit::new(
+                    ambassadors::registrants::UPLOAD_LIMIT,
+                )),
+        )
+        .at(
             "/ambassadors/ambassador_tutorial.csv",
             get(ambassadors::tutorial),
         )

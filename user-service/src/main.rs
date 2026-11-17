@@ -3862,6 +3862,11 @@ async fn main() {
         ambassador::passed_locations
     ));
     toplevel.spawn(handler!(ambassador_group, "stages", ambassador::stages));
+    toplevel.spawn(handler!(
+        ambassador_group,
+        "standings",
+        ambassador::standings
+    ));
 
     // Legacy user-id lookup (User-level legacy ids only — distinct from
     // user.profile.lookup which handles Profile-level legacy ids).

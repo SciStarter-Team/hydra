@@ -86,6 +86,9 @@ pub struct TimezoneField {
     selected: String,
     required: bool,
     invalid: bool,
+    /// Shown as one of the small grey links under a date's start ("🌐 PDT"),
+    /// as Facebook shows the zone, rather than as a field.
+    chip: bool,
     timezones: &'static [(&'static str, &'static str)],
     all_timezones: &'static [(String, Vec<(String, String)>)],
 }
@@ -98,9 +101,16 @@ impl TimezoneField {
             selected: selected.to_string(),
             required,
             invalid: false,
+            chip: false,
             timezones: COMMON_TIMEZONES,
             all_timezones: all_timezones(),
         }
+    }
+
+    /// Show the zone as a chip under a date's start rather than as a field.
+    pub fn chip(mut self) -> Self {
+        self.chip = true;
+        self
     }
 
     /// Mark the field invalid when `error` is about it.

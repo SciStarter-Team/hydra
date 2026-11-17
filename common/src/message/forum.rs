@@ -335,6 +335,10 @@ pub struct ReplyToMessage {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ReplyToMessageResponse {
     pub post_id: Ulid,
+    /// Whether the reply was delivered at once, as an answer or an entity's
+    /// send, rather than held for staff review.
+    #[serde(default)]
+    pub delivered: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

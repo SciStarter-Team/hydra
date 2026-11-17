@@ -36,7 +36,7 @@ use crate::{
     event::{
         EventInstance,
         all::EventAll,
-        location::{EventLocation, LocationInput, picked_point, settle_online},
+        location::{EventLocation, LocationInput, VirtualJoin, picked_point, settle_online},
         rules::{self, DateRow, Field, Refusal, RowReading, ZonedInstance, stored_instance},
     },
     exchange::SubmissionExchange,
@@ -213,6 +213,10 @@ struct AddEventForm {
     regions: String,
     #[serde(default)]
     url: String,
+    /// How people join a virtual event: `link`, at its link, or `other`, by
+    /// its instructions.
+    #[serde(default)]
+    virtual_join: String,
     /// What was left typed in the location picker's place search; read only
     /// to say, when no address was given, that it wasn't used as one.
     #[serde(default)]
@@ -318,6 +322,7 @@ struct EventFormValues {
     longitude: String,
     regions: String,
     url: String,
+    virtual_join: String,
     place_query: String,
     formats: Vec<String>,
     programs: Vec<String>,
@@ -388,6 +393,7 @@ impl From<&AddEventForm> for EventFormValues {
             longitude: f.longitude.clone(),
             regions: f.regions.clone(),
             url: f.url.clone(),
+            virtual_join: f.virtual_join.clone(),
             place_query: f.place_query.clone(),
             formats: f.formats.clone(),
             programs: f.programs.clone(),
@@ -444,7 +450,6 @@ struct AddEventContent {
     audience: ChoiceCheckboxes,
     location: LocationPicker,
     image: ImageField,
-    tags: TagInput,
 }
 
 // ---------------------------------------------------------------------------
@@ -459,6 +464,9 @@ struct AddEventContent {
 struct SectionSummary {
     icon: SectionIcon,
     title: Cow<'static, str>,
+    /// What the section holds, beside its title, where that's worth seeing
+    /// without opening it; the page's script keeps it current.
+    summary: Option<String>,
 }
 
 impl SectionSummary {
@@ -466,13 +474,20 @@ impl SectionSummary {
         SectionSummary {
             icon,
             title: title.into(),
+            summary: None,
         }
+    }
+
+    fn summary(mut self, summary: impl Into<String>) -> Self {
+        self.summary = Some(summary.into());
+        self
     }
 }
 
 #[derive(Clone, Copy)]
 enum SectionIcon {
     Details,
+    Presenter,
     Umbrella,
     Contact,
     Ticket,
@@ -497,6 +512,9 @@ struct ChoiceGroup {
     /// The form fields, each submitted as `field[]`.
     fields: Vec<String>,
     checkboxes: Vec<ChoiceCheckboxes>,
+    /// Tags, asked after the lists, where the section is about how people
+    /// find what is added.
+    tags: Option<TagInput>,
     invalid: bool,
 }
 
@@ -544,8 +562,15 @@ impl ChoiceGroup {
                 .map(|boxes| boxes.field().to_string())
                 .collect(),
             checkboxes,
+            tags: None,
             invalid: false,
         }
+    }
+
+    /// Ask for tags after the lists.
+    fn with_tags(mut self, tags: TagInput) -> Self {
+        self.tags = Some(tags);
+        self
     }
 
     /// Mark the section invalid when `error` is about one of its fields.
@@ -907,7 +932,7 @@ async fn render_event_form(
         &values.regions,
     )
     .with_place_query(&values.place_query)
-    .for_events()
+    .for_events(&values.virtual_join, &values.how_to_join)
     .with_venues(ChoiceCheckboxes::new(
         "venues",
         crate::event::offered_types(ChoiceList::EventVenue).await?,
@@ -924,10 +949,6 @@ async fn render_event_form(
             .as_ref()
             .is_some_and(|error| error.is_about(ImageUrlInput::NAME)),
     };
-    let tags = TagInput {
-        value: values.tags.clone(),
-    };
-
     // Whether the event is online, and the kind of venue it's held at, are
     // asked with its location, and its audience with who can attend; the
     // rest of what it picks is here.
@@ -938,7 +959,7 @@ async fn render_event_form(
         &values.audience,
     );
     let categories = ChoiceGroup::new(
-        SectionIcon::Details,
+        SectionIcon::Activities,
         "Topics and event type",
         vec![
             event_choices(
@@ -963,6 +984,9 @@ async fn render_event_form(
             ),
         ],
     )
+    .with_tags(TagInput {
+        value: values.tags.clone(),
+    })
     .errors(error.as_ref());
 
     let exchange = SubmissionExchange::find(&values.exchange).await?;
@@ -980,7 +1004,6 @@ async fn render_event_form(
         audience,
         location,
         image,
-        tags,
     };
 
     let layout = StandardLayout::new("/add/event", content)
@@ -1390,31 +1413,86 @@ pub async fn add_place_search(
 
     // Over-fetch: OSM often carries same-named entries (a city and its
     // county, a node and its relation) that render identically and are
-    // deduplicated below, so ask for more than we intend to show.
+    // deduplicated, so ask for more than we intend to show.
+    let suggestions = photon("api", &[("q", q), ("limit", "10"), ("lang", "en")]).await?;
+
+    Ok(Response::builder()
+        .content_type("application/json")
+        .body(serde_json::to_string(&suggestions)?))
+}
+
+/// GET `/add/places-near?lat=&lon=` — the places nearest the visitor, for
+/// the location picker's "use my location" button: at most five, within a
+/// kilometer, nearest first, as `/add/place-search` lists the places it
+/// finds.
+#[handler]
+#[tracing::instrument]
+pub async fn add_places_near(
+    Authenticated(user_info): Authenticated,
+    Query(point): Query<PointQuery>,
+) -> Result<Response, anyhow::Error> {
+    if user_info.is_none() {
+        return Ok(Response::builder()
+            .status(poem::http::StatusCode::UNAUTHORIZED)
+            .finish());
+    }
+
+    if !point.on_earth() {
+        return Ok(Response::builder()
+            .status(poem::http::StatusCode::BAD_REQUEST)
+            .finish());
+    }
+
+    let (lat, lon) = (point.lat.to_string(), point.lon.to_string());
+    let suggestions = photon(
+        "reverse",
+        &[
+            ("lat", lat.as_str()),
+            ("lon", lon.as_str()),
+            ("limit", "10"),
+            ("radius", "1"),
+            ("lang", "en"),
+        ],
+    )
+    .await?;
+
+    Ok(Response::builder()
+        .content_type("application/json")
+        .body(serde_json::to_string(&suggestions)?))
+}
+
+/// The suggestions a Photon endpoint (`api`, the search, or `reverse`)
+/// answers `params` with: both answer in the same GeoJSON.
+async fn photon(
+    endpoint: &str,
+    params: &[(&str, &str)],
+) -> Result<Vec<PlaceSuggestion>, anyhow::Error> {
     let response: serde_json::Value = reqwest::Client::new()
-        .get("https://photon.komoot.io/api")
-        .query(&[("q", q), ("limit", "10"), ("lang", "en")])
+        .get(format!("https://photon.komoot.io/{endpoint}"))
+        .query(params)
         .header("User-Agent", "SciStarter/1.0 (+https://scistarter.org)")
         .send()
         .await?
         .json()
         .await?;
 
-    let mut suggestions: Vec<PlaceSuggestion> = response
-        .get("features")
-        .and_then(|f| f.as_array())
-        .map(|features| features.iter().filter_map(photon_suggestion).collect())
-        .unwrap_or_default();
+    Ok(distinct_suggestions(
+        response
+            .get("features")
+            .and_then(|f| f.as_array())
+            .map(|features| features.iter().filter_map(photon_suggestion).collect())
+            .unwrap_or_default(),
+    ))
+}
 
-    // Drop suggestions the visitor couldn't tell apart: same name, kind, and
-    // context. Photon ranks better matches first, so keep the first of each.
+/// The first five of `suggestions` a visitor could tell apart: those that
+/// differ in name, kind or context. Photon ranks better matches, and nearer
+/// places, first, so the first of each is kept.
+fn distinct_suggestions(mut suggestions: Vec<PlaceSuggestion>) -> Vec<PlaceSuggestion> {
     let mut seen = std::collections::HashSet::new();
     suggestions.retain(|s| seen.insert((s.name.clone(), s.kind.clone(), s.context.clone())));
     suggestions.truncate(5);
-
-    Ok(Response::builder()
-        .content_type("application/json")
-        .body(serde_json::to_string(&suggestions)?))
+    suggestions
 }
 
 /// A short human label for what kind of place a Photon feature is, from its
@@ -1436,10 +1514,17 @@ fn photon_kind(osm_value: &str) -> String {
     }
 }
 
+/// A point, as a browser's geolocation or a picked place gives it.
 #[derive(Debug, Deserialize)]
-struct ZipLookupQuery {
+struct PointQuery {
     lat: f64,
     lon: f64,
+}
+
+impl PointQuery {
+    fn on_earth(&self) -> bool {
+        (-90.0..=90.0).contains(&self.lat) && (-180.0..=180.0).contains(&self.lon)
+    }
 }
 
 /// GET `/add/zip-lookup?lat=&lon=` — resolve coordinates to a postal code via
@@ -1452,7 +1537,7 @@ struct ZipLookupQuery {
 #[tracing::instrument]
 pub async fn add_zip_lookup(
     Authenticated(user_info): Authenticated,
-    Query(query): Query<ZipLookupQuery>,
+    Query(query): Query<PointQuery>,
 ) -> Result<Response, anyhow::Error> {
     if user_info.is_none() {
         return Ok(Response::builder()
@@ -1460,7 +1545,7 @@ pub async fn add_zip_lookup(
             .finish());
     }
 
-    if !(-90.0..=90.0).contains(&query.lat) || !(-180.0..=180.0).contains(&query.lon) {
+    if !query.on_earth() {
         return Ok(Response::builder()
             .status(poem::http::StatusCode::BAD_REQUEST)
             .finish());
@@ -1591,18 +1676,12 @@ fn photon_suggestion(feature: &serde_json::Value) -> Option<PlaceSuggestion> {
 /// links; the ticketing date; and the contact.
 fn validate_and_build(form: &AddEventForm, author: Editor) -> Result<EventAll, FormError> {
     let user_id = author.user_id;
+
+    rules::image_link(&form.image, None).map_err(refused)?;
+    let image = form.image.trim();
+
     rules::name(&form.name, None).map_err(refused)?;
     let name = form.name.trim();
-
-    let topics = form.topics.iter().collect::<BTreeSet<_>>().len();
-    if let Some(refusal) = crate::event::refuse_picks(ChoiceList::Topic, topics) {
-        return Err(FormError::at("topics", refusal));
-    }
-
-    rules::description(&form.description).map_err(refused)?;
-    let description = form.description.trim();
-
-    let mode = rules::mode(form.location_mode).map_err(refused)?;
 
     // Resolve the date/time rows that carry a start.
     let now = Zoned::now();
@@ -1627,21 +1706,25 @@ fn validate_and_build(form: &AddEventForm, author: Editor) -> Result<EventAll, F
 
     let instances = expand_recurrence(base, form)?;
 
-    let url = form.url.trim().to_string();
-
-    // What the mode requires.
-    rules::join_link(&url, mode).map_err(refused)?;
+    // Where it is held, and how people join it: the link is saved only
+    // when the form asks for it.
+    let mode = rules::mode(form.location_mode).map_err(refused)?;
+    let choice = VirtualJoin::parse(&form.virtual_join);
+    let url = rules::join(mode, choice, &form.url, &form.how_to_join)
+        .map_err(refused)?
+        .trim()
+        .to_string();
     rules::place(mode, &form.address, &form.city, &form.place_query).map_err(refused)?;
     rules::location_note(mode, &form.location_description).map_err(refused)?;
-
-    let limited = form.attendance == Attendance::Limited;
-    rules::limited_to(&form.limited_to, limited).map_err(refused)?;
-    let limited_to = if limited { form.limited_to.trim() } else { "" };
-
     rules::link(&url, None).map_err(refused)?;
 
-    rules::image_link(&form.image, None).map_err(refused)?;
-    let image = form.image.trim();
+    rules::description(&form.description).map_err(refused)?;
+    let description = form.description.trim();
+
+    let topics = form.topics.iter().collect::<BTreeSet<_>>().len();
+    if let Some(refusal) = crate::event::refuse_picks(ChoiceList::Topic, topics) {
+        return Err(FormError::at("topics", refusal));
+    }
 
     rules::ticket_link(&form.ticket_url, None).map_err(refused)?;
     let ticket_url = form.ticket_url.trim();
@@ -1654,6 +1737,10 @@ fn validate_and_build(form: &AddEventForm, author: Editor) -> Result<EventAll, F
     )
     .map_err(refused)?
     .map(TimeString::from);
+
+    let limited = form.attendance == Attendance::Limited;
+    rules::limited_to(&form.limited_to, limited).map_err(refused)?;
+    let limited_to = if limited { form.limited_to.trim() } else { "" };
 
     // The organizer contact: someone staff can ask about the event, and
     // some way to reach them.
@@ -1677,7 +1764,6 @@ fn validate_and_build(form: &AddEventForm, author: Editor) -> Result<EventAll, F
     event.presenter = form.presenter.trim().to_string();
     event.image = image.to_string();
     event.image_credit = form.image_credit.trim().to_string();
-    event.how_to_join = form.how_to_join.trim().to_string();
     event.part_of = form.part_of.trim().parse::<Ulid>().ok();
     event.ticket_url = ticket_url.to_string();
     event.cost = form.cost.trim().to_string();
@@ -1709,6 +1795,7 @@ fn validate_and_build(form: &AddEventForm, author: Editor) -> Result<EventAll, F
             longitude: &form.longitude,
             location_description: &form.location_description,
             url: &url,
+            how_to_join: &form.how_to_join,
             regions: &form.regions,
             venues: &form.venues,
         },
@@ -1742,35 +1829,35 @@ fn filter_to_vocabulary(values: &[String], vocabulary: &[&str]) -> Box<[String]>
 
 /// The add event form's control a refusal is about.
 fn refused(refusal: Refusal) -> FormError {
-    let name = match refusal.field {
-        Field::Name => "name",
-        Field::Description => "description",
-        Field::ImageLink => ImageUrlInput::NAME,
-        Field::Url => "url",
-        Field::TicketUrl => "ticket_url",
-        Field::LimitedTo => "limited_to",
-        Field::LocationMode => "location_mode",
-        Field::Address => "address",
-        Field::LocationDescription => "location_description",
-        Field::TicketingDate => "ticketing_date",
-        Field::TicketingTimezone => "ticketing_timezone",
-        Field::ContactName => "contact_name",
-        Field::ContactEmail => "contact_email",
-        Field::ContactUrl => "contact_url",
-        Field::Date(_) => return refused_in_row(refusal, 0),
-    };
-    FormError::at(name, refusal.message)
+    refused_in_row(refusal, 0)
 }
 
-/// The add event form's control in date/time row `row` a refusal is about.
+/// The add event form's controls a refusal is about, a date's in date/time
+/// row `row`.
 fn refused_in_row(refusal: Refusal, row: usize) -> FormError {
-    match refusal.field {
-        Field::Date(part) => FormError::at(
-            format!("instances[{row}][{}]", part.name()),
-            refusal.message,
-        ),
-        _ => refused(refusal),
-    }
+    let name = |field: Field| match field {
+        Field::Name => "name".to_string(),
+        Field::Description => "description".to_string(),
+        Field::ImageLink => ImageUrlInput::NAME.to_string(),
+        Field::Url => "url".to_string(),
+        Field::VirtualJoin => "virtual_join".to_string(),
+        Field::HowToJoin => "how_to_join".to_string(),
+        Field::TicketUrl => "ticket_url".to_string(),
+        Field::LimitedTo => "limited_to".to_string(),
+        Field::LocationMode => "location_mode".to_string(),
+        Field::Address => "address".to_string(),
+        Field::LocationDescription => "location_description".to_string(),
+        Field::TicketingDate => "ticketing_date".to_string(),
+        Field::TicketingTimezone => "ticketing_timezone".to_string(),
+        Field::ContactName => "contact_name".to_string(),
+        Field::ContactEmail => "contact_email".to_string(),
+        Field::ContactUrl => "contact_url".to_string(),
+        Field::Date(part) => format!("instances[{row}][{}]", part.name()),
+    };
+    refusal.also.iter().fold(
+        FormError::at(name(refusal.field), refusal.message),
+        |error, field| error.also(name(*field)),
+    )
 }
 
 /// Expand each base date/time into one or more `EventInstance`s according to
@@ -2538,19 +2625,7 @@ mod tests {
 
     #[test]
     fn an_implausible_contact_email_is_refused() {
-        let submit = |email: &str| {
-            let body = format!(
-                "name=Bioblitz&description=Count+bugs&location_mode=online\
-                 &url=https://example.org/bioblitz&repeat_frequency=once\
-                 &instances[0][begin_date]=2099-11-01&instances[0][begin_time]=10:00\
-                 &instances[0][timezone]=America/Chicago\
-                 &contact_name=Ada+Organizer&contact_email={email}"
-            );
-            let form: AddEventForm = serde_qs::Config::new(10, false)
-                .deserialize_bytes(body.as_bytes())
-                .unwrap();
-            validate_and_build(&form, test_author())
-        };
+        let submit = |email: &str| submit_event(&[("contact_email", email)]);
 
         let refused = submit("test@test").unwrap_err();
         check!(refused.is_about("contact_email"));
@@ -2579,6 +2654,18 @@ mod tests {
             refused.message
                 == "Please add the contact person's email, or a link to a contact form."
         );
+        // Either would do, so both are marked; the message is told once.
+        check!(refused.is_about("contact_url"));
+        let html = event_form(fresh_event(), Some(refused));
+        for name in ["contact_email", "contact_url"] {
+            let at = html.find(&format!(r#"name="{name}""#)).unwrap();
+            check!(html[at..at + html[at..].find('>').unwrap()].contains(r#"aria-invalid="true""#));
+        }
+        check!(html.matches("email, or a link to a contact form.").count() == 1);
+
+        // An implausible email is the email's problem alone.
+        let refused = submit_event(&[("contact_email", "test@test")]).unwrap_err();
+        check!(!refused.is_about("contact_url"));
 
         let event = submit_event(&[
             ("contact_email", ""),
@@ -2726,6 +2813,15 @@ mod tests {
         );
     }
 
+    /// What a fresh add-event form shows: one date, not repeating.
+    fn fresh_event() -> EventFormValues {
+        EventFormValues {
+            repeat_frequency: RepeatFrequency::Once.as_str().to_string(),
+            instances: vec![DateRowValues::default()],
+            ..Default::default()
+        }
+    }
+
     /// The add-event form, showing `values` and refused over `error`.
     fn event_form(values: EventFormValues, error: Option<FormError>) -> String {
         AddEventContent {
@@ -2733,23 +2829,23 @@ mod tests {
             values,
             exchange: None,
             publishes: false,
-            categories: ChoiceGroup::new(SectionIcon::Details, "Categories", Vec::new()),
+            categories: ChoiceGroup::new(SectionIcon::Activities, "Categories", Vec::new())
+                .with_tags(TagInput {
+                    value: String::new(),
+                }),
             audience: event_choices(
                 "audience",
                 ChoiceList::Audience,
                 vec![choice(ChoiceList::Audience, "families", "Families", None)],
                 &[],
             ),
-            location: picker("online").for_events(),
+            location: picker("online").for_events("", ""),
             image: ImageField {
                 label: "Image link".to_string(),
                 value: String::new(),
                 credit: None,
                 layout: ImageLayout::Cover,
                 invalid: false,
-            },
-            tags: TagInput {
-                value: String::new(),
             },
         }
         .render_once()
@@ -2763,7 +2859,92 @@ mod tests {
         check!(
             at("<legend>Who can attend?</legend>") < at("<legend>Audience (choose any)</legend>")
         );
-        check!(at("<legend>Audience (choose any)</legend>") < at("What are the details?"));
+    }
+
+    #[test]
+    fn the_sections_come_in_facebooks_order() {
+        let html = event_form(fresh_event(), None);
+        let at = |text: &str| html.find(text).unwrap();
+        let order = [
+            "Event name",
+            "Start date",
+            "Is it in person or virtual?",
+            "What are the details?",
+            // The instructions below the details, rather than as the way to
+            // join a virtual event.
+            "data-instructions-below",
+            "Categories",
+            "Organizer / presenter",
+            "Tickets / registration",
+            "Who can attend",
+            "Part of a larger event",
+            "Organizer contact",
+        ];
+        for pair in order.windows(2) {
+            check!(at(pair[0]) < at(pair[1]), "{} before {}", pair[0], pair[1]);
+        }
+    }
+
+    #[test]
+    fn who_can_attend_says_who_without_being_opened() {
+        let summary = |values: EventFormValues| {
+            let html = event_form(values, None);
+            let at = html.find("data-section-summary>").unwrap() + "data-section-summary>".len();
+            html[at..at + html[at..].find('<').unwrap()].to_string()
+        };
+        check!(summary(EventFormValues::default()) == "Open to everyone");
+        check!(
+            summary(EventFormValues {
+                limited: true,
+                ..Default::default()
+            }) == "Limited to a specific group"
+        );
+        check!(
+            summary(EventFormValues {
+                limited: true,
+                limited_to: "Library cardholders only".to_string(),
+                ..Default::default()
+            }) == "Library cardholders only"
+        );
+    }
+
+    #[test]
+    fn repetition_is_offered_under_the_first_date_alone() {
+        let mut values = fresh_event();
+        values.instances.push(DateRowValues::default());
+        let html = event_form(values, None);
+        check!(html.matches("data-repeat-toggle ").count() == 1);
+        check!(html.matches("Add end time").count() == 2);
+        // Put away until it's asked for, unless the event repeats already.
+        check!(html.contains(r#"data-repeat hidden"#));
+        let html = event_form(
+            EventFormValues {
+                repeat_frequency: "weekly".to_string(),
+                ..fresh_event()
+            },
+            None,
+        );
+        check!(html.contains(r#"data-repeat-toggle hidden"#));
+        check!(!html.contains(r#"data-repeat hidden"#));
+    }
+
+    #[test]
+    fn the_instructions_are_asked_in_one_place_at_a_time() {
+        let instructions = |mode: &str, join: &str| {
+            let html = event_form(
+                EventFormValues {
+                    location_mode: mode.to_string(),
+                    virtual_join: join.to_string(),
+                    ..Default::default()
+                },
+                None,
+            );
+            let at = html.find("data-instructions-below").unwrap();
+            html[at..at + html[at..].find('>').unwrap()].ends_with("hidden disabled")
+        };
+        check!(instructions("online", "other"));
+        check!(!instructions("online", "link"));
+        check!(!instructions("in_person", "other"));
     }
 
     #[test]
@@ -2773,6 +2954,33 @@ mod tests {
         check!(html.contains(r#"name="contact_url""#));
         check!(html.contains("Contact form link"));
         check!(html.contains("Please give an email address, a link to a contact form, or both."));
+    }
+
+    #[test]
+    fn each_way_to_reach_the_contact_is_required_until_the_other_is_given() {
+        let required = |email: &str, url: &str| {
+            let html = event_form(
+                EventFormValues {
+                    contact_email: email.to_string(),
+                    contact_url: url.to_string(),
+                    ..fresh_event()
+                },
+                None,
+            );
+            let input = |name: &str| {
+                let at = html.find(&format!(r#"name="{name}""#)).unwrap();
+                html[at..at + html[at..].find('>').unwrap()].contains(" required")
+            };
+            (input("contact_email"), input("contact_url"))
+        };
+        check!(required("", "") == (true, true));
+        check!(required("ada@example.org", "") == (true, false));
+        check!(required("", "https://example.org/contact") == (false, true));
+        // Each is marked either way, so the page can require it again.
+        let html = event_form(fresh_event(), None);
+        let at = html.find("data-one-required").unwrap();
+        check!(html[at..].find("Contact form link").is_some());
+        check!(html[at..].matches("pill-required").count() >= 2);
     }
 
     #[test]
@@ -2806,21 +3014,21 @@ mod tests {
     }
 
     #[test]
-    fn the_group_is_checked_after_the_place_and_before_the_links() {
+    fn the_group_is_checked_after_the_tickets_and_before_the_contact() {
         let limited_unnamed = [("attendance", "limited"), ("limited_to", "")];
 
         let refused = submit_event(
             &[
                 &limited_unnamed[..],
-                &[("location_mode", "region"), ("url", "example.org")],
+                &[("ticket_url", "tickets.example.org")],
             ]
             .concat(),
         )
         .unwrap_err();
-        check!(refused.is_about("location_description"));
+        check!(refused.is_about("ticket_url"));
 
         let refused =
-            submit_event(&[&limited_unnamed[..], &[("url", "example.org")]].concat()).unwrap_err();
+            submit_event(&[&limited_unnamed[..], &[("contact_name", "")]].concat()).unwrap_err();
         check!(refused.is_about("limited_to"));
     }
 
@@ -2832,6 +3040,7 @@ mod tests {
             ("name", "Bioblitz".to_string()),
             ("description", "Count bugs".to_string()),
             ("location_mode", "online".to_string()),
+            ("virtual_join", "link".to_string()),
             ("url", "https://example.org/bioblitz".to_string()),
             ("repeat_frequency", "once".to_string()),
             ("instances[0][begin_date]", "2099-11-01".to_string()),
@@ -3151,7 +3360,7 @@ mod tests {
             None,
         );
         let html = picker("in_person")
-            .for_events()
+            .for_events("", "")
             .with_venues(venues)
             .render_once()
             .unwrap();
@@ -3178,11 +3387,14 @@ mod tests {
             html[at..at + html[at..].find('>').unwrap()].to_string()
         };
 
-        let online_event = picker("online").for_events().render_once().unwrap();
+        let online_event = picker("online").for_events("", "").render_once().unwrap();
         check!(note(&online_event).contains(" data-no-online-note"));
         check!(note(&online_event).ends_with(" hidden"));
 
-        let in_person_event = picker("in_person").for_events().render_once().unwrap();
+        let in_person_event = picker("in_person")
+            .for_events("", "")
+            .render_once()
+            .unwrap();
         check!(note(&in_person_event).contains(" data-no-online-note"));
         check!(!note(&in_person_event).ends_with(" hidden"));
 
@@ -3190,6 +3402,41 @@ mod tests {
         let online_project = picker("online").render_once().unwrap();
         check!(!note(&online_project).contains("data-no-online-note"));
         check!(!note(&online_project).ends_with(" hidden"));
+    }
+
+    /// The attributes of the `<fieldset>` holding the field of join choice
+    /// `choice`.
+    fn join_field(html: &str, choice: &str) -> String {
+        let at = html.find(&format!(r#"data-join="{choice}""#)).unwrap();
+        html[at..at + html[at..].find('>').unwrap()].to_string()
+    }
+
+    #[test]
+    fn a_virtual_event_is_asked_how_people_join() {
+        let html = picker("online").for_events("", "").render_once().unwrap();
+        check!(html.matches(r#"name="virtual_join""#).count() == 2);
+        check!(html.contains("External link"));
+        check!(html.contains("Include clear instructions on how to participate."));
+        // Neither field is open, or submitted, until its choice is made, and
+        // the link shared with the other modes isn't asked of a virtual event.
+        check!(join_field(&html, "link").ends_with("hidden disabled"));
+        check!(join_field(&html, "other").ends_with("hidden disabled"));
+        check!(html.contains(r#"data-mode="in_person region anywhere" hidden disabled"#));
+
+        let html = picker("online")
+            .for_events("other", "Dial 555-0100")
+            .render_once()
+            .unwrap();
+        check!(!join_field(&html, "other").ends_with("hidden disabled"));
+        check!(join_field(&html, "link").ends_with("hidden disabled"));
+        check!(html.contains("Dial 555-0100</textarea>"));
+    }
+
+    #[test]
+    fn a_project_is_not_asked_how_people_join() {
+        let html = picker("online").render_once().unwrap();
+        check!(!html.contains(r#"name="virtual_join""#));
+        check!(html.matches(r#"name="url""#).count() == 1);
     }
 
     #[test]
@@ -3202,10 +3449,10 @@ mod tests {
     }
 
     #[test]
-    fn the_toggle_is_in_person_or_online() {
-        let html = picker("").for_events().render_once().unwrap();
-        check!(html.contains("Is it in person or online?"));
-        for (value, label) in [("in_person", "In person"), ("online", "Online")] {
+    fn the_toggle_is_in_person_or_virtual() {
+        let html = picker("").for_events("", "").render_once().unwrap();
+        check!(html.contains("Is it in person or virtual?"));
+        for (value, label) in [("in_person", "In person"), ("online", "Virtual")] {
             let radio = toggle_radio(&html, value).unwrap();
             check!(radio.contains(" required"));
             check!(!radio.contains(" checked"));
@@ -3225,14 +3472,14 @@ mod tests {
     #[test]
     fn the_toggle_shows_in_person_for_a_region_or_anywhere() {
         for mode in ["region", "anywhere"] {
-            let html = picker(mode).for_events().render_once().unwrap();
+            let html = picker(mode).for_events("", "").render_once().unwrap();
             let radio = toggle_radio(&html, mode).unwrap();
             check!(radio.contains(" data-in-person"), "{mode}");
             check!(radio.contains(" checked"), "{mode}");
             check!(toggle_radio(&html, "in_person").is_none(), "{mode}");
         }
 
-        let html = picker("anywhere").for_events().render_once().unwrap();
+        let html = picker("anywhere").for_events("", "").render_once().unwrap();
         check!(
             html.contains(r#"<p class="field-help" data-only-mode="anywhere" >People take part"#)
         );
@@ -3248,7 +3495,7 @@ mod tests {
             "Please choose where the event takes place.",
         );
         let html = picker("")
-            .for_events()
+            .for_events("", "")
             .errors(Some(&error))
             .render_once()
             .unwrap();

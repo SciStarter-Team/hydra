@@ -3,7 +3,9 @@
 <% let parts = self.parts; %>
 <% let changed = self.changed; %>
 <% let error = self.error; %>
-<% let shown = self.can_edit || self.entirely_online || self.also_online || self.region_geojson.is_some() || parts.iter().any(|part| !part.empty); %>
+<% use crate::project::location::LocationMode; %>
+<% let online = self.mode == Some(LocationMode::Online); %>
+<% let shown = self.can_edit || self.mode.is_some() || self.also_online || self.region_geojson.is_some() || parts.iter().any(|part| !part.empty); %>
 <div id="event-location">
   <% if shown { %>
   <div class="border border-linework rounded-sm bg-primary-light mb-4">
@@ -37,16 +39,24 @@
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-3.5 h-3.5 fill-gray-500"><path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1 0 32c0 8.8 7.2 16 16 16l32 0zM362.7 18.7L348.3 33.2 420.2 105.1 434.7 90.6c0 0 0 0 0 0L462.5 62.8c4-4 6.2-9.2 6.7-14.6l.3-3.9c.4-5.5-1.3-11-4.8-15.4-3.3-4.2-7.9-7-13.1-7.8l-3.9-.6c-5.5-.8-11.1 .6-15.4 3.9L409.7 42.6 362.7 18.7z"/></svg>
         </button>
         <% } %>
+        <%# The mode, where it says where the event is held: an event held
+            at an address or across an area says so by its parts. %>
+        <% if online { %>
+        <p class="mb-2 font-semibold">Virtual</p>
+        <% } else if self.mode == Some(LocationMode::Anywhere) { %>
+        <p class="mb-2 font-semibold">Anywhere on the planet</p>
+        <% } %>
         <%# Only the parts the event has: the location form, which edits them
-            together, names each. The first part says whether it's online,
-            and an online event has no other parts to show. %>
-        <% for (i, part) in parts.into_iter().enumerate() { %>
-        <% if !part.empty && (i == 0 || !self.entirely_online) { %>
+            together, names each. A virtual event has no others to show. %>
+        <% if !online { %>
+        <% for part in parts { %>
+        <% if !part.empty { %>
         <%+ part %>
         <% } %>
         <% } %>
+        <% } %>
         <% if self.also_online { %>
-        <p class="mb-2">and online</p>
+        <p class="mb-2">and virtual</p>
         <% } %>
         <% if self.has_point { %>
         <button class="btn btn-primary btn-thin btn-icon" hx-get="/-detail/<%= &self.target_id %>/map" hx-target="body" hx-swap="beforeend">

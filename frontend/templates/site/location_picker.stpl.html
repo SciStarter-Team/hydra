@@ -8,7 +8,13 @@
     its radio submits whichever of the three is chosen. %>
 <% let in_person_toggled = self.mode == "in_person" || region_active || anywhere_active; %>
 <% let in_person_value = if region_active || anywhere_active { self.mode.as_str() } else { "in_person" }; %>
-<% let toggle = [("in_person", "In person"), ("online", "Online")]; %>
+<% let toggle = [("in_person", "In person"), ("online", "Virtual")]; %>
+<%# An event asks how people join it when it's virtual, at a link or by
+    instructions, and asks its link there; anything else is asked its link
+    with the fields every mode shares. %>
+<% let asks_join = self.offers_event_modes; %>
+<% let join_link = self.virtual_join == "link"; %>
+<% let join_other = self.virtual_join == "other"; %>
 <%# Taken out of `self` up front: rendering the region editor consumes it. %>
 <% let error = self.error.clone(); %>
 <% let error = error.as_ref(); %>
@@ -17,7 +23,7 @@
 <% let invalid_attrs = |field: &str| if error.is_some_and(|e| e.is_about(field)) { format!(r#" aria-invalid="true" aria-describedby="{}""#, FormError::ELEMENT_ID) } else { String::new() }; %>
 <div data-location-picker class="space-y-2">
   <fieldset class="choice-group location-toggle">
-    <legend>Is it in person or online?<span class="pill-required" aria-hidden="true"> *</span></legend>
+    <legend>Is it in person or virtual?<span class="pill-required" aria-hidden="true"> *</span></legend>
     <div class="toggle-options">
       <% for (value, label) in toggle { %>
       <% let in_person = value == "in_person"; %>
@@ -38,24 +44,34 @@
       don't submit) whenever that mode isn't selected. %>
   <fieldset class="location-fields space-y-2 border-0 p-0 m-0" data-mode="in_person" <% if !inperson_active { %>hidden disabled<% } %>>
     <div class="place-search" data-place-search>
-      <div class="pill-field">
-        <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
-        <label class="pill-body">
-          <%# An address or a city is required in person, but not as
-              `required`: typing them into the details below does as well as
-              picking here. The marks show only while this fieldset does. %>
-          <span class="pill-label">Add a place or address<span class="pill-required" aria-hidden="true"> *</span></span>
-          <%# The address the in-person check wants is set by picking here, so
-              an error about it marks this, the control a visitor sees. What
-              is left typed here is submitted only so that the refusal can
-              say it went unused, and so it is still here to pick from. %>
-          <input id="place-search-input" type="search" name="place_query" value="<%= self.place_query %>" placeholder=" " aria-required="true"
-            autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"
-            aria-controls="place-search-results"<%- invalid_attrs("address") %>>
-        </label>
+      <div class="place-search-row">
+        <div class="pill-field">
+          <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+          <label class="pill-body">
+            <%# An address or a city is required in person, but not as
+                `required`: typing them into the details below does as well as
+                picking here. The marks show only while this fieldset does. %>
+            <span class="pill-label">Add a place or address<span class="pill-required" aria-hidden="true"> *</span></span>
+            <%# The address the in-person check wants is set by picking here, so
+                an error about it marks this, the control a visitor sees. What
+                is left typed here is submitted only so that the refusal can
+                say it went unused, and so it is still here to pick from. %>
+            <input id="place-search-input" type="search" name="place_query" value="<%= self.place_query %>" placeholder=" " aria-required="true"
+              autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"
+              aria-controls="place-search-results"<%- invalid_attrs("address") %>>
+          </label>
+        </div>
+        <%# The places around the visitor, for an event added from its venue,
+            as Facebook's location button finds them. Shown by
+            js/location-picker.js where the browser can say where the
+            visitor is. %>
+        <button type="button" class="locate-btn" data-locate aria-label="Find places near my location" title="Find places near my location" hidden>
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.7 2.3a1 1 0 0 0-1.06-.23l-18 7a1 1 0 0 0 .05 1.88l7.6 2.55 2.56 7.6a1 1 0 0 0 .92.68h.03a1 1 0 0 0 .93-.64l7-18a1 1 0 0 0-.03-.84z"/></svg>
+        </button>
       </div>
       <ul id="place-search-results" class="place-search-results" role="listbox" aria-label="Places" hidden></ul>
       <span class="sr-only" aria-live="polite" data-place-status></span>
+      <p class="field-help" data-locate-problem hidden></p>
     </div>
 
     <input type="hidden" name="latitude" value="<%= self.latitude %>">
@@ -110,24 +126,69 @@
   <button type="button" class="link-btn" data-mode-link="in_person" data-only-mode="anywhere" <% if !anywhere_active { %>hidden<% } %>>Back to a single place</button>
   <% } %>
 
+  <%# How people join a virtual event, as Facebook asks it: at a link, or
+      by instructions ("Other"). Each choice is a card, and opens its field
+      under it; a field whose choice isn't made is disabled, so that it
+      doesn't submit. %>
+  <% if asks_join { %>
+  <fieldset class="location-fields choice-group option-cards border-0 p-0 m-0" data-mode="online" data-virtual-join <% if !online_active { %>hidden disabled<% } %>>
+    <legend class="sr-only">How people join<span aria-hidden="true"> *</span></legend>
+    <label class="option-card">
+      <span class="option-card-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+      </span>
+      <span class="option-card-text">
+        <span class="option-card-title">External link</span>
+        <span class="option-card-description">Add a link so people know where to go when your event starts.</span>
+      </span>
+      <input type="radio" name="virtual_join" value="link" required<%- invalid_attrs("virtual_join") %><% if join_link { %> checked<% } %>>
+    </label>
+    <fieldset class="option-card-field border-0 p-0 m-0" data-join="link" <% if !join_link { %>hidden disabled<% } %>>
+      <%+ FloatingField::new(FieldKind::Url, "url", "Event link", self.url.as_str()).id("join-link").hint("https://").required().errors(error) %>
+    </fieldset>
+    <label class="option-card">
+      <span class="option-card-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="11"/><circle cx="7.5" cy="12" r="1.5" fill="#fff"/><circle cx="12" cy="12" r="1.5" fill="#fff"/><circle cx="16.5" cy="12" r="1.5" fill="#fff"/></svg>
+      </span>
+      <span class="option-card-text">
+        <span class="option-card-title">Other</span>
+        <span class="option-card-description">Include clear instructions on how to participate.</span>
+      </span>
+      <input type="radio" name="virtual_join" value="other" required<%- invalid_attrs("virtual_join") %><% if join_other { %> checked<% } %>>
+    </label>
+    <fieldset class="option-card-field border-0 p-0 m-0" data-join="other" <% if !join_other { %>hidden disabled<% } %>>
+      <%+ FloatingField::new(FieldKind::TextArea { rows: 3 }, "how_to_join", "How to join / participate", self.how_to_join.as_str()).id("join-instructions").required().errors(error) %>
+    </fieldset>
+  </fieldset>
+  <% } %>
+
   <%# Fields meaningful in every mode, held back until the "in person or
       virtual?" question is answered so the section starts as one control. %>
   <div class="space-y-2" data-location-common <% if self.mode.is_empty() { %>hidden<% } %>>
+    <% if asks_join { %>
+    <%# An event's link, when it's held somewhere; a virtual one's is asked
+        as its way to join, above. %>
+    <fieldset class="location-fields space-y-2 border-0 p-0 m-0" data-mode="in_person region anywhere" <% if online_active { %>hidden disabled<% } %>>
+      <%+ FloatingField::new(FieldKind::Url, "url", "Event link", self.url.as_str()).id("add-url").hint("https://").described_by("add-url-help").errors(error) %>
+      <p id="add-url-help" class="field-help">A website, registration page, or livestream link.</p>
+    </fieldset>
+    <% } else { %>
     <div data-url-field
       data-online-label="Join link"
       data-online-help="The link people use to join or participate online."
       data-default-label="Link / URL"
       data-default-help="A website, registration page, or livestream link.">
-      <%# Required for an event joined online, which is refused without it;
+      <%# Required for a project joined online, which is refused without it;
           js/location-picker.js moves the marks as the mode changes. %>
       <div class="pill-field">
         <label class="pill-body">
           <span class="pill-label"><span class="url-label"><% if online_active { %>Join link<% } else { %>Link / URL<% } %></span><span class="pill-required url-required" aria-hidden="true" <% if !online_active { %>hidden<% } %>> *</span></span>
-          <input id="add-url" type="url" name="url" value="<%= self.url %>" placeholder=" "<% if online_active { %> required<% } %><% if url_invalid { %> aria-invalid="true" aria-describedby="<%= FormError::ELEMENT_ID %> add-url-help"<% } else { %> aria-describedby="add-url-help"<% } %>>
+          <input id="add-url" type="url" name="url" value="<%= self.url %>" placeholder="https://"<% if online_active { %> required<% } %><% if url_invalid { %> aria-invalid="true" aria-describedby="<%= FormError::ELEMENT_ID %> add-url-help"<% } else { %> aria-describedby="add-url-help"<% } %>>
         </label>
       </div>
       <p id="add-url-help" class="field-help url-help"><% if online_active { %>The link people use to join or participate online.<% } else { %>A website, registration page, or livestream link.<% } %></p>
     </div>
+    <% } %>
 
     <%# A location note (the area for a region, or a "meet at the north
         entrance"-style note), meaningful in every mode a place is joined in

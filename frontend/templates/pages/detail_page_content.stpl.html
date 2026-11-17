@@ -162,7 +162,7 @@
       <% } %>
 
       <% if self.kind.is_event() { %>
-      <%+ crate::component::detail_page_edit::EventLocationDisplay::new(self.target_id.to_string(), self.can_edit, |part| self.field(part), self.entirely_online, self.also_online, self.has_point, self.region_geojson.clone()) %>
+      <%+ crate::component::detail_page_edit::EventLocationDisplay::new(self.target_id.to_string(), self.can_edit, |part| self.field(part), &self.location_type, self.entirely_online, self.also_online, self.has_point, self.region_geojson.clone()) %>
       <% } else { %>
       <% if !self.location_name.is_empty() || !self.regions_description.is_empty() || !self.location_description.is_empty() || !self.address.is_empty() || !self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty() || self.entirely_online || self.also_online || self.can_edit { %>
       <div class="border border-linework rounded-sm bg-primary-light mb-4">

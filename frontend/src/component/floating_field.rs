@@ -18,11 +18,17 @@ pub struct FloatingField {
     value: String,
     id: Option<String>,
     required: bool,
+    /// Whether a required field is, for now, not required: another that will
+    /// do as well has been answered. It is still marked, so that the page's
+    /// script can require it again, but the mark is hidden while the control
+    /// isn't `required`.
+    waived: bool,
     icon: Option<FieldIcon>,
     autocomplete: Option<&'static str>,
     description_id: Option<&'static str>,
     invalid: bool,
     limit: Option<usize>,
+    hint: Option<&'static str>,
 }
 
 impl FloatingField {
@@ -39,11 +45,13 @@ impl FloatingField {
             value: value.into(),
             id: None,
             required: false,
+            waived: false,
             icon: None,
             autocomplete: None,
             description_id: None,
             invalid: false,
             limit: None,
+            hint: None,
         }
     }
 
@@ -56,6 +64,15 @@ impl FloatingField {
 
     pub fn required(mut self) -> Self {
         self.required = true;
+        self
+    }
+
+    /// Require the field unless `answered_elsewhere`: it is one of a group
+    /// of fields any of which will do, and another of them has a value. The
+    /// group's script requires it again once none does.
+    pub fn required_unless(mut self, answered_elsewhere: bool) -> Self {
+        self.required = true;
+        self.waived = answered_elsewhere;
         self
     }
 
@@ -85,6 +102,19 @@ impl FloatingField {
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit);
         self
+    }
+
+    /// Show `hint` in the empty field while it has focus, once the label has
+    /// moved out of its way: what a value looks like, such as "https://".
+    pub fn hint(mut self, hint: &'static str) -> Self {
+        self.hint = Some(hint);
+        self
+    }
+
+    /// The control's placeholder: the hint, or a blank one, since either is
+    /// what `:placeholder-shown` keys the label's resting position on.
+    fn placeholder(&self) -> &'static str {
+        self.hint.unwrap_or(" ")
     }
 
     /// The count of the value's characters, against the field's limit.
@@ -120,13 +150,15 @@ impl FloatingField {
 }
 
 /// Why a submitted form was refused: a message for the visitor and, where the
-/// problem is one control's, that control's `name`. The form shows the message
-/// at its top (element id [`FormError::ELEMENT_ID`], focused on load) and marks
-/// the control `aria-invalid`, described by the message.
+/// problem is one control's, that control's `name`, with any others it
+/// implicates (either of which would fix it). The form shows the message once,
+/// at its top (element id [`FormError::ELEMENT_ID`], focused on load), and
+/// marks each control it is about `aria-invalid`, described by the message.
 #[derive(Debug, Clone)]
 pub struct FormError {
     pub message: String,
     field: Option<String>,
+    also: Vec<String>,
 }
 
 impl FormError {
@@ -137,7 +169,14 @@ impl FormError {
         FormError {
             message: message.into(),
             field: Some(field.into()),
+            also: Vec::new(),
         }
+    }
+
+    /// Implicate the control named `field` as well.
+    pub fn also(mut self, field: impl Into<String>) -> Self {
+        self.also.push(field.into());
+        self
     }
 
     /// An error about the submission as a whole.
@@ -145,12 +184,14 @@ impl FormError {
         FormError {
             message: message.into(),
             field: None,
+            also: Vec::new(),
         }
     }
 
-    /// Whether this error is about the control named `field`.
+    /// Whether this error is about the control named `field`: the one it
+    /// names, or another it implicates.
     pub fn is_about(&self, field: &str) -> bool {
-        self.field.as_deref() == Some(field)
+        self.field.as_deref() == Some(field) || self.also.iter().any(|also| also == field)
     }
 }
 

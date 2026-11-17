@@ -1,6 +1,6 @@
 <% use crate::component::floating_field::{FieldIcon, FieldKind, FloatingField}; %>
 <% use crate::add::{SectionIcon, SectionSummary}; %>
-<% use crate::component::{date_row::DateRowFields, timezone_field::TimezoneField}; %>
+<% use crate::component::{date_row::{DateRowFields, RepeatChip}, timezone_field::TimezoneField}; %>
 <% let error = self.error.as_ref(); %>
 <% let repeating = self.values.repeat_frequency != "once"; %>
 <div class="ss-container !pt-8 !pb-12 mx-auto">
@@ -27,6 +27,7 @@
         <%+ self.image %>
       </div>
 
+      <%# The name, when and where, in the order of Facebook's event form. %>
       <div class="add-area add-area-main">
         <%+ FloatingField::new(FieldKind::Text, "name", "Event name", self.values.name.as_str()).id("event-name").required().limit(crate::event::rules::NAME_LIMIT).errors(error) %>
 
@@ -34,18 +35,24 @@
           <% for (i, inst) in self.values.instances.iter().enumerate() { %>
             <fieldset class="instance-row">
               <legend class="sr-only instance-legend">Date and time <%= i + 1 %></legend>
-              <%+ DateRowFields::new(format!("instances[{i}]"), inst.clone()).errors(error) %>
+              <%# Repetition repeats every date, so it's offered under the
+                  first alone. %>
+              <% let row = DateRowFields::new(format!("instances[{i}]"), inst.clone()).errors(error); %>
+              <% if i == 0 { %>
+              <%+ row.with_repeat(RepeatChip { shown: repeating }) %>
+              <% } else { %>
+              <%+ row %>
+              <% } %>
 
               <button type="button" class="link-btn remove-instance" aria-label="Remove date and time <%= i + 1 %>" <% if i == 0 { %>hidden<% } %>>Remove this date</button>
             </fieldset>
           <% } %>
         </div>
 
-        <button type="button" id="add-instance" class="link-btn">+ Add another date/time</button>
-
-        <%# Repetition belongs with the dates it repeats; "Repeat until"
-            appears once there's something to repeat. %>
-        <div class="space-y-2" data-repeat>
+        <%# Repetition, for every date above, once "Repeat event" is chosen
+            (or the event repeats already); "Repeat until" appears once
+            there's something to repeat. %>
+        <div class="space-y-2" data-repeat <% if !repeating { %>hidden<% } %>>
           <div class="field-pair">
             <div class="pill-field">
               <label class="pill-body">
@@ -64,38 +71,12 @@
             </div>
           </div>
           <p id="repeat-help" class="field-help" data-repeat-only <% if !repeating { %>hidden<% } %>>Each date/time above repeats at this frequency through the &ldquo;repeat until&rdquo; date.</p>
+          <button type="button" class="link-btn" data-repeat-off>Don&rsquo;t repeat</button>
         </div>
+
+        <button type="button" id="add-instance" class="link-btn">+ Add another date/time</button>
 
         <%+ self.location %>
-
-        <%# Open to everyone unless the organizer says otherwise; a limited
-            event says who is eligible, which the event page and the finder's
-            cards show. Choosing to limit it reveals that field and moves
-            there; the server reads the field only then. The hint describes
-            the question and the field alike. %>
-        <div class="space-y-2" data-attendance>
-          <fieldset class="choice-group" aria-describedby="attendance-help"
-            hx-on:change="var field = this.closest('[data-attendance]').querySelector('[data-limited-only]'), limited = event.target.value === 'limited'; field.hidden = !limited; if (limited) field.querySelector('input').focus();">
-            <legend>Who can attend?</legend>
-            <div class="toggle-options">
-              <label class="toggle-option">
-                <input type="radio" name="attendance" value="open"<% if !self.values.limited { %> checked<% } %>>
-                <span>Open to everyone</span>
-              </label>
-              <label class="toggle-option">
-                <input type="radio" name="attendance" value="limited"<% if self.values.limited { %> checked<% } %>>
-                <span>Limited to a specific group</span>
-              </label>
-            </div>
-          </fieldset>
-          <p id="attendance-help" class="field-help">If your event is limited to a specific group, tell people who can attend. For example, &ldquo;Library cardholders only,&rdquo; &ldquo;Open to K&ndash;12 teachers,&rdquo; or &ldquo;For members of our book club.&rdquo;</p>
-          <div data-limited-only <% if !self.values.limited { %>hidden<% } %>>
-            <%+ FloatingField::new(FieldKind::Text, "limited_to", "Who is eligible to attend?", self.values.limited_to.as_str()).id("limited-to").required().limit(crate::event::rules::LIMITED_TO_LIMIT).described_by("attendance-help").errors(error) %>
-          </div>
-        </div>
-
-        <%# Who the event is for, asked with who can attend it. %>
-        <%+ self.audience %>
       </div>
 
       <div class="add-area add-area-details">
@@ -103,22 +84,37 @@
 
         <p id="review-note" class="field-help">Your event will be reviewed by SciStarter staff before it appears on the public calendar.</p>
 
-        <div class="add-more-fields">
-          <%+ FloatingField::new(FieldKind::Text, "presenter", "Organizer / presenter", self.values.presenter.as_str()) %>
-          <%+ self.tags %>
-          <%+ FloatingField::new(FieldKind::TextArea { rows: 3 }, "how_to_join", "How to join / participate", self.values.how_to_join.as_str()) %>
-        </div>
+        <%# A virtual event joined by instructions has them asked above, as
+            its answer to how people join; js/location-picker.js moves what
+            was typed between the two, and keeps this one from submitting
+            while it's asked there. %>
+        <% let instructions_above = self.values.location_mode == "online" && self.values.virtual_join == "other"; %>
+        <fieldset class="border-0 p-0 m-0" data-instructions-below <% if instructions_above { %>hidden disabled<% } %>>
+          <%+ FloatingField::new(FieldKind::TextArea { rows: 3 }, "how_to_join", "How to join / participate", self.values.how_to_join.as_str()).errors(error) %>
+        </fieldset>
       </div>
 
-      <%# The optional sections, collapsed: ticketing first, where Facebook's
-          form has it, then SciStarter's own. %>
+      <%# The optional sections, collapsed, in the order of Facebook's form
+          (its "Market your event", "Add co-hosts" and "Add tickets"), then
+          SciStarter's own. %>
       <div class="add-sections">
-        <details class="add-section" <% if !self.values.ticketing_date.is_empty() || !self.values.ticket_url.is_empty() || !self.values.cost.is_empty() { %>open<% } %>>
-          <%+ SectionSummary::new(SectionIcon::Ticket, "Ticketing / registration") %>
+        <%+ self.categories %>
+
+        <details class="add-section" <% if !self.values.presenter.is_empty() { %>open<% } %>>
+          <%+ SectionSummary::new(SectionIcon::Presenter, "Organizer / presenter") %>
           <div class="add-section-body">
-            <%+ FloatingField::new(FieldKind::Url, "ticket_url", "Ticket / registration link", self.values.ticket_url.as_str()).described_by("ticket-cost-help").errors(error) %>
-            <%+ FloatingField::new(FieldKind::Text, "cost", "Cost", self.values.cost.as_str()).described_by("ticket-cost-help").errors(error) %>
-            <p id="ticket-cost-help" class="field-help">Where people get tickets or register, if that isn&rsquo;t the event&rsquo;s own link, and what it costs to attend, such as &ldquo;Free&rdquo; or &ldquo;$10 suggested donation.&rdquo;</p>
+            <%+ FloatingField::new(FieldKind::Text, "presenter", "Organizer / presenter", self.values.presenter.as_str()).described_by("presenter-help") %>
+            <p id="presenter-help" class="field-help">Who is hosting or presenting the event, as it should appear on the event page.</p>
+          </div>
+        </details>
+
+        <details class="add-section" <% if !self.values.ticketing_date.is_empty() || !self.values.ticket_url.is_empty() || !self.values.cost.is_empty() { %>open<% } %>>
+          <%+ SectionSummary::new(SectionIcon::Ticket, "Tickets / registration") %>
+          <div class="add-section-body">
+            <p class="field-help">Add a link to an external website to get tickets or register.</p>
+            <%+ FloatingField::new(FieldKind::Url, "ticket_url", "Ticket / registration link", self.values.ticket_url.as_str()).hint("https://").errors(error) %>
+            <%+ FloatingField::new(FieldKind::Text, "cost", "Cost", self.values.cost.as_str()).described_by("cost-help").errors(error) %>
+            <p id="cost-help" class="field-help">What it costs to attend, such as &ldquo;Free&rdquo; or &ldquo;$10 suggested donation.&rdquo;</p>
             <p id="ticketing-help" class="field-help">If tickets or registration open at a specific time, set it here.</p>
             <div class="when-grid">
               <%+ FloatingField::new(FieldKind::Date, "ticketing_date", "Opens on", self.values.ticketing_date.as_str()).icon(FieldIcon::Calendar).described_by("ticketing-help").errors(error) %>
@@ -128,7 +124,39 @@
           </div>
         </details>
 
-        <%+ self.categories %>
+        <%# Not a question Facebook asks. Open to everyone unless the
+            organizer says otherwise; a limited event says who is eligible,
+            which the event page and the finder's cards show. Choosing to
+            limit it reveals that field and moves there; the server reads the
+            field only then. The summary says which, so it can be checked
+            without opening the section. %>
+        <% let attendance = if !self.values.limited { "Open to everyone" } else if self.values.limited_to.trim().is_empty() { "Limited to a specific group" } else { self.values.limited_to.trim() }; %>
+        <details class="add-section" data-attendance>
+          <%+ SectionSummary::new(SectionIcon::Audience, "Who can attend").summary(attendance) %>
+          <div class="add-section-body">
+            <fieldset class="choice-group" aria-describedby="attendance-help">
+              <legend>Who can attend?</legend>
+              <div class="toggle-options">
+                <label class="toggle-option">
+                  <input type="radio" name="attendance" value="open"<% if !self.values.limited { %> checked<% } %>>
+                  <span>Open to everyone</span>
+                </label>
+                <label class="toggle-option">
+                  <input type="radio" name="attendance" value="limited"<% if self.values.limited { %> checked<% } %>>
+                  <span>Limited to a specific group</span>
+                </label>
+              </div>
+            </fieldset>
+            <p id="attendance-help" class="field-help">If your event is limited to a specific group, tell people who can attend. For example, &ldquo;Library cardholders only,&rdquo; &ldquo;Open to K&ndash;12 teachers,&rdquo; or &ldquo;For members of our book club.&rdquo;</p>
+            <div data-limited-only <% if !self.values.limited { %>hidden<% } %>>
+              <%+ FloatingField::new(FieldKind::Text, "limited_to", "Who is eligible to attend?", self.values.limited_to.as_str()).id("limited-to").required().limit(crate::event::rules::LIMITED_TO_LIMIT).described_by("attendance-help").errors(error) %>
+            </div>
+
+            <%# Who the event is for, read together with who may come: an
+                event open to everyone can still be aimed at families. %>
+            <%+ self.audience %>
+          </div>
+        </details>
 
         <details class="add-section" <% if !self.values.part_of.is_empty() { %>open<% } %>>
           <%+ SectionSummary::new(SectionIcon::Umbrella, "Part of a larger event") %>
@@ -168,10 +196,14 @@
             <p id="contact-help" class="field-help">Who should SciStarter staff contact about this event? It isn&rsquo;t shown on the event page.</p>
             <%+ FloatingField::new(FieldKind::Text, "contact_name", "Contact name", self.values.contact_name.as_str()).autocomplete("name").required().described_by("contact-help").errors(error) %>
             <%# Either reaches them; an organization that publishes no address
-                may have a contact form instead. %>
-            <div class="field-pair">
-              <%+ FloatingField::new(FieldKind::Email, "contact_email", "Email", self.values.contact_email.as_str()).autocomplete("email").described_by("contact-reach-help").errors(error) %>
-              <%+ FloatingField::new(FieldKind::Url, "contact_url", "Contact form link", self.values.contact_url.as_str()).autocomplete("url").described_by("contact-reach-help").errors(error) %>
+                may have a contact form instead. So each is required, and
+                marked so, until the other is given. %>
+            <% let has_email = !self.values.contact_email.trim().is_empty(); %>
+            <% let has_url = !self.values.contact_url.trim().is_empty(); %>
+            <div class="field-pair" data-one-required
+                 hx-on:input="var fields = this.querySelectorAll('input'); fields.forEach(function (field) { field.required = Array.prototype.every.call(fields, function (other) { return other === field || !other.value.trim(); }); })">
+              <%+ FloatingField::new(FieldKind::Email, "contact_email", "Email", self.values.contact_email.as_str()).autocomplete("email").required_unless(has_url).described_by("contact-reach-help").errors(error) %>
+              <%+ FloatingField::new(FieldKind::Url, "contact_url", "Contact form link", self.values.contact_url.as_str()).autocomplete("url").required_unless(has_email).described_by("contact-reach-help").errors(error) %>
             </div>
             <p id="contact-reach-help" class="field-help">Please give an email address, a link to a contact form, or both.</p>
             <%+ FloatingField::new(FieldKind::Text, "contact_affiliation", "Affiliation", self.values.contact_affiliation.as_str()).autocomplete("organization") %>
@@ -203,7 +235,7 @@
     // server ignores the date while it doesn't.
     var repeat = document.querySelector("[data-repeat]");
     var frequency = repeat.querySelector('select[name="repeat_frequency"]');
-    frequency.addEventListener("change", function () {
+    function repeatUntilShown() {
       var repeating = frequency.value !== "once";
       repeat.querySelectorAll("[data-repeat-only]").forEach(function (el) { el.hidden = !repeating; });
       if (repeating) {
@@ -211,7 +243,47 @@
       } else {
         frequency.removeAttribute("aria-describedby");
       }
+    }
+    frequency.addEventListener("change", repeatUntilShown);
+
+    // "Repeat event", under the first date, shows the repetition; "Don't
+    // repeat" puts it away, repeating no more. Each hides the control that
+    // was used, so focus moves to the one that takes its place.
+    var repeatToggle = document.querySelector("[data-repeat-toggle]");
+    repeatToggle.addEventListener("click", function () {
+      repeat.hidden = false;
+      repeatToggle.hidden = true;
+      frequency.focus();
     });
+    repeat.querySelector("[data-repeat-off]").addEventListener("click", function () {
+      frequency.value = "once";
+      repeat.querySelector('input[name="repeat_until"]').value = "";
+      repeatUntilShown();
+      repeat.hidden = true;
+      repeatToggle.hidden = false;
+      repeatToggle.focus();
+    });
+
+    // Who can attend: limiting the event reveals who it's limited to, and
+    // moves there; the section's summary says which, as it's answered.
+    var attendance = document.querySelector("[data-attendance]");
+    var limitedOnly = attendance.querySelector("[data-limited-only]");
+    var limitedTo = limitedOnly.querySelector("input");
+    var attendanceSummary = attendance.querySelector("[data-section-summary]");
+    function summarizeAttendance() {
+      var limited = attendance.querySelector('input[name="attendance"][value="limited"]').checked;
+      attendanceSummary.textContent = !limited
+        ? "Open to everyone"
+        : limitedTo.value.trim() || "Limited to a specific group";
+    }
+    attendance.addEventListener("change", function (e) {
+      if (e.target.name !== "attendance") return;
+      var limited = e.target.value === "limited";
+      limitedOnly.hidden = !limited;
+      if (limited) limitedTo.focus();
+      summarizeAttendance();
+    });
+    limitedTo.addEventListener("input", summarizeAttendance);
 
     // Events are added ahead of time, so dates the event itself happens on
     // start from today (the visitor's today; the server checks again in the
@@ -274,6 +346,9 @@
         sel.selectedIndex = 0;
         delete sel.dataset.userSet;
       }
+      // Repetition is offered under the first date alone.
+      var repeatChip = clone.querySelector("[data-repeat-toggle]");
+      if (repeatChip) repeatChip.remove();
       var end = clone.querySelector(".end-block");
       if (end) end.hidden = true;
       var endToggle = clone.querySelector(".end-toggle");

@@ -310,6 +310,7 @@ fn user_facing() -> impl Endpoint {
         .at("/add/upload-image", post(add::add_upload_image))
         .at("/add/region-lookup", get(add::add_region_lookup))
         .at("/add/place-search", get(add::add_place_search))
+        .at("/add/places-near", get(add::add_places_near))
         .at("/add/zip-lookup", get(add::add_zip_lookup))
         .nest("/staff", staff::routes())
         .at(

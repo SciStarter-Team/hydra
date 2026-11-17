@@ -24,7 +24,7 @@ use crate::component::location_picker::LocationPicker;
 use crate::contact::{Contact, ContactRole, Unreachable};
 use crate::event::facebook::FacebookEvent;
 use crate::event::field::{EventField, EventFieldType, EventFieldValue};
-use crate::event::location::{EventLocation, LocationInput, SavedAddress};
+use crate::event::location::{EventLocation, LocationInput, SavedAddress, VirtualJoin};
 use crate::event::rules::{self, DateRow, Field as RulesField, Refusal, RowReading};
 use crate::event::{EventInstance, read_instances};
 use crate::project::location::LocationMode;
@@ -111,12 +111,13 @@ fn pick_limit(kind: DetailPageKind, list: ChoiceList) -> Option<usize> {
 /// shows a field, but no part is edited on its own.
 pub fn edited_as_location(field_type: &str, kind: DetailPageKind) -> bool {
     kind == DetailPageKind::Event
-        && (LOCATION_PARTS.contains(&field_type) || field_type == "venues")
+        && (LOCATION_PARTS.contains(&field_type)
+            || matches!(field_type, "entirely_online" | "venues"))
 }
 
-/// The parts of an event's location the event page shows, in order.
+/// The parts of where an event is held the event page shows, in order,
+/// under the mode it is held in.
 const LOCATION_PARTS: &[&str] = &[
-    "entirely_online",
     "location_name",
     "location_description",
     "address",
@@ -170,11 +171,23 @@ async fn refuse_event_value(
         "name" => rules::name(value, Some(&stored().await?)),
         "description" => rules::description(&rich_text_words(value)),
         "image" => rules::image_link(value, Some(&stored().await?)),
+        // A virtual event keeps a way to join, its link or its
+        // instructions, whichever of them is changed here.
         "url" => {
             let stored_url = stored().await?;
+            let how_to_join = read_event_field(id, "how_to_join").await?;
             let mode = event_mode(id).await?;
-            mode.map_or(Ok(()), |mode| rules::join_link(value, mode))
-                .and_then(|()| rules::link(value, Some(&stored_url)))
+            mode.map_or(Ok(()), |mode| {
+                rules::way_to_join(mode, value, &how_to_join, RulesField::Url)
+            })
+            .and_then(|()| rules::link(value, Some(&stored_url)))
+        }
+        "how_to_join" => {
+            let url = read_event_field(id, "url").await?;
+            let mode = event_mode(id).await?;
+            mode.map_or(Ok(()), |mode| {
+                rules::way_to_join(mode, &url, value, RulesField::HowToJoin)
+            })
         }
         "ticket_url" => rules::ticket_link(value, Some(&stored().await?)),
         // Saying who is eligible limits the event to them; saying no one
@@ -241,7 +254,7 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
             input_kind: FieldInputKind::Text,
         }),
         ("url", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Link / URL",
+            label: "Event link",
             input_kind: FieldInputKind::Url,
         }),
         ("description", DetailPageKind::Event) => Some(FieldMeta {
@@ -273,7 +286,7 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
             input_kind: FieldInputKind::Text,
         }),
         ("entirely_online", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Is it in person or online?",
+            label: "Is it in person or virtual?",
             input_kind: FieldInputKind::Boolean,
         }),
 
@@ -2760,8 +2773,9 @@ async fn store_instances(
 // Where an event is held, edited as a whole, as orrery's event form edits it
 // ---------------------------------------------------------------------------
 
-/// The event page's "Where": each part of the event's location shown as the
-/// page shows a field, and, to an editor, one control to change them all
+/// The event page's "Where": the mode it is held in, where that says
+/// something ("Virtual", "Anywhere on the planet"), each part of the event's
+/// location shown as the page shows a field, and, to an editor, one control to change them all
 /// together, with the add event form's location section. Changing where the
 /// event is held can change its link, its kinds of venue and whether it is of
 /// the Online type too, so a change also replaces those fields' displays
@@ -2772,7 +2786,8 @@ pub struct EventLocationDisplay {
     target_id: String,
     can_edit: bool,
     parts: Vec<FieldDisplay>,
-    entirely_online: bool,
+    /// `None` for a saved `location_type` that names no mode.
+    mode: Option<LocationMode>,
     also_online: bool,
     has_point: bool,
     region_geojson: Option<String>,
@@ -2783,7 +2798,7 @@ pub struct EventLocationDisplay {
 
 /// The fields a change to where an event is held can change besides its
 /// location's own parts.
-const CHANGED_WITH_LOCATION: &[&str] = &["url", "formats", "programs", "venues"];
+const CHANGED_WITH_LOCATION: &[&str] = &["url", "how_to_join", "formats", "programs", "venues"];
 
 impl EventLocationDisplay {
     /// The display of an event's location from the event page's own values;
@@ -2792,6 +2807,7 @@ impl EventLocationDisplay {
         target_id: String,
         can_edit: bool,
         field: impl Fn(&str) -> FieldDisplay,
+        location_type: &str,
         entirely_online: bool,
         also_online: bool,
         has_point: bool,
@@ -2801,7 +2817,7 @@ impl EventLocationDisplay {
             target_id,
             can_edit,
             parts: LOCATION_PARTS.iter().map(|part| field(part)).collect(),
-            entirely_online,
+            mode: LocationMode::of_event(location_type, entirely_online),
             also_online,
             has_point,
             region_geojson,
@@ -2815,7 +2831,7 @@ impl EventLocationDisplay {
     /// not (`is_staff`), is shown it.
     async fn load(id: &str, can_edit: bool, is_staff: bool) -> Result<Self, Error> {
         let row = sqlx::query!(
-            r#"SELECT entirely_online AS "entirely_online: bool",
+            r#"SELECT location_type, entirely_online AS "entirely_online: bool",
                       also_online AS "also_online: bool",
                       point IS NOT NULL AS "has_point: bool",
                       AsGeoJSON(regions) AS "region_geojson: String"
@@ -2834,7 +2850,7 @@ impl EventLocationDisplay {
             target_id: id.to_string(),
             can_edit,
             parts,
-            entirely_online: row.entirely_online,
+            mode: LocationMode::of_event(&row.location_type, row.entirely_online),
             also_online: row.also_online,
             has_point: row.has_point,
             region_geojson: row.region_geojson,
@@ -2865,6 +2881,12 @@ struct LocationForm {
     longitude: String,
     location_description: String,
     url: String,
+    /// How people join a virtual event: `link`, `other`, or empty until it
+    /// is chosen.
+    virtual_join: String,
+    /// The instructions a virtual event joined otherwise than at a link
+    /// is joined by, submitted only when that is chosen.
+    how_to_join: String,
     regions: String,
     place_query: String,
     venues: Vec<String>,
@@ -2897,7 +2919,13 @@ impl LocationForm {
             latitude,
             longitude,
             location_description: location.location_description,
+            virtual_join: VirtualJoin::of_saved(&location.url, &location.how_to_join)
+                .filter(|_| location.entirely_online)
+                .map(VirtualJoin::as_str)
+                .unwrap_or_default()
+                .to_string(),
             url: location.url,
+            how_to_join: location.how_to_join,
             regions: location.regions.unwrap_or_default(),
             place_query: String::new(),
             venues: location.venues.into_iter().collect(),
@@ -2921,7 +2949,7 @@ impl LocationForm {
             &self.regions,
         )
         .with_place_query(&self.place_query)
-        .for_events()
+        .for_events(&self.virtual_join, &self.how_to_join)
         .with_venues(ChoiceCheckboxes::new(
             "venues",
             crate::event::offered_types(ChoiceList::EventVenue).await?,
@@ -2932,12 +2960,12 @@ impl LocationForm {
     }
 
     /// The location this settles on, by the rules orrery's event form
-    /// keeps, or why it can't be saved. `stored_url` is the link the event
+    /// keeps, or why it can't be saved. `stored` is the location the event
     /// was saved with, `saved` its address, and `venues` the kinds of venue
     /// picked that are known.
     fn settle(
         &self,
-        stored_url: &str,
+        stored: &EventLocation,
         saved: &SavedAddress,
         venues: &[String],
     ) -> Result<EventLocation, FormError> {
@@ -2947,15 +2975,25 @@ impl LocationForm {
                 RulesField::Address => "address",
                 RulesField::LocationDescription => "location_description",
                 RulesField::Url => "url",
+                RulesField::VirtualJoin => "virtual_join",
+                RulesField::HowToJoin => "how_to_join",
                 _ => return FormError::general(refusal.message),
             };
             FormError::at(field, refusal.message)
         };
         let mode = rules::mode(LocationMode::parse(&self.location_mode)).map_err(refused)?;
+        let choice = VirtualJoin::parse(&self.virtual_join);
         rules::place(mode, &self.address, &self.city, &self.place_query).map_err(refused)?;
-        rules::join_link(&self.url, mode).map_err(refused)?;
-        rules::link(&self.url, Some(stored_url)).map_err(refused)?;
+        let url = rules::join(mode, choice, &self.url, &self.how_to_join).map_err(refused)?;
+        rules::link(url, Some(&stored.url)).map_err(refused)?;
         rules::location_note(mode, &self.location_description).map_err(refused)?;
+        // The instructions are asked here only as a virtual event's way to
+        // join; otherwise they are the event page's own field, and kept.
+        let how_to_join = if mode == LocationMode::Online && choice == Some(VirtualJoin::Other) {
+            &self.how_to_join
+        } else {
+            &stored.how_to_join
+        };
 
         Ok(EventLocation::settle(
             LocationInput {
@@ -2969,7 +3007,8 @@ impl LocationForm {
                 latitude: &self.latitude,
                 longitude: &self.longitude,
                 location_description: &self.location_description,
-                url: &self.url,
+                url,
+                how_to_join,
                 regions: &self.regions,
                 venues,
             },
@@ -3032,7 +3071,7 @@ pub async fn save_location(
         .into_iter()
         .collect::<Vec<_>>();
 
-    let location = match form.settle(&stored.url, &saved, &venues) {
+    let location = match form.settle(&stored, &saved, &venues) {
         Ok(location) => location,
         Err(error) => {
             let mut display = EventLocationDisplay::load(&id, true, is_staff)
@@ -4456,6 +4495,65 @@ mod tests {
     use assert2::check;
 
     use super::*;
+
+    /// The event page's "Where" for an event held as given, its venue
+    /// named "Town Library".
+    fn where_shown(location_type: &str, entirely_online: bool, also_online: bool) -> String {
+        let part = |field: &str| {
+            let venue = field == "location_name";
+            FieldDisplay::build(
+                "01HZZZZZZZZZZZZZZZZZZZEVNT".to_string(),
+                field,
+                DetailPageKind::Event,
+                String::new(),
+                false,
+                if venue {
+                    "Town Library".to_string()
+                } else {
+                    String::new()
+                },
+                !venue,
+            )
+        };
+        EventLocationDisplay::new(
+            "01HZZZZZZZZZZZZZZZZZZZEVNT".to_string(),
+            false,
+            part,
+            location_type,
+            entirely_online,
+            also_online,
+            false,
+            None,
+        )
+        .render_once()
+        .unwrap()
+    }
+
+    #[test]
+    fn a_virtual_event_is_shown_as_virtual_whatever_its_type() {
+        use crate::project::location::{ANYWHERE, AT_AN_ADDRESS, IN_A_RANGE};
+        for location_type in [ANYWHERE, AT_AN_ADDRESS, IN_A_RANGE, ""] {
+            let html = where_shown(location_type, true, false);
+            check!(html.contains("Virtual"));
+            check!(!html.contains("Anywhere on the planet"));
+            check!(!html.contains("Town Library"));
+        }
+    }
+
+    #[test]
+    fn an_event_anywhere_in_person_is_shown_as_anywhere() {
+        let html = where_shown(crate::project::location::ANYWHERE, false, false);
+        check!(html.contains("Anywhere on the planet"));
+        check!(!html.contains("Virtual"));
+    }
+
+    #[test]
+    fn an_event_in_person_and_online_too_is_also_virtual() {
+        let html = where_shown(crate::project::location::AT_AN_ADDRESS, false, true);
+        check!(html.contains("Town Library"));
+        check!(html.contains("and virtual"));
+        check!(!html.contains(">Virtual<"));
+    }
 
     #[tokio::test]
     async fn an_event_says_who_can_attend() {

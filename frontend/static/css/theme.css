@@ -45,6 +45,9 @@
   /* Boundary of a form control: 3.2:1 against white, the WCAG 1.4.11 floor
      for a control's edge being distinguishable. */
   --color-field-border: #8a8f98;
+  /* A form control's label inside its box: 6.6:1 against white, which the
+     grey it replaced (4.6:1) fell well short of to the eye (Darlene). */
+  --color-field-label: var(--color-primary-action-dark);
   --color-neutral-xlight: #F8F8F8;
   --color-neutral-light: #D9D9D9;
   --color-neutral-mid: #757575;

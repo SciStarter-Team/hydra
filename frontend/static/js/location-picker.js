@@ -1,6 +1,8 @@
-// Shared location section for the add forms: an "in person or online?" toggle
-// of radio buttons, a Photon-backed place type-ahead (via /add/place-search),
-// and the conditionally revealed region editor. Shows only the fields for the
+// Shared location section for the add forms: an "in person or virtual?"
+// toggle of radio buttons, a Photon-backed place type-ahead (via
+// /add/place-search, and /add/places-near for the visitor's own location),
+// the conditionally revealed region editor, and, for a virtual event, how
+// people join it. Shows only the fields for the
 // selected mode; disabled fieldsets keep their controls out of the
 // submission. A fieldset's data-mode lists the modes it serves; "anywhere"
 // (in person, wherever each participant is) has no pane of its own. "region" and
@@ -59,6 +61,43 @@
       // An online event has no location note; the server drops one anyway.
       if (note && note.hasAttribute("data-no-online-note")) note.hidden = mode === "online";
       applyUrlText(mode);
+      applyJoin(mode);
+    }
+
+    // How people join a virtual event: each choice's field opens under its
+    // card, and the other's is disabled so it doesn't submit.
+    var join = root.querySelector("[data-virtual-join]");
+    // The instructions are one field, asked in one place at a time: here, as
+    // a virtual event's way to join, and in the form's own field below the
+    // details otherwise. Moving between the two carries what was typed.
+    var form = root.closest("form");
+    var below = form && form.querySelector("[data-instructions-below]");
+    var askedHere = null;
+    function applyJoin(mode) {
+      if (!join) return;
+      var checked = join.querySelector('input[name="virtual_join"]:checked');
+      var how = checked ? checked.value : "";
+      join.querySelectorAll("[data-join]").forEach(function (fs) {
+        var active = fs.getAttribute("data-join") === how;
+        fs.hidden = !active;
+        fs.disabled = !active;
+      });
+      if (!below) return;
+      var here = join.querySelector('[data-join="other"] textarea');
+      var there = below.querySelector("textarea");
+      var asked = mode === "online" && how === "other";
+      if (askedHere !== null && asked !== askedHere && here && there) {
+        if (asked) here.value = there.value;
+        else there.value = here.value;
+      }
+      askedHere = asked;
+      below.hidden = asked;
+      below.disabled = asked;
+    }
+    if (join) {
+      join.querySelectorAll('input[name="virtual_join"]').forEach(function (radio) {
+        radio.addEventListener("change", apply);
+      });
     }
 
     // The link/URL field is present in every mode; for an online event it is
@@ -122,6 +161,8 @@
       longitude: root.querySelector('input[name="longitude"]'),
     };
     var status = wrap.querySelector("[data-place-status]");
+    var locateButton = wrap.querySelector("[data-locate]");
+    var locateProblem = wrap.querySelector("[data-locate-problem]");
     var summary = root.querySelector("[data-place-summary]");
     var summaryAction = root.querySelector("[data-place-summary-action]");
     var timer = null;
@@ -262,11 +303,12 @@
     }
 
     // Once a search answers, the list always ends with the option to use the
-    // words typed as the address, found places or not.
+    // words typed as the address, found places or not. The places around the
+    // visitor, found with nothing typed, have no such option.
     function render(suggestions, words) {
       list.innerHTML = "";
-      var typed = { typed: words };
-      current = suggestions.concat([typed]);
+      var offerTyped = words.trim() !== "";
+      current = offerTyped ? suggestions.concat([{ typed: words }]) : suggestions.slice();
       active = -1;
       input.removeAttribute("aria-activedescendant");
       suggestions.forEach(function (s, i) {
@@ -275,13 +317,21 @@
         var contextText = [s.kind, s.context].filter(Boolean).join(" · ");
         list.appendChild(option(list.id + "-" + i, s.name, contextText, function () { pick(s); }));
       });
-      var last = option(list.id + "-" + suggestions.length,
-        "Use \u201c" + words + "\u201d as the address", "",
-        function () { useTyped(words); });
-      last.classList.add("place-typed");
-      list.appendChild(last);
+      if (offerTyped) {
+        var last = option(list.id + "-" + suggestions.length,
+          "Use \u201c" + words + "\u201d as the address", "",
+          function () { useTyped(words); });
+        last.classList.add("place-typed");
+        list.appendChild(last);
+      }
       list.hidden = false;
       input.setAttribute("aria-expanded", "true");
+      if (!offerTyped) {
+        announce(suggestions.length === 1
+          ? "1 place near you; use the arrow keys to choose it"
+          : suggestions.length + " places near you; use the arrow keys to choose one");
+        return;
+      }
       announce(suggestions.length === 0
         ? "No places found; use the arrow keys to use what you typed as the address"
         : suggestions.length === 1
@@ -304,10 +354,70 @@
         .catch(function () {});
     }
 
+    // Typing supersedes a search of the places around the visitor still
+    // under way, and what it said about the last one.
     input.addEventListener("input", function () {
+      ++seq;
+      locating(false);
+      showLocateProblem("");
       clearTimeout(timer);
       timer = setTimeout(search, 300);
     });
+
+    // The places around the visitor, for an event added from its venue, as
+    // Facebook's location button finds them: listed as the search lists the
+    // places it finds, with focus in the search so the arrow keys choose
+    // among them. Offered where the browser can say where the visitor is.
+    function locating(on) {
+      if (locateButton) locateButton.disabled = on;
+    }
+    function showLocateProblem(text) {
+      if (!locateProblem) return;
+      locateProblem.textContent = text;
+      locateProblem.hidden = !text;
+    }
+    function locate() {
+      clearTimeout(timer);
+      close();
+      showLocateProblem("");
+      locating(true);
+      announce("Finding places near you");
+      var mine = ++seq;
+      var failed = function (text) {
+        if (mine !== seq) return;
+        locating(false);
+        showLocateProblem(text);
+        announce(text);
+      };
+      navigator.geolocation.getCurrentPosition(function (position) {
+        if (mine !== seq) return;
+        var c = position.coords;
+        fetch("/add/places-near?lat=" + c.latitude + "&lon=" + c.longitude, { headers: { Accept: "application/json" } })
+          .then(function (r) {
+            if (!r.ok) throw new Error("lookup failed");
+            return r.json();
+          })
+          .then(function (suggestions) {
+            if (mine !== seq) return;
+            if (!suggestions || !suggestions.length) {
+              failed("No places were found near you. Please search for the place instead.");
+              return;
+            }
+            locating(false);
+            render(suggestions, "");
+            input.focus();
+          })
+          .catch(function () {
+            failed("Places near you couldn\u2019t be found just now. Please search for the place instead.");
+          });
+      }, function () {
+        failed("Your browser didn\u2019t share your location. Please search for the place instead.");
+      }, { timeout: 15000, maximumAge: 60000 });
+    }
+    if (locateButton && navigator.geolocation) {
+      locateButton.hidden = false;
+      locateButton.addEventListener("click", locate);
+    }
     input.addEventListener("keydown", function (e) {
       var open = !list.hidden && current.length > 0;
       if (e.key === "ArrowDown" && open) {

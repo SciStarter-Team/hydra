@@ -168,9 +168,21 @@ async fn main() {
 
     // People Finder: messages to everyone in an area, held for staff review
     let people_finder_group = service.group("forum.people_finder");
-    toplevel.spawn(handler!(people_finder_group, "submit", people_finder::submit));
-    toplevel.spawn(handler!(people_finder_group, "pending", people_finder::pending));
-    toplevel.spawn(handler!(people_finder_group, "review", people_finder::review));
+    toplevel.spawn(handler!(
+        people_finder_group,
+        "submit",
+        people_finder::submit
+    ));
+    toplevel.spawn(handler!(
+        people_finder_group,
+        "pending",
+        people_finder::pending
+    ));
+    toplevel.spawn(handler!(
+        people_finder_group,
+        "review",
+        people_finder::review
+    ));
     toplevel.spawn(people_finder::delivery_worker());
 
     // Content filtering endpoints

@@ -13,6 +13,7 @@ use common::{
     service::send_email,
     shared::db,
 };
+use sqlx::SqlitePool;
 use ulid::Ulid;
 
 /// Minimal HTML escaping for interpolating message content into the staff
@@ -368,20 +369,25 @@ pub async fn reply_to_message(req: &Request) -> Result<ReplyToMessageResponse> {
         return Err(anyhow::anyhow!("Not a participant in this conversation"));
     }
 
-    // Create the reply post. Pre-approved replies (an entity manager replying
-    // *as* the entity) are delivered at once; others are held pending review.
-    let approved = if msg.pre_approved { 1 } else { 0 };
-    sqlx::query!(
-        r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "created_at", "is_deleted", "is_flagged", "approved")
-           VALUES (?, ?, ?, ?, ?, 0, 0, ?)"#,
-        post_id_str,
-        topic_id_str,
-        msg.body,
-        user_id_str,
-        now_str,
-        approved,
-    )
-    .execute(db)
+    // The other participant: the conversation is between the topic's author
+    // and the owner of the inbox it's in, so a reply always goes to the one
+    // who didn't write it.
+    let other_user = if user_id_str == forum_owner {
+        topic_author.to_string()
+    } else {
+        forum_owner.to_string()
+    };
+
+    let delivered = NewReply {
+        post_id: &post_id_str,
+        topic_id: &topic_id_str,
+        body: &msg.body,
+        author: &user_id_str,
+        other: &other_user,
+        now: &now_str,
+        pre_approved: msg.pre_approved,
+    }
+    .insert(db)
     .await?;
 
     // Update topic's updated_at
@@ -394,12 +400,6 @@ pub async fn reply_to_message(req: &Request) -> Result<ReplyToMessageResponse> {
     .await?;
 
     // Mark as unread for the other participant
-    let other_user = if user_id_str == forum_owner {
-        topic_author.to_string()
-    } else {
-        forum_owner.to_string()
-    };
-
     sqlx::query!(
         r#"INSERT INTO "message_status" ("user_id", "topic_id", "seen", "discarded")
            VALUES (?, ?, 0, 0)
@@ -419,11 +419,59 @@ pub async fn reply_to_message(req: &Request) -> Result<ReplyToMessageResponse> {
     .execute(db)
     .await?;
 
-    if !msg.pre_approved {
+    if !delivered {
         notify_reviewers(&topic.title, &msg.body, &user_id_str, &other_user).await;
     }
 
-    Ok(ReplyToMessageResponse { post_id })
+    Ok(ReplyToMessageResponse { post_id, delivered })
+}
+
+/// A reply by `author` to the conversation `topic_id` with `other`.
+struct NewReply<'a> {
+    post_id: &'a str,
+    topic_id: &'a str,
+    body: &'a str,
+    author: &'a str,
+    other: &'a str,
+    now: &'a str,
+    /// Sent as a project or event, so delivered without review.
+    pre_approved: bool,
+}
+
+impl NewReply<'_> {
+    /// Add the reply to its conversation, and say whether it is delivered at
+    /// once rather than held for staff review.
+    ///
+    /// Only a message that opens a conversation needs review. A reply is
+    /// delivered when it is pre-approved (sent as a project or event), or when
+    /// it answers what `other` has written in the conversation, which is to say
+    /// `other` has a post there that was delivered: approved by staff, or itself
+    /// an answer or an entity's send. A follow-up to one's own unanswered
+    /// message, or a reply to posts still pending or rejected, is held. Being a
+    /// two-party conversation, a reply always goes back the way the posts it
+    /// answers came. Decided in the insert itself, so a rejection made meanwhile
+    /// can't be missed.
+    async fn insert(&self, db: &SqlitePool) -> Result<bool> {
+        let approved = sqlx::query_scalar!(
+        r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "created_at", "is_deleted", "is_flagged", "approved")
+           VALUES (?1, ?2, ?3, ?4, ?5, 0, 0,
+                   ?6 OR EXISTS (SELECT 1 FROM "posts"
+                                  WHERE "topic_id" = ?2 AND "author_id" = ?7
+                                    AND "approved" = 1 AND "is_deleted" = 0))
+           RETURNING "approved" as "approved!: bool""#,
+            self.post_id,
+            self.topic_id,
+            self.body,
+            self.author,
+            self.now,
+            self.pre_approved,
+            self.other,
+        )
+        .fetch_one(db)
+        .await?;
+
+        Ok(approved)
+    }
 }
 
 pub async fn inbox(req: &Request) -> Result<InboxResponse> {
@@ -868,4 +916,103 @@ pub async fn last_contacted(req: &Request) -> Result<Vec<LastContacted>> {
     }
 
     Ok(contacted)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert2::check;
+
+    const MEMBER: &str = "01HZZZZZZZZZZZZZZZZZZZMEMB";
+    const OTHER: &str = "01HZZZZZZZZZZZZZZZZZZZOTHR";
+    const TOPIC: &str = "01HZZZZZZZZZZZZZZZZZZZTOPC";
+
+    /// A conversation `MEMBER` opened in `OTHER`'s inbox, its first post
+    /// approved or not as given.
+    async fn conversation(opener_approved: bool) -> SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        sqlx::query(
+            r#"INSERT INTO "forums" ("forum_id", "slug", "name", "description", "created_at", "is_active", "display_order")
+               VALUES (?1, 'inbox-' || ?1, 'Inbox', '', '2026-11-17T00:00:00Z', 1, 0)"#,
+        )
+        .bind(OTHER)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "topics" ("topic_id", "forum_id", "title", "content", "author_id", "created_at", "updated_at", "is_pinned", "is_locked", "is_deleted", "is_flagged")
+               VALUES (?, ?, 'Hello', 'Hi', ?, '2026-11-17T00:00:00Z', '2026-11-17T00:00:00Z', 0, 0, 0, 0)"#,
+        )
+        .bind(TOPIC)
+        .bind(OTHER)
+        .bind(MEMBER)
+        .execute(&pool)
+        .await
+        .unwrap();
+        post(&pool, MEMBER, OTHER, false).await;
+        sqlx::query(r#"UPDATE "posts" SET "approved" = ?"#)
+            .bind(opener_approved)
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    /// Whether a reply by `author` to `other` is delivered at once.
+    async fn post(pool: &SqlitePool, author: &str, other: &str, pre_approved: bool) -> bool {
+        NewReply {
+            post_id: &Ulid::new().to_string(),
+            topic_id: TOPIC,
+            body: "Thanks",
+            author,
+            other,
+            now: "2026-11-17T01:00:00Z",
+            pre_approved,
+        }
+        .insert(pool)
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn an_answer_to_a_delivered_message_is_delivered() {
+        let pool = conversation(true).await;
+        check!(post(&pool, OTHER, MEMBER, false).await);
+        // And an answer to that answer, which was delivered as one.
+        check!(post(&pool, MEMBER, OTHER, false).await);
+    }
+
+    #[tokio::test]
+    async fn a_follow_up_to_an_unanswered_message_is_held() {
+        let pool = conversation(true).await;
+        check!(!post(&pool, MEMBER, OTHER, false).await);
+    }
+
+    #[tokio::test]
+    async fn a_reply_to_a_message_still_pending_is_held() {
+        let pool = conversation(false).await;
+        check!(!post(&pool, OTHER, MEMBER, false).await);
+    }
+
+    #[tokio::test]
+    async fn a_reply_to_a_rejected_message_is_held() {
+        let pool = conversation(true).await;
+        sqlx::query(r#"UPDATE "posts" SET "is_deleted" = 1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        check!(!post(&pool, OTHER, MEMBER, false).await);
+    }
+
+    #[tokio::test]
+    async fn an_entitys_send_is_delivered_and_can_be_answered() {
+        let pool = conversation(false).await;
+        check!(post(&pool, OTHER, MEMBER, true).await);
+        check!(post(&pool, MEMBER, OTHER, false).await);
+    }
 }

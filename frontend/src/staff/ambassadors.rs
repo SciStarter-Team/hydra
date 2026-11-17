@@ -6,8 +6,13 @@
 //! open. They are all the same query against different stages, so they share one
 //! handler and differ only in which stages they name.
 //!
+//! The page that finds the Champions and Ambassadors among an event's Zoom
+//! registrants is [`registrants`].
+//!
 //! The application browser and its export live at `/-admin/ambassadors`, which
 //! is where orrery's `/staff/ambassadors/applications` went.
+
+pub mod registrants;
 
 use common::{
     message::dashboard::{AmbassadorStage, AmbassadorStageRow, AmbassadorStagesRequest},

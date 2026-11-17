@@ -3,11 +3,17 @@
     so a click anywhere on it opens the list. Without the script the list is
     simply visible. Labelled by attribute rather than a <label for>: date/time
     rows are cloned client-side, and a cloned id would collide. %>
-<div class="pill-field tz-pill" data-tz-field>
-  <svg class="pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/></svg>
-  <label class="pill-body">
+<%# As a chip, it is one of the small links under a date's start, its short
+    name standing for the field ("Time zone" until a zone is chosen). %>
+<div class="<% if self.chip { %>chip tz-chip<% } else { %>pill-field tz-pill<% } %>" data-tz-field>
+  <svg class="<% if self.chip { %>chip-icon<% } else { %>pill-icon<% } %>" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/></svg>
+  <label class="<% if self.chip { %>tz-chip-body<% } else { %>pill-body<% } %>">
+    <% if self.chip { %>
+    <span class="tz-short" aria-hidden="true" data-placeholder="Time zone">Time zone</span>
+    <% } else { %>
     <span class="pill-label">Time zone</span>
     <span class="tz-short" aria-hidden="true"></span>
+    <% } %>
     <select class="tz-select" name="<%= self.field_name %>" aria-label="Time zone" <% if self.required { %>required<% } %><% if self.invalid { %> aria-invalid="true" aria-describedby="<%= crate::component::floating_field::FormError::ELEMENT_ID %>"<% } %>>
       <option value="" <% if self.selected.is_empty() { %>selected<% } %> disabled></option>
       <optgroup label="Common">
