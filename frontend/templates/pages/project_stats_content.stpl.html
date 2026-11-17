@@ -1,0 +1,240 @@
+<%+ self.nav %>
+<div class="ss-container !pt-8 !pb-8 mx-auto ss-project-stats">
+  <p class="ps-back"><a href="<%= self.project_path %>">&larr; <%= self.name %></a></p>
+  <h1 class="text-2xl mb-2">Project Stats: <%= self.name %></h1>
+
+  <% if let Some(stats) = &self.stats { %>
+  <p class="ps-through">Counted through the end of <%= stats.through %> (UTC), and updated daily. Only you, the project's other editors, and SciStarter staff can see this page.</p>
+
+  <div class="tabs-bar-wrapper mb-8">
+    <div class="tabs-wrapper no-shadow">
+      <div class="tabs tabs-bar tabs-subtitled" role="tablist" aria-label="Project stats">
+        <button class="tab tab-icon" role="tab" aria-selected="true" aria-controls="ps-panel-events" id="ps-tab-events">
+          <svg width="24" height="24" aria-hidden="true" class="shrink-0"><use xlink:href="/-static/img/icons.svg#icon--ld-participates"></use></svg>
+          <span class="tab-text">
+            <span class="tab-name">Events</span>
+            <span class="tab-subtitle">Views, visits, saves, joins and shares</span>
+          </span>
+        </button>
+        <button class="tab tab-icon" role="tab" aria-selected="false" aria-controls="ps-panel-users" id="ps-tab-users">
+          <svg width="24" height="24" aria-hidden="true" class="shrink-0"><use xlink:href="/-static/img/icons.svg#icon--org-groups"></use></svg>
+          <span class="tab-text">
+            <span class="tab-name">Users</span>
+            <span class="tab-subtitle">Who views your project</span>
+          </span>
+        </button>
+        <button class="tab tab-icon" role="tab" aria-selected="false" aria-controls="ps-panel-feedback" id="ps-tab-feedback">
+          <svg width="24" height="24" aria-hidden="true" class="shrink-0"><use xlink:href="/-static/img/icons.svg#icon--feedback"></use></svg>
+          <span class="tab-text">
+            <span class="tab-name">Feedback</span>
+            <span class="tab-subtitle">How many visitors join</span>
+          </span>
+        </button>
+        <% if self.is_affiliate { %>
+        <button class="tab tab-icon" role="tab" aria-selected="false" aria-controls="ps-panel-contributions" id="ps-tab-contributions">
+          <svg width="24" height="24" aria-hidden="true" class="shrink-0"><use xlink:href="/-static/img/icons.svg#icon--org-contributions"></use></svg>
+          <span class="tab-text">
+            <span class="tab-name">Contributions</span>
+            <span class="tab-subtitle">What participants report</span>
+          </span>
+        </button>
+        <% } %>
+      </div>
+
+      <%# Narrow screens scroll the tab row; tabs.js shows this when a tab is
+          scrolled out of sight. %>
+      <div class="chevron">
+        <button class="chev-btn" aria-label="Show more tabs">
+          <svg class="chev-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 6l6 6-6 6"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="tab-panels border border-linework border-t-0 p-4">
+
+      <%# ------------------------------------------------------------------ %>
+      <%# Events                                                              %>
+      <%# ------------------------------------------------------------------ %>
+      <div class="tab-panel" id="ps-panel-events" role="tabpanel" aria-labelledby="ps-tab-events" aria-hidden="false">
+        <h2>All-Time</h2>
+        <div class="ps-cards">
+          <% for card in &stats.all_time { %>
+          <%+ CardInclude { card } %>
+          <% } %>
+        </div>
+
+        <h2>Last 30 Days</h2>
+        <div class="ps-cards">
+          <% for card in &stats.last_30 { %>
+          <%+ CardInclude { card } %>
+          <% } %>
+        </div>
+
+        <div class="ps-panel">
+          <div class="ps-panel-head">
+            <h2>Conversions</h2>
+            <div class="ps-toggle" role="tablist" aria-label="Conversions over">
+              <button role="tab" aria-selected="true" aria-controls="ps-conversions-30">30 Days</button>
+              <button role="tab" aria-selected="false" aria-controls="ps-conversions-90">90 Days</button>
+            </div>
+          </div>
+          <p class="ps-legend">
+            <span class="ps-key ps-key-views">Views</span>
+            <span class="ps-key ps-key-visits">Visits</span>
+            <span class="ps-key ps-key-saves">Saves</span>
+          </p>
+          <div>
+            <div class="tab-panel" id="ps-conversions-30" role="tabpanel" aria-hidden="false">
+              <%+ DayChartInclude { chart: &stats.conversions_30, label: "Views, visits and saves by day over the last 30 days" } %>
+            </div>
+            <div class="tab-panel" id="ps-conversions-90" role="tabpanel" aria-hidden="true">
+              <%+ DayChartInclude { chart: &stats.conversions_90, label: "Views, visits and saves by day over the last 90 days" } %>
+            </div>
+          </div>
+        </div>
+
+        <div class="ps-panel">
+          <div class="ps-panel-head">
+            <h2>Shares</h2>
+            <div class="ps-toggle" role="tablist" aria-label="Shares over">
+              <% for (i, shares) in stats.shares.iter().enumerate() { %>
+              <button role="tab" aria-selected="<%= i == 0 %>" aria-controls="ps-<%= shares.id %>"><%= shares.timeframe %></button>
+              <% } %>
+            </div>
+          </div>
+          <div>
+            <% for (i, shares) in stats.shares.iter().enumerate() { %>
+            <div class="tab-panel" id="ps-<%= shares.id %>" role="tabpanel" aria-hidden="<%= i != 0 %>">
+              <div class="ps-shares">
+                <%+ DonutInclude { donut: &shares.donut, figure: &shares.total, caption: "Shares" } %>
+                <% if shares.platforms.is_empty() { %>
+                <p>Nothing on SciStarter has been shared yet.</p>
+                <% } else { %>
+                <div class="ps-share-platforms">
+                  <% for platform in &shares.platforms { %>
+                  <div class="ps-share-platform">
+                    <p class="ps-share-name"><span class="ps-swatch <%= platform.class %>"></span><%= platform.label %>: <strong><%= platform.count %></strong></p>
+                    <%+ MedAvgInclude { graph: &platform.median } %>
+                    <%+ MedAvgInclude { graph: &platform.mean } %>
+                  </div>
+                  <% } %>
+                </div>
+                <% } %>
+              </div>
+            </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <%# ------------------------------------------------------------------ %>
+      <%# Users                                                               %>
+      <%# ------------------------------------------------------------------ %>
+      <div class="tab-panel" id="ps-panel-users" role="tabpanel" aria-labelledby="ps-tab-users" aria-hidden="true">
+        <p class="ps-note">From the <%= stats.audience_views %> views of your project's page by people signed in to SciStarter, counted since SciStarter moved to its new site. Visitors who have not told us their gender or age are counted as unknown.</p>
+
+        <div class="ps-columns">
+          <div class="ps-panel">
+            <h2>Views by Gender</h2>
+            <%+ BarsInclude { rows: &stats.by_gender } %>
+          </div>
+          <div class="ps-panel">
+            <h2>Views by Age</h2>
+            <%+ BarsInclude { rows: &stats.by_age } %>
+          </div>
+        </div>
+
+        <div class="ps-panel">
+          <h2>Users Who Viewed Your Project Also Viewed</h2>
+          <% if stats.also_viewed.is_empty() { %>
+          <p>Not enough signed-in visitors have viewed your project yet.</p>
+          <% } else { %>
+          <table class="ps-also-viewed">
+            <thead>
+              <tr><th scope="col" colspan="2">Project</th><th scope="col">Goal</th><th scope="col" class="text-right">Views</th></tr>
+            </thead>
+            <tbody>
+              <% for project in &stats.also_viewed { %>
+              <tr>
+                <td class="ps-also-image">
+                  <% if let Some(image) = &project.image { %>
+                  <img src="<%= image %>" alt="" loading="lazy">
+                  <% } %>
+                </td>
+                <td><a href="<%= project.link %>"><%= project.name %></a></td>
+                <td><%= project.goal %></td>
+                <td class="text-right"><%= project.views %></td>
+              </tr>
+              <% } %>
+            </tbody>
+          </table>
+          <% } %>
+        </div>
+      </div>
+
+      <%# ------------------------------------------------------------------ %>
+      <%# Feedback                                                            %>
+      <%# ------------------------------------------------------------------ %>
+      <div class="tab-panel" id="ps-panel-feedback" role="tabpanel" aria-labelledby="ps-tab-feedback" aria-hidden="true">
+        <p class="ps-note">Of the signed-in people who went from SciStarter to your project's site, or joined it: how many have joined, and how many have not told us.</p>
+
+        <div class="ps-panel">
+          <div class="ps-shares">
+            <%+ DonutInclude { donut: &stats.feedback.pie, figure: &stats.feedback.joins, caption: "Joins" } %>
+            <div>
+              <p class="ps-legend">
+                <span class="ps-key ps-key-joins">Joined: <strong><%= stats.feedback.joins %></strong></span>
+                <span class="ps-key ps-key-unknown">Unknown: <strong><%= stats.feedback.unknown %></strong></span>
+              </p>
+              <div class="ps-feedback-rows">
+                <% for row in &stats.feedback.rows { %>
+                <div class="ps-feedback-row">
+                  <% for graph in row { %>
+                  <%+ MedAvgInclude { graph } %>
+                  <% } %>
+                </div>
+                <% } %>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <% if self.is_affiliate { %>
+      <%# ------------------------------------------------------------------ %>
+      <%# Contributions                                                       %>
+      <%# ------------------------------------------------------------------ %>
+      <div class="tab-panel" id="ps-panel-contributions" role="tabpanel" aria-labelledby="ps-tab-contributions" aria-hidden="true">
+        <div class="ps-cards ps-cards-3">
+          <% for card in &stats.contributions { %>
+          <%+ CardInclude { card } %>
+          <% } %>
+        </div>
+
+        <div class="ps-panel">
+          <div class="ps-panel-head">
+            <h2>Contributions Trend</h2>
+            <div class="ps-toggle" role="tablist" aria-label="Contributions over">
+              <button role="tab" aria-selected="true" aria-controls="ps-contributions-30">30 Days</button>
+              <button role="tab" aria-selected="false" aria-controls="ps-contributions-90">90 Days</button>
+            </div>
+          </div>
+          <div>
+            <div class="tab-panel" id="ps-contributions-30" role="tabpanel" aria-hidden="false">
+              <%+ DayChartInclude { chart: &stats.contributions_30, label: "Contributions by day over the last 30 days" } %>
+            </div>
+            <div class="tab-panel" id="ps-contributions-90" role="tabpanel" aria-hidden="true">
+              <%+ DayChartInclude { chart: &stats.contributions_90, label: "Contributions by day over the last 90 days" } %>
+            </div>
+          </div>
+        </div>
+      </div>
+      <% } %>
+    </div>
+  </div>
+  <% } else { %>
+  <p class="ps-note">Project stats are worked out once a day, and the first count has not finished yet. Please check back tomorrow.</p>
+  <% } %>
+</div>

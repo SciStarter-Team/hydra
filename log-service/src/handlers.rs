@@ -620,7 +620,8 @@ pub async fn handle_affiliate_participation(
 pub async fn handle_entity_list_stats(
     req: &async_nats::service::Request,
 ) -> Result<EntityListStatsResponse, anyhow::Error> {
-    use datafusion::arrow::array::{Array, Int32Array, StringArray};
+    use datafusion::arrow::array::{Array, StringArray};
+    use log_service::database::tables::ParticipationRow;
     use std::collections::HashMap;
 
     let request: EntityListStatsRequest = decode_structured_message(req.message.clone())?;
@@ -727,13 +728,14 @@ pub async fn handle_entity_list_stats(
             col("user_id"),
             col("entity_id"),
             col("when"),
-            col("magnitude"),
+            col("task_name"),
         ])?
         .collect()
         .await?;
 
-    // magnitude is the multiplier a single record carries, so a record
-    // standing for four contributions counts as four.
+    // The log holds one row per repetition, so each row is one contribution;
+    // `magnitude` is how intense a repetition was, not how many it stands
+    // for. A row reporting a join is not a contribution.
     let mut totals: HashMap<(Ulid, Ulid), EntityListContributions> = HashMap::new();
 
     for batch in participation_batches {
@@ -752,14 +754,20 @@ pub async fn handle_entity_list_stats(
             .as_any()
             .downcast_ref::<StringArray>()
             .expect("when column should be StringArray");
-        let magnitudes = batch
+        let task_names = batch
             .column(3)
             .as_any()
-            .downcast_ref::<Int32Array>()
-            .expect("magnitude column should be Int32Array");
+            .downcast_ref::<StringArray>()
+            .expect("task_name column should be StringArray");
 
         for i in 0..users.len() {
             if users.is_null(i) {
+                continue;
+            }
+
+            if !task_names.is_null(i)
+                && ParticipationRow::JOIN_TASK_NAMES.contains(&task_names.value(i))
+            {
                 continue;
             }
 
@@ -775,7 +783,6 @@ pub async fn handle_entity_list_stats(
             };
 
             let when = whens.value(i);
-            let magnitude = magnitudes.value(i) as i64;
 
             let entry =
                 totals
@@ -792,13 +799,13 @@ pub async fn handle_entity_list_stats(
             // contribution came after the list existed, so none of it is
             // claimed as such.
             if !request.created_at.is_empty() && when >= request.created_at.as_str() {
-                entry.since_list_creation += magnitude;
+                entry.since_list_creation += 1;
             } else {
-                entry.before_list_creation += magnitude;
+                entry.before_list_creation += 1;
             }
 
             if when >= first_view.as_str() {
-                entry.since_viewing += magnitude;
+                entry.since_viewing += 1;
             }
         }
     }

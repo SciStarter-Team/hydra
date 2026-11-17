@@ -368,7 +368,8 @@ fn user_facing() -> impl Endpoint {
         )
         .at(
             "/-detail/:id/save",
-            post(component::detail_page::save_project),
+            post(component::detail_page::save_project)
+                .delete(component::detail_page::unsave_project),
         )
         .at(
             "/-detail/:id/share",
@@ -594,6 +595,19 @@ fn user_facing() -> impl Endpoint {
         .at(people_finder::PATH, get(people_finder::page))
         .at(people_finder::COUNT_PATH, get(people_finder::count))
         .at(people_finder::SEND_PATH, post(people_finder::send))
+        .at("/projects/:slug/stats", get(project::stats::page))
+        .at(
+            "/projects/:slug/participants",
+            get(project::participants::page),
+        )
+        .at(
+            "/projects/:slug/participants/message",
+            post(project::participants::message),
+        )
+        .at(
+            "/projects/:slug/participants/:kind/:user_id/star",
+            post(project::participants::star).delete(project::participants::unstar),
+        )
         .at("/projects/*slug", get(project_page))
         .at("/events/*slug", get(event_page))
         .at("/*slug", get(entity_page).post(entity_page))
@@ -825,6 +839,11 @@ async fn main() -> Result<(), Error> {
             "summary_by_slug",
             dashboard::entity_summary::summary_by_slug
         ));
+        tasks.spawn(handler!(
+            entity_group,
+            "project_slugs",
+            project::stats::slugs::project_slugs
+        ));
         tasks.join_all().await;
     });
 
@@ -856,7 +875,7 @@ async fn main() -> Result<(), Error> {
 
     println!("Listening on {}", env!("LISTEN_ON"));
     println!(
-        "Frontend NATS service started: frontend.health.check, frontend.entity.summary_by_id, frontend.entity.summary_by_slug, frontend.inaturalist.projects, frontend.people_finder.operators"
+        "Frontend NATS service started: frontend.health.check, frontend.entity.summary_by_id, frontend.entity.summary_by_slug, frontend.entity.project_slugs, frontend.inaturalist.projects, frontend.people_finder.operators"
     );
     // The id peer messages are tagged with, and the one the staff query
     // tool reports as having answered a query against this instance's

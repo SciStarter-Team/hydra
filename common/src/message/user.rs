@@ -791,16 +791,20 @@ pub struct UserDetails {
     pub orcid: Option<String>,
 }
 
+/// The name an account goes by: its first and last names, or its handle
+/// when it gave neither.
+pub fn display_name(first_name: &str, last_name: &str, handle: &str) -> String {
+    if first_name.is_empty() && last_name.is_empty() {
+        handle.to_string()
+    } else {
+        format!("{first_name} {last_name}").trim().to_string()
+    }
+}
+
 impl UserDetails {
     /// Returns the display name, preferring first/last name over handle
     pub fn display_name(&self) -> String {
-        if self.first_name.is_empty() && self.last_name.is_empty() {
-            self.handle.clone()
-        } else {
-            format!("{} {}", self.first_name, self.last_name)
-                .trim()
-                .to_string()
-        }
+        display_name(&self.first_name, &self.last_name, &self.handle)
     }
 
     /// Returns the user role as a display string
@@ -1428,6 +1432,13 @@ pub struct BookmarkCreateRequest {
 pub struct BookmarkCreateResponse {
     pub success: bool,
     pub message: String,
+}
+
+/// Withdraw a save. Answered with whether there was one to withdraw.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BookmarkDeleteRequest {
+    pub user_id: Ulid,
+    pub project_id: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -2186,13 +2197,7 @@ pub struct CommunityMembership {
 
 impl CommunityMembership {
     pub fn display_name(&self) -> String {
-        if self.first_name.is_empty() && self.last_name.is_empty() {
-            self.handle.clone()
-        } else {
-            format!("{} {}", self.first_name, self.last_name)
-                .trim()
-                .to_string()
-        }
+        display_name(&self.first_name, &self.last_name, &self.handle)
     }
 }
 

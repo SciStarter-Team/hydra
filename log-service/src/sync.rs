@@ -1030,7 +1030,7 @@ async fn insert_join_as_clickthrough(database: &Database, join: &JoinData) -> Re
             .url
             .clone()
             .unwrap_or_else(|| format!("entity/{}", join.entity_ulid)),
-        link_type: "join".to_string(),
+        link_type: common::message::project_stats::ORRERY_VISIT_LINK_TYPE.to_string(),
         program_id: Some(join.entity_ulid.clone()),
         geolocation: r#"{"type":"Point","coordinates":[0,0]}"#.to_string(),
     };
@@ -1418,6 +1418,107 @@ async fn fetch_orrery_feed<T: serde::de::DeserializeOwned>(
     }
 }
 
+/// A row of one of orrery's sync feeds that pages by a watermark and an
+/// id: rows come in (watermark, id) order, and the next page starts just past
+/// the last row taken.
+trait OrreryFeedRow: serde::de::DeserializeOwned + Send {
+    /// The feed, `/staff/sync/<FEED>`.
+    const FEED: &'static str;
+    /// The sync's name, as its log lines give it.
+    const NAME: &'static str;
+    /// The sync bookmarks the cursor is kept under.
+    const BOOKMARK: &'static str;
+    const LAST_ID: &'static str;
+    /// The watermark to start from before anything has been taken.
+    const START: &'static str;
+    /// How many rows orrery sends a page; a full page means more wait.
+    const PAGE: usize;
+
+    /// The (watermark, id) cursor the row leaves.
+    fn cursor(&self) -> (String, i32);
+
+    /// Keep the row. Storing a row again must change nothing, since a row
+    /// that fails holds the cursor back and is delivered again.
+    fn store(&self) -> impl std::future::Future<Output = Result<()>> + Send;
+}
+
+/// Carry one of orrery's feeds in, page by page, until cancelled.
+async fn synchronize_orrery_feed<T: OrreryFeedRow>(
+    database: Arc<Database>,
+    cancellation_token: CancellationToken,
+) {
+    loop {
+        if cancellation_token.is_cancelled() {
+            println!("{} sync cancelled, exiting gracefully", T::NAME);
+            return;
+        }
+
+        let since = get_sync_bookmark(&database, T::BOOKMARK)
+            .await
+            .unwrap_or_else(|_| String::from(T::START));
+        let last_id = get_sync_last_id(&database, T::LAST_ID).await.unwrap_or(0);
+
+        let page = fetch_orrery_feed::<T>(
+            T::FEED,
+            &[("since", since.clone()), ("last_id", last_id.to_string())],
+        )
+        .await;
+
+        let sleep_duration = match page {
+            // Try again in a minute.
+            None => Duration::from_secs(60),
+            Some(page) => {
+                let full = page.len() == T::PAGE;
+
+                match store_orrery_feed_page(&database, page).await {
+                    // A full page means more are waiting; otherwise check
+                    // back hourly.
+                    Ok(()) if full => Duration::from_secs(5),
+                    Ok(()) => Duration::from_secs(60 * 60),
+                    Err(e) => {
+                        eprintln!("{} sync: {e}", T::NAME);
+                        Duration::from_secs(60)
+                    }
+                }
+            }
+        };
+
+        tokio::select! {
+            _ = sleep(sleep_duration) => {}
+            _ = cancellation_token.cancelled() => {
+                println!("{} sync cancelled during sleep, exiting gracefully", T::NAME);
+                return;
+            }
+        }
+    }
+}
+
+/// Store a page of a feed, then move the cursor up to the last row stored.
+/// Stopping at a row that fails keeps the cursor short of it, and it comes
+/// again.
+async fn store_orrery_feed_page<T: OrreryFeedRow>(database: &Database, page: Vec<T>) -> Result<()> {
+    let mut stored = None;
+    let mut failure = None;
+
+    for row in page {
+        let cursor = row.cursor();
+
+        if let Err(e) = row.store().await {
+            failure = Some(e.context(format!("storing row {}", cursor.1)));
+            break;
+        }
+
+        stored = Some(cursor);
+    }
+
+    if let Some((since, id)) = stored {
+        set_sync_bookmark(database, T::BOOKMARK, &since).await?;
+        set_sync_last_id(database, T::LAST_ID, id).await?;
+    }
+
+    failure.map_or(Ok(()), Err)
+}
+
 /// One of orrery's counting windows of clicks on a project's Visit button,
 /// as `/staff/sync/join_clicks` sends it.
 #[derive(Debug, Deserialize)]
@@ -1428,9 +1529,6 @@ pub struct VisitClicksData {
     pub count: i32,
 }
 
-/// The size of a page of Visit click windows, as orrery sends them.
-const VISIT_CLICKS_PAGE: usize = 500;
-
 /// Carry orrery's Visit click counts into `orrery_visit_clicks`, the record
 /// of visits from before hydra counted each one itself.
 ///
@@ -1438,96 +1536,140 @@ const VISIT_CLICKS_PAGE: usize = 500;
 /// counting is delivered again each time it grows, and replaces the copy
 /// held before. Once orrery stops serving, the counts stand as they last
 /// were.
+impl OrreryFeedRow for VisitClicksData {
+    const FEED: &'static str = "join_clicks";
+    const NAME: &'static str = "Visit click";
+    const BOOKMARK: &'static str = "visit-click-sync-bookmark";
+    const LAST_ID: &'static str = "visit-click-sync-last-id";
+    const START: &'static str = "1900-01-01T00:00:00Z";
+    const PAGE: usize = 500;
+
+    fn cursor(&self) -> (String, i32) {
+        (self.as_of.clone(), self.id)
+    }
+
+    async fn store(&self) -> Result<()> {
+        sqlx::query!(
+            r#"INSERT INTO orrery_visit_clicks (window_id, project_id, as_of, clicks)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT (window_id)
+               DO UPDATE SET project_id = excluded.project_id, as_of = excluded.as_of,
+                             clicks = excluded.clicks"#,
+            self.id,
+            self.entity_ulid,
+            self.as_of,
+            self.count,
+        )
+        .execute(common::shared::db())
+        .await?;
+
+        Ok(())
+    }
+}
+
 pub async fn visit_click_synchronize(
     database: Arc<Database>,
     cancellation_token: CancellationToken,
 ) {
-    loop {
-        if cancellation_token.is_cancelled() {
-            println!("Visit click sync cancelled, exiting gracefully");
-            return;
-        }
+    synchronize_orrery_feed::<VisitClicksData>(database, cancellation_token).await
+}
 
-        let since = get_sync_bookmark(&database, "visit-click-sync-bookmark")
-            .await
-            .unwrap_or_else(|_| String::from("1900-01-01T00:00:00Z"));
-        let last_id = get_sync_last_id(&database, "visit-click-sync-last-id")
-            .await
-            .unwrap_or(0);
+/// One project's views on one UTC day, as `/staff/sync/project_views` sends
+/// it. Orrery serves a day only once it can no longer change.
+#[derive(Debug, Deserialize)]
+pub struct ProjectViewsData {
+    pub entity_id: i32,
+    pub entity_ulid: String,
+    pub day: String,
+    pub views: i64,
+}
 
-        let page = fetch_orrery_feed::<VisitClicksData>(
-            "join_clicks",
-            &[("since", since.clone()), ("last_id", last_id.to_string())],
+/// Carry orrery's daily view counts into `orrery_project_views`, the record
+/// of views from before hydra counted them itself.
+///
+/// Watermark: `day`. A day orrery sends again replaces the copy held before.
+impl OrreryFeedRow for ProjectViewsData {
+    const FEED: &'static str = "project_views";
+    const NAME: &'static str = "Project view";
+    const BOOKMARK: &'static str = "project-view-sync-day";
+    const LAST_ID: &'static str = "project-view-sync-last-id";
+    const START: &'static str = "1900-01-01";
+    const PAGE: usize = 1000;
+
+    fn cursor(&self) -> (String, i32) {
+        (self.day.clone(), self.entity_id)
+    }
+
+    async fn store(&self) -> Result<()> {
+        sqlx::query!(
+            r#"INSERT INTO orrery_project_views (project_id, day, views)
+               VALUES (?, ?, ?)
+               ON CONFLICT (project_id, day) DO UPDATE SET views = excluded.views"#,
+            self.entity_ulid,
+            self.day,
+            self.views,
         )
-        .await;
+        .execute(common::shared::db())
+        .await?;
 
-        let sleep_duration = match page {
-            // Try again in a minute.
-            None => Duration::from_secs(60),
-            Some(page) => {
-                let full = page.len() == VISIT_CLICKS_PAGE;
-
-                match store_visit_click_page(&database, page).await {
-                    // A full page means more are waiting; otherwise check
-                    // back hourly.
-                    Ok(()) if full => Duration::from_secs(5),
-                    Ok(()) => Duration::from_secs(60 * 60),
-                    Err(e) => {
-                        eprintln!("Visit click sync: {e}");
-                        Duration::from_secs(60)
-                    }
-                }
-            }
-        };
-
-        tokio::select! {
-            _ = sleep(sleep_duration) => {}
-            _ = cancellation_token.cancelled() => {
-                println!("Visit click sync cancelled during sleep, exiting gracefully");
-                return;
-            }
-        }
+        Ok(())
     }
 }
 
-/// Store a page of Visit click windows, then move the watermark up to the
-/// last one stored. The page comes in (as_of, id) order, so stopping at a
-/// row that fails keeps the watermark short of it, and it comes again.
-async fn store_visit_click_page(database: &Database, page: Vec<VisitClicksData>) -> Result<()> {
-    let mut stored = None;
-    let mut failure = None;
-
-    for window in page {
-        if let Err(e) = store_visit_clicks(&window).await {
-            failure = Some(e.context(format!("storing window {}", window.id)));
-            break;
-        }
-
-        stored = Some((window.as_of, window.id));
-    }
-
-    if let Some((as_of, id)) = stored {
-        set_sync_bookmark(database, "visit-click-sync-bookmark", &as_of).await?;
-        set_sync_last_id(database, "visit-click-sync-last-id", id).await?;
-    }
-
-    failure.map_or(Ok(()), Err)
+pub async fn project_view_synchronize(
+    database: Arc<Database>,
+    cancellation_token: CancellationToken,
+) {
+    synchronize_orrery_feed::<ProjectViewsData>(database, cancellation_token).await
 }
 
-async fn store_visit_clicks(window: &VisitClicksData) -> Result<()> {
-    sqlx::query!(
-        r#"INSERT INTO orrery_visit_clicks (window_id, project_id, as_of, clicks)
-           VALUES (?, ?, ?, ?)
-           ON CONFLICT (window_id)
-           DO UPDATE SET project_id = excluded.project_id, as_of = excluded.as_of,
-                         clicks = excluded.clicks"#,
-        window.id,
-        window.entity_ulid,
-        window.as_of,
-        window.count,
-    )
-    .execute(common::shared::db())
-    .await?;
+/// A click on one of the share buttons of an entity's page, as
+/// `/staff/sync/project_shares` sends it.
+#[derive(Debug, Deserialize)]
+pub struct ProjectShareData {
+    pub id: i32,
+    pub when: String,
+    pub entity_ulid: String,
+    pub platform: String,
+}
 
-    Ok(())
+/// Carry orrery's share clicks into `orrery_shares`, the record of shares
+/// from before hydra logged them itself.
+///
+/// Watermark: `when`, which never changes.
+impl OrreryFeedRow for ProjectShareData {
+    const FEED: &'static str = "project_shares";
+    const NAME: &'static str = "Project share";
+    const BOOKMARK: &'static str = "project-share-sync-bookmark";
+    const LAST_ID: &'static str = "project-share-sync-last-id";
+    const START: &'static str = "1900-01-01T00:00:00Z";
+    const PAGE: usize = 500;
+
+    fn cursor(&self) -> (String, i32) {
+        (self.when.clone(), self.id)
+    }
+
+    async fn store(&self) -> Result<()> {
+        sqlx::query!(
+            r#"INSERT INTO orrery_shares (click_id, entity_id, platform, "when")
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT (click_id) DO UPDATE SET entity_id = excluded.entity_id,
+                   platform = excluded.platform, "when" = excluded."when""#,
+            self.id,
+            self.entity_ulid,
+            self.platform,
+            self.when,
+        )
+        .execute(common::shared::db())
+        .await?;
+
+        Ok(())
+    }
+}
+
+pub async fn project_share_synchronize(
+    database: Arc<Database>,
+    cancellation_token: CancellationToken,
+) {
+    synchronize_orrery_feed::<ProjectShareData>(database, cancellation_token).await
 }

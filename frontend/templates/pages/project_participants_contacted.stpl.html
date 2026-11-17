@@ -1,0 +1,1 @@
+<td id="<%= self.id %>"<% if self.oob { %> hx-swap-oob="true"<% } %>><% if let Some(contacted) = &self.contacted { %><%= contacted %><% } else { %><span class="pm-never">Never</span><% } %></td>

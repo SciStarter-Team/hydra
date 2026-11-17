@@ -67,6 +67,10 @@ pub struct ClickthroughBeacon {
     pub to_url: String,
     /// Path of the page the click originated from.
     pub from_path: String,
+    /// Whether the link was a project page's Visit button, which counts as
+    /// a visit to the project rather than any outbound click.
+    #[serde(default)]
+    pub visit: bool,
 }
 
 /// Record an outbound external-link click reported by `static/js/pagelife.js`.
@@ -101,7 +105,11 @@ pub async fn record_clickthrough(
         user_info.as_ref().map(|u| u.user_id),
         beacon.from_path,
         beacon.to_url,
-        "external_link",
+        if beacon.visit {
+            common::message::project_stats::VISIT_LINK_TYPE
+        } else {
+            "external_link"
+        },
         None, // program_id
         None, // geolocation - resolved from IP
     )

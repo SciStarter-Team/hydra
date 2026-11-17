@@ -89,7 +89,51 @@ pub(crate) async fn store_join(
     source: JoinSource,
 ) -> Result<bool, Error> {
     let mut tx = Immediate::begin_with_retry(pool, None, None).await?;
+    let new = upsert_join(&mut tx, user_id, project_id, when, source).await?;
+    tx.commit().await?;
 
+    Ok(new)
+}
+
+/// Record orrery's copy of `user_id`'s join to `project_id` at `when`, by
+/// [`store_join`]'s rule, with the star and consent orrery's Participant
+/// Manager keeps on it.
+pub(crate) async fn store_legacy_join(
+    pool: &SqlitePool,
+    user_id: &str,
+    project_id: &str,
+    when: &TimeString,
+    starred: bool,
+    consented: Option<&str>,
+) -> Result<(), Error> {
+    let mut tx = Immediate::begin_with_retry(pool, None, None).await?;
+
+    upsert_join(&mut tx, user_id, project_id, when, JoinSource::LegacyOrrery).await?;
+
+    sqlx::query!(
+        r#"UPDATE "project_joins" SET "starred" = ?, "consented" = ?
+           WHERE "user_id" = ? AND "project_id" = ?"#,
+        starred,
+        consented,
+        user_id,
+        project_id,
+    )
+    .execute(&mut tx)
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(())
+}
+
+/// [`store_join`]'s rule, within `tx`.
+async fn upsert_join(
+    tx: &mut Immediate,
+    user_id: &str,
+    project_id: &str,
+    when: &TimeString,
+    source: JoinSource,
+) -> Result<bool, Error> {
     let existed = sqlx::query_scalar!(
         r#"SELECT EXISTS (
              SELECT 1 FROM "project_joins" WHERE "user_id" = ? AND "project_id" = ?
@@ -97,7 +141,7 @@ pub(crate) async fn store_join(
         user_id,
         project_id,
     )
-    .fetch_one(&mut tx)
+    .fetch_one(&mut *tx)
     .await?;
 
     sqlx::query!(
@@ -114,10 +158,8 @@ pub(crate) async fn store_join(
         when,
         source,
     )
-    .execute(&mut tx)
+    .execute(&mut *tx)
     .await?;
-
-    tx.commit().await?;
 
     Ok(!existed)
 }

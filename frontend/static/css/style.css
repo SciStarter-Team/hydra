@@ -74,6 +74,7 @@
 @import "./components/flip.css" layer(hydra);
 @import "./components/dashboard.css" layer(hydra);
 @import "./components/concierge.css" layer(hydra);
+@import "./components/editor-nav.css" layer(hydra);
 @import "./components/web-awesome-overrides.css" layer(hydra);
 
 
@@ -84,6 +85,8 @@
 @import "./pages/project.css" layer(hydra);
 @import "./pages/api.css" layer(hydra);
 @import "./pages/data.css" layer(hydra);
+@import "./pages/project-stats.css" layer(hydra);
+@import "./pages/project-participants.css" layer(hydra);
 @import "./pages/finder.css" layer(hydra);
 
 

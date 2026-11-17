@@ -1,0 +1,77 @@
+/* The Participant Manager (crate::project::participants). */
+.ss-participants .pm-back {
+    @apply text-sm mb-2;
+}
+
+.ss-participants .pm-note {
+    @apply text-sm text-neutral-dark mb-6 max-w-3xl;
+}
+
+.ss-participants .pm-filters {
+    @apply flex flex-wrap items-end gap-4 mb-4;
+}
+
+.ss-participants .pm-filters label,
+.ss-participants .pm-message label {
+    @apply flex flex-col gap-1 text-sm font-semibold;
+}
+
+.ss-participants .pm-filters select,
+.ss-participants .pm-filters input,
+.ss-participants .pm-message input,
+.ss-participants .pm-message textarea {
+    @apply border border-linework rounded-sm px-3 py-2 font-normal;
+}
+
+.ss-participants .pm-search {
+    @apply grow max-w-sm;
+}
+
+.ss-participants .pm-total {
+    @apply text-sm font-semibold mb-2;
+}
+
+.ss-participants .pm-table-wrap {
+    @apply overflow-x-auto border border-linework rounded-sm;
+}
+
+.ss-participants .pm-table {
+    @apply w-full text-sm;
+}
+
+.ss-participants .pm-table th {
+    @apply text-left bg-primary-light px-3 py-2 whitespace-nowrap;
+}
+
+.ss-participants .pm-table td {
+    @apply px-3 py-2 border-t border-linework whitespace-nowrap;
+}
+
+.ss-participants .pm-never {
+    @apply text-neutral-dark opacity-70;
+}
+
+.ss-participants .pm-star {
+    @apply p-1 bg-transparent border-0 cursor-pointer;
+}
+
+.ss-participants .pm-star svg {
+    fill: none;
+    @apply stroke-primary-action;
+}
+
+.ss-participants .pm-star[aria-pressed=true] svg {
+    @apply fill-accent1 stroke-accent1;
+}
+
+.ss-participants .pm-pages {
+    @apply flex justify-center items-center gap-6 mt-4 text-sm;
+}
+
+.ss-participants .pm-message {
+    @apply grid grid-cols-1 gap-3 mt-10 p-4 border border-linework rounded-sm bg-primary-light max-w-3xl;
+}
+
+.ss-participants .pm-result {
+    @apply font-semibold text-primary-dark;
+}

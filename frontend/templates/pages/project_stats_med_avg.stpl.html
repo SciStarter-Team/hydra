@@ -1,0 +1,12 @@
+<%# One figure placed on a line beside every project's median or mean: the
+    tick is the projects', the dot this project's. %>
+<div class="ps-medavg">
+  <div class="ps-medavg-head">
+    <span><%= self.graph.label %></span>
+    <span class="ps-medavg-figure"><%= self.graph.figure %></span>
+  </div>
+  <div class="ps-medavg-track" role="img" aria-label="<%= self.graph.label %> <%= self.graph.figure %>; this project <%= self.graph.project %>">
+    <span class="ps-medavg-mid" style="left: <%= format!("{:.1}", self.graph.midline) %>%"></span>
+    <span class="ps-medavg-dot" style="left: <%= format!("{:.1}", self.graph.dot) %>%" title="This project: <%= self.graph.project %>"></span>
+  </div>
+</div>

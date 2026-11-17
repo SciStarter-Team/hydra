@@ -30,6 +30,11 @@ use crate::middleware::authorization::Authenticated;
 
 const INBOX_PAGE_SIZE: i64 = 25;
 
+/// The inbox of the project or event `entity_id` names.
+pub fn inbox_path(entity_id: impl std::fmt::Display) -> String {
+    format!("/dashboard/owned/{entity_id}/messages")
+}
+
 /// Confirm the signed-in user manages `entity_id`, returning them plus the
 /// entity's summary (name/kind) when they do, or `None` otherwise.
 async fn authorize_manager(

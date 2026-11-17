@@ -1,6 +1,6 @@
 <div class="ss-container !pt-8 !pb-8 mx-auto">
     <p class="text-sm">
-        <a href="/dashboard/owned/<%= &self.entity_id %>/messages" class="text-primary-action hover:underline">&larr; Back to messages</a>
+        <a href="<%= crate::dashboard::entity_messages::inbox_path(&self.entity_id) %>" class="text-primary-action hover:underline">&larr; Back to messages</a>
     </p>
     <h1 class="mt-2">Message participants of "<%= &self.entity_name %>"</h1>
     <p class="text-sm text-gray-600 mb-6">

@@ -13,6 +13,7 @@ mod exchange;
 mod foundations;
 mod handlers;
 mod project_ids;
+mod project_stats;
 mod sync;
 
 use bridges::{
@@ -41,7 +42,8 @@ use parking_lot::RwLock;
 use sync::{
     acts_of_science_synchronize, bookmark_synchronize, exchange_event_synchronize,
     golink_synchronize, join_synchronize, participation_synchronize, rating_synchronize,
-    review_synchronize, visit_click_synchronize,
+    project_share_synchronize, project_view_synchronize, review_synchronize,
+    visit_click_synchronize,
 };
 
 // Global database instance for handler access - using RwLock<Option<>> so we can take ownership for shutdown
@@ -78,6 +80,9 @@ async fn main() -> Result<()> {
     let acts_cancel = CancellationToken::new();
     let exchange_events_cancel = CancellationToken::new();
     let visit_clicks_cancel = CancellationToken::new();
+    let project_views_cancel = CancellationToken::new();
+    let project_shares_cancel = CancellationToken::new();
+    let project_stats_cancel = CancellationToken::new();
     let zoo_projects_cancel = CancellationToken::new();
     let zoo_sync_cancel = CancellationToken::new();
     let inat_cancel = CancellationToken::new();
@@ -168,6 +173,30 @@ async fn main() -> Result<()> {
     let visit_clicks_database = Arc::clone(&database);
     background_tasks.spawn(async move {
         visit_click_synchronize(visit_clicks_database, visit_clicks_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn orrery daily project view (legacy view history) sync task
+    let project_views_cancel_clone = project_views_cancel.clone();
+    let project_views_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        project_view_synchronize(project_views_database, project_views_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn orrery share click (legacy share history) sync task
+    let project_shares_cancel_clone = project_shares_cancel.clone();
+    let project_shares_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        project_share_synchronize(project_shares_database, project_shares_cancel_clone).await;
+        Ok::<(), anyhow::Error>(())
+    });
+
+    // Spawn the daily project stats snapshot
+    let project_stats_cancel_clone = project_stats_cancel.clone();
+    let project_stats_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        project_stats::run_daily(project_stats_database, project_stats_cancel_clone).await;
         Ok::<(), anyhow::Error>(())
     });
 
@@ -354,6 +383,17 @@ async fn main() -> Result<()> {
     ));
     toplevel.spawn(handler!(log_group, "user_last_view", handle_user_last_view));
 
+    toplevel.spawn(handler!(
+        log_group,
+        "project_stats",
+        project_stats::handle_project_stats
+    ));
+    toplevel.spawn(handler!(
+        log_group,
+        "project_participants",
+        project_stats::handle_project_participants
+    ));
+
     // Stats endpoints
     let stats_group = svc.group("log.stats");
     toplevel.spawn(handler!(stats_group, "go_url", handle_go_url_stats));
@@ -464,6 +504,8 @@ async fn main() -> Result<()> {
     println!("  - log.recent_activity");
     println!("  - log.affiliate_participants");
     println!("  - log.entity_list_stats");
+    println!("  - log.project_stats");
+    println!("  - log.project_participants");
     println!("  - log.stats.go_url");
     println!("  - log.acts.contributors");
     println!("  - log.cache.user_tags_update");
@@ -489,6 +531,8 @@ async fn main() -> Result<()> {
     println!("  - zooniverse user sync running in background");
     println!("  - zooniverse classification sync running in background");
     println!("  - iNaturalist sync running in background");
+    println!("  - project view and share syncs running in background");
+    println!("  - project stats snapshot running daily");
     println!("  - WAL compactor running in background");
 
     // Set up signal handling
@@ -560,6 +604,9 @@ async fn main() -> Result<()> {
     acts_cancel.cancel();
     exchange_events_cancel.cancel();
     visit_clicks_cancel.cancel();
+    project_views_cancel.cancel();
+    project_shares_cancel.cancel();
+    project_stats_cancel.cancel();
     zoo_projects_cancel.cancel();
     zoo_sync_cancel.cancel();
     inat_cancel.cancel();

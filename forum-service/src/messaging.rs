@@ -6,6 +6,7 @@ use common::{
         dashboard::EntitySummary,
         email::EmailRecipient,
         forum::*,
+        participants::{LastContacted, LastContactedRequest},
         user::{BasicInfo, PROTECTED_SENDER_REFUSAL},
     },
     service::request as nats_request,
@@ -833,4 +834,38 @@ pub async fn review_batch(req: &Request) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// `forum.messaging.last_contacted`: when `from_id` last wrote to each of
+/// `to_ids` -- in a conversation it began in their inbox, or in one they
+/// began in its own -- counting only what was delivered.
+pub async fn last_contacted(req: &Request) -> Result<Vec<LastContacted>> {
+    let request: LastContactedRequest = flexbuffers::from_slice(&req.message.payload)?;
+    let from_id = request.from_id.to_string();
+    let mut contacted = Vec::new();
+
+    for to_id in request.to_ids {
+        let to = to_id.to_string();
+        let when = sqlx::query_scalar!(
+            r#"SELECT MAX(p."created_at") AS "when: String"
+               FROM "posts" p
+               JOIN "topics" t ON t."topic_id" = p."topic_id"
+               WHERE p."author_id" = ?1 AND p."approved" = 1 AND NOT p."is_deleted"
+                 AND ((t."forum_id" = ?2 AND t."author_id" = ?1)
+                      OR (t."forum_id" = ?1 AND t."author_id" = ?2))"#,
+            from_id,
+            to,
+        )
+        .fetch_one(db())
+        .await?;
+
+        if let Some(when) = when {
+            contacted.push(LastContacted {
+                user_id: to_id,
+                when,
+            });
+        }
+    }
+
+    Ok(contacted)
 }

@@ -1,0 +1,19 @@
+<%# Counts by day: bars, with lines drawn over them on the same scale. %>
+<figure class="ps-chart">
+  <div class="ps-chart-plot">
+    <span class="ps-chart-top"><%= self.chart.top %></span>
+    <svg viewBox="0 0 <%= self.chart.width %> 100" preserveAspectRatio="none" role="img" aria-label="<%= self.label %>">
+      <% for bar in &self.chart.bars { %>
+      <rect class="ps-bar" x="<%= format!("{:.1}", bar.x) %>" y="<%= format!("{:.2}", bar.y) %>" width="8" height="<%= format!("{:.2}", bar.height) %>"><title><%= bar.title %></title></rect>
+      <% } %>
+      <% for line in &self.chart.lines { %>
+      <polyline class="<%= line.class %>" points="<%= line.points %>" vector-effect="non-scaling-stroke"></polyline>
+      <% } %>
+    </svg>
+  </div>
+  <figcaption class="ps-chart-axis">
+    <span><%= self.chart.first %></span>
+    <span><%= self.chart.middle %></span>
+    <span><%= self.chart.last %></span>
+  </figcaption>
+</figure>

@@ -1,0 +1,103 @@
+<%+ self.nav %>
+<div class="ss-container !pt-8 !pb-8 mx-auto ss-participants">
+  <p class="pm-back"><a href="<%= self.project_path %>">&larr; <%= self.name %></a></p>
+  <h1 class="text-2xl mb-2">Volunteer Manager: <%= self.name %></h1>
+  <p class="pm-note">Everyone who has joined your project, and everyone who has saved it without joining. Star people to keep track of them, and write to the people you pick. Only you, the project's other editors, and SciStarter staff can see this page. People who have asked SciStarter to keep their participation private are not listed.</p>
+
+  <%# The filters are an ordinary GET back to this page, so they work with no
+      JavaScript; HTMX fetches the same address and lifts the roster out of
+      the response, keeping the address bar honest. %>
+  <div id="pm-roster">
+    <form method="get" action="<%= self.here %>" class="pm-filters"
+          hx-get="<%= self.here %>" hx-trigger="submit, change"
+          hx-target="#pm-roster" hx-select="#pm-roster" hx-swap="outerHTML" hx-push-url="true">
+      <label>
+        <span>Type</span>
+        <select name="kind">
+          <option value="">Everyone</option>
+          <% for choice in &self.kinds { %>
+          <option value="<%= choice.key %>"<% if choice.selected { %> selected<% } %>><%= choice.label %></option>
+          <% } %>
+        </select>
+      </label>
+      <label>
+        <span>Star</span>
+        <select name="starred">
+          <option value="">Everyone</option>
+          <% for choice in &self.stars { %>
+          <option value="<%= choice.key %>"<% if choice.selected { %> selected<% } %>><%= choice.label %></option>
+          <% } %>
+        </select>
+      </label>
+      <label class="pm-search">
+        <span>Name</span>
+        <input type="search" name="q" value="<%= self.search %>">
+      </label>
+      <button type="submit" class="btn btn-secondary">Filter</button>
+    </form>
+
+    <p class="pm-total" role="status"><%= thousands(self.total as i64) %> <% if self.total == 1 { %>person<% } else { %>people<% } %></p>
+
+    <% if self.rows.is_empty() { %>
+    <p class="pm-note">Nobody on the list matches.</p>
+    <% } else { %>
+    <div class="pm-table-wrap">
+      <table class="pm-table">
+        <thead>
+          <tr>
+            <th scope="col"><span class="sr-only">Pick</span></th>
+            <th scope="col"><span class="sr-only">Star</span></th>
+            <th scope="col">Name</th>
+            <th scope="col">Type</th>
+            <th scope="col">Since</th>
+            <th scope="col">Contacted</th>
+            <th scope="col">Activity</th>
+            <% if self.asks_consent { %><th scope="col">Consented</th><% } %>
+            <% if self.is_affiliate { %><th scope="col" class="text-right">Contributions</th><% } %>
+          </tr>
+        </thead>
+        <tbody>
+          <% for row in self.rows { %>
+          <tr>
+            <td><input type="checkbox" name="to[]" value="<%= row.user_id | disp %>" form="pm-message" aria-label="Pick <%= row.name %>"></td>
+            <td><%+ row.star %></td>
+            <td><a href="<%= row.profile %>"><%= row.name %></a></td>
+            <td><%= row.kind %></td>
+            <td><%= row.since %></td>
+            <%+ ContactedCell { id: row.contacted_id, contacted: row.contacted, oob: false } %>
+            <td><%= row.activity %></td>
+            <% if self.asks_consent { %><td><% if let Some(consented) = &row.consented { %><%= consented %><% } %></td><% } %>
+            <% if self.is_affiliate { %><td class="text-right"><%= row.contributions %></td><% } %>
+          </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+
+    <% if self.pages > 1 { %>
+    <nav class="pm-pages" aria-label="Pages of the list">
+      <% if let Some(previous) = &self.previous { %><a href="<%= previous %>" hx-get="<%= previous %>" hx-target="#pm-roster" hx-select="#pm-roster" hx-swap="outerHTML" hx-push-url="true">&larr; Previous</a><% } %>
+      <span>Page <%= self.page %> of <%= self.pages %></span>
+      <% if let Some(next) = &self.next { %><a href="<%= next %>" hx-get="<%= next %>" hx-target="#pm-roster" hx-select="#pm-roster" hx-swap="outerHTML" hx-push-url="true">Next &rarr;</a><% } %>
+    </nav>
+    <% } %>
+    <% } %>
+  </div>
+
+  <form id="pm-message" class="pm-message" hx-post="<%= self.message_path %>" hx-target="#pm-message-result" hx-swap="innerHTML">
+    <h2>Write to the people you picked</h2>
+    <p class="pm-note">Sent as <strong><%= self.name %></strong>. Each person receives it as a private message they can reply to, and it is delivered immediately.</p>
+    <label>
+      <span>Subject</span>
+      <input name="subject" type="text" required>
+    </label>
+    <label>
+      <span>Message</span>
+      <textarea name="body" rows="6" required></textarea>
+    </label>
+    <div id="pm-message-result"></div>
+    <div class="flex justify-end">
+      <button type="submit" class="btn btn-primary">Send</button>
+    </div>
+  </form>
+</div>

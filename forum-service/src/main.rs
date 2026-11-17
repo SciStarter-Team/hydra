@@ -149,6 +149,11 @@ async fn main() {
     toplevel.spawn(handler!(messaging, "send_bulk", messaging::send_bulk));
     toplevel.spawn(handler!(messaging, "reply", messaging::reply_to_message));
     toplevel.spawn(handler!(messaging, "inbox", messaging::inbox));
+    toplevel.spawn(handler!(
+        messaging,
+        "last_contacted",
+        messaging::last_contacted
+    ));
     toplevel.spawn(recv_handler!(messaging, "read", messaging::mark_read));
     toplevel.spawn(recv_handler!(messaging, "discard", messaging::discard));
     toplevel.spawn(handler!(messaging, "unread_count", messaging::unread_count));

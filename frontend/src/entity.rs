@@ -663,6 +663,7 @@ impl Entity {
                     slug: self.slug.clone(),
                     kind: crate::component::detail_page::DetailPageKind::Project,
                     target_id,
+                    published: self.publish(),
                     return_to: req
                         .uri()
                         .path_and_query()
@@ -712,6 +713,7 @@ impl Entity {
                     slug: self.slug.clone(),
                     kind: crate::component::detail_page::DetailPageKind::Event,
                     target_id,
+                    published: self.publish(),
                     return_to: req
                         .uri()
                         .path_and_query()

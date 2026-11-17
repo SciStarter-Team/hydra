@@ -1,0 +1,299 @@
+/* A project's stats page (/projects/<slug>/stats) */
+
+.ss-project-stats h2 {
+    @apply text-lg mt-6 mb-3;
+}
+
+.ss-project-stats .ps-back {
+    @apply text-sm mb-2;
+}
+
+.ss-project-stats .ps-through,
+.ss-project-stats .ps-note {
+    @apply text-sm opacity-80 mb-4;
+}
+
+/* A bordered block grouping one chart or table. */
+.ss-project-stats .ps-panel {
+    @apply border border-linework rounded-sm bg-white p-4 mt-6;
+}
+
+.ss-project-stats .ps-panel h2 {
+    @apply mt-0;
+}
+
+.ss-project-stats .ps-panel-head {
+    @apply flex flex-wrap items-center justify-between gap-2 mb-2;
+}
+
+.ss-project-stats .ps-columns {
+    @apply grid gap-4 md:grid-cols-2;
+}
+
+.ss-project-stats .ps-columns .ps-panel {
+    @apply mt-0;
+}
+
+/* Comparison cards: a figure, and where it falls among every project's. */
+.ss-project-stats .ps-cards {
+    @apply grid gap-4 sm:grid-cols-2 lg:grid-cols-4;
+}
+
+.ss-project-stats .ps-cards-3 {
+    @apply lg:grid-cols-3;
+}
+
+.ss-project-stats .ps-card {
+    @apply border border-linework rounded-sm bg-white p-4 flex flex-col gap-2;
+}
+
+.ss-project-stats .ps-card-head {
+    @apply flex items-center gap-2;
+}
+
+.ss-project-stats .ps-card-head h3 {
+    @apply text-base font-semibold m-0 grow;
+}
+
+.ss-project-stats .ps-card-icon {
+    @apply shrink-0 fill-primary-action;
+}
+
+.ss-project-stats .ps-card-timeframe {
+    @apply text-xs uppercase tracking-wide opacity-70;
+}
+
+.ss-project-stats .ps-card-figure {
+    @apply font-header-lg text-3xl text-primary-dark leading-none m-0;
+}
+
+.ss-project-stats .ps-card-description {
+    @apply text-xs opacity-80 m-0;
+}
+
+/* One figure on a line: the tick is every project's median or mean, the
+   dot this project. */
+.ss-project-stats .ps-medavg {
+    @apply text-xs;
+}
+
+.ss-project-stats .ps-medavg-head {
+    @apply flex justify-between gap-2 mb-1;
+}
+
+.ss-project-stats .ps-medavg-figure {
+    @apply font-semibold;
+}
+
+.ss-project-stats .ps-medavg-track {
+    @apply relative block h-2 rounded-full bg-primary-light mb-2;
+}
+
+.ss-project-stats .ps-medavg-mid {
+    @apply absolute -top-1 h-4 w-0.5 bg-primary-dark;
+    transform: translateX(-50%);
+}
+
+.ss-project-stats .ps-medavg-dot {
+    @apply absolute top-1/2 h-3 w-3 rounded-full bg-accent1 border-2 border-white;
+    transform: translate(-50%, -50%);
+}
+
+/* A two- or three-way switch between views of one chart; tabs.js does the
+   switching. */
+.ss-project-stats .ps-toggle {
+    @apply inline-flex border border-linework rounded-sm overflow-hidden;
+}
+
+.ss-project-stats .ps-toggle > [role=tab] {
+    @apply px-3 py-1 text-sm bg-white text-primary-action;
+}
+
+.ss-project-stats .ps-toggle > [role=tab][aria-selected=true] {
+    @apply bg-primary-action text-white;
+}
+
+.ss-project-stats .tab-panels .tab-panel .tab-panel {
+    max-width: none;
+}
+
+/* Counts by day. */
+.ss-project-stats .ps-chart {
+    @apply m-0;
+}
+
+.ss-project-stats .ps-chart-plot {
+    @apply relative border-b border-l border-linework pt-5;
+}
+
+.ss-project-stats .ps-chart-plot svg {
+    @apply block w-full h-48;
+}
+
+.ss-project-stats .ps-chart-top {
+    @apply absolute top-0 left-1 text-xs opacity-70;
+}
+
+.ss-project-stats .ps-chart-axis {
+    @apply flex justify-between text-xs opacity-70 mt-1;
+}
+
+.ss-project-stats .ps-bar {
+    fill: var(--color-primary);
+}
+
+.ss-project-stats .ps-bar:hover {
+    fill: var(--color-primary-action-dark);
+}
+
+.ss-project-stats .ps-line-visits,
+.ss-project-stats .ps-line-saves {
+    fill: none;
+    stroke-width: 2;
+    stroke-linejoin: round;
+}
+
+.ss-project-stats .ps-line-visits {
+    stroke: var(--color-accent1);
+}
+
+.ss-project-stats .ps-line-saves {
+    stroke: var(--color-primary-dark);
+}
+
+/* Legends. */
+.ss-project-stats .ps-legend {
+    @apply flex flex-wrap gap-4 text-sm mb-2;
+}
+
+.ss-project-stats .ps-key {
+    @apply inline-flex items-center gap-1;
+}
+
+.ss-project-stats .ps-key::before {
+    content: "";
+    @apply inline-block w-3 h-3 rounded-sm;
+}
+
+.ss-project-stats .ps-key-views::before {
+    background: var(--color-primary);
+}
+
+.ss-project-stats .ps-key-visits::before {
+    background: var(--color-accent1);
+}
+
+.ss-project-stats .ps-key-saves::before {
+    background: var(--color-primary-dark);
+}
+
+.ss-project-stats .ps-key-joins::before {
+    background: var(--color-primary-action);
+}
+
+.ss-project-stats .ps-key-unknown::before {
+    background: var(--color-light-gray);
+}
+
+/* Rings. */
+.ss-project-stats .ps-shares {
+    @apply grid gap-6 md:grid-cols-[12rem_1fr] items-start;
+}
+
+.ss-project-stats .ps-donut {
+    @apply relative w-48 h-48 mx-auto;
+}
+
+.ss-project-stats .ps-donut svg {
+    @apply w-full h-full;
+}
+
+.ss-project-stats .ps-donut-ring {
+    stroke: var(--color-primary-light);
+}
+
+.ss-project-stats .ps-donut-label {
+    @apply absolute inset-0 flex flex-col items-center justify-center;
+}
+
+.ss-project-stats .ps-donut-figure {
+    @apply font-header-lg text-2xl text-primary-dark leading-none;
+}
+
+.ss-project-stats .ps-donut-caption {
+    @apply text-xs uppercase tracking-wide opacity-70;
+}
+
+.ss-project-stats .ps-share-platforms {
+    @apply grid gap-4 sm:grid-cols-2;
+}
+
+.ss-project-stats .ps-share-name {
+    @apply flex items-center gap-2 text-sm mb-1;
+}
+
+.ss-project-stats .ps-swatch {
+    @apply inline-block w-3 h-3 rounded-sm;
+}
+
+.ss-project-stats .ps-feedback-rows {
+    @apply grid gap-4;
+}
+
+.ss-project-stats .ps-feedback-row {
+    @apply grid gap-x-4 sm:grid-cols-2;
+}
+
+/* Each segment's colour is its stroke in the ring and its fill as a swatch. */
+.ss-project-stats .ps-share-facebook { stroke: #1877f2; background: #1877f2; }
+.ss-project-stats .ps-share-twitter { stroke: #1d9bf0; background: #1d9bf0; }
+.ss-project-stats .ps-share-pinterest { stroke: #e60023; background: #e60023; }
+.ss-project-stats .ps-share-linkedin { stroke: #0a66c2; background: #0a66c2; }
+.ss-project-stats .ps-share-instagram { stroke: #c13584; background: #c13584; }
+.ss-project-stats .ps-share-other { stroke: var(--color-field-border); background: var(--color-field-border); }
+.ss-project-stats .ps-feedback-joins { stroke: var(--color-primary-action); }
+.ss-project-stats .ps-feedback-unknown { stroke: var(--color-light-gray); }
+
+/* Horizontal bars. */
+.ss-project-stats .ps-bars {
+    @apply m-0 p-0 grid gap-2;
+}
+
+.ss-project-stats .ps-bars > li {
+    @apply list-none m-0 grid grid-cols-[8rem_1fr_4rem] items-center gap-2 text-sm;
+}
+
+.ss-project-stats .ps-bars-track {
+    @apply block h-3 bg-primary-light rounded-sm;
+}
+
+.ss-project-stats .ps-bars-fill {
+    @apply block h-full bg-primary rounded-sm;
+}
+
+.ss-project-stats .ps-bars-count {
+    @apply text-right;
+}
+
+/* Other projects viewers viewed. */
+.ss-project-stats .ps-also-viewed {
+    @apply w-full text-sm;
+}
+
+.ss-project-stats .ps-also-viewed th,
+.ss-project-stats .ps-also-viewed td {
+    @apply text-left align-top py-2 pr-3 border-b border-linework;
+}
+
+.ss-project-stats .ps-also-viewed th.text-right,
+.ss-project-stats .ps-also-viewed td.text-right {
+    @apply text-right pr-0;
+}
+
+.ss-project-stats .ps-also-image {
+    @apply w-16;
+}
+
+.ss-project-stats .ps-also-image img {
+    @apply w-16 h-12 object-cover rounded-sm;
+}

@@ -1,0 +1,30 @@
+/* The bar of links to a project's editor-only pages
+   (crate::project::editor_nav), across the top of each of them. */
+.ss-editor-nav {
+    @apply bg-primary-light border-b border-linework;
+}
+
+.ss-editor-nav > ul {
+    @apply flex flex-wrap justify-end gap-x-6 gap-y-1 py-2 m-0 list-none text-sm;
+}
+
+.ss-editor-nav li {
+    @apply m-0;
+}
+
+.ss-editor-nav a {
+    @apply text-primary-action font-semibold hover:underline;
+}
+
+.ss-editor-nav a[aria-current=page] {
+    @apply text-primary-dark no-underline pointer-events-none border-b-2 border-accent1;
+}
+
+/* Staff-only: the page's status and whether it is published. */
+.ss-staff-status {
+    @apply flex justify-end gap-2 m-0 mb-2 text-xs;
+}
+
+.ss-staff-status > span {
+    @apply border border-linework rounded-sm px-2 py-0.5 bg-white uppercase tracking-wide;
+}

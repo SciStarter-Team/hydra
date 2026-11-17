@@ -1,0 +1,13 @@
+<div class="ps-card">
+  <div class="ps-card-head">
+    <svg width="24" height="24" aria-hidden="true" class="ps-card-icon"><use xlink:href="/-static/img/icons.svg#icon--<%= self.card.icon %>"></use></svg>
+    <h3><%= self.card.label %></h3>
+    <span class="ps-card-timeframe"><%= self.card.timeframe %></span>
+  </div>
+  <p class="ps-card-figure"><%= self.card.figure %></p>
+  <% if !self.card.description.is_empty() { %>
+  <p class="ps-card-description"><%= self.card.description %></p>
+  <% } %>
+  <%+ MedAvgInclude { graph: &self.card.median } %>
+  <%+ MedAvgInclude { graph: &self.card.mean } %>
+</div>

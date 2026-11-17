@@ -7,7 +7,9 @@
 // A single delegated click listener reports outbound clicks to /-clickthrough
 // and lets the link navigate directly, so links stay plain hrefs and the server
 // never has to rewrite them. Links opt out with `data-no-track` (e.g. social
-// share-intent links, which are recorded as shares, not clickthroughs).
+// share-intent links, which are recorded as shares, not clickthroughs). A
+// project's Visit button carries `data-visit`, which marks its click as a visit
+// to the project.
 (function () {
   document.addEventListener(
     "click",
@@ -29,7 +31,13 @@
         navigator.sendBeacon(
           "/-clickthrough",
           new Blob(
-            [JSON.stringify({ to_url: url, from_path: location.pathname })],
+            [
+              JSON.stringify({
+                to_url: url,
+                from_path: location.pathname,
+                visit: anchor.hasAttribute("data-visit"),
+              }),
+            ],
             { type: "application/json" }
           )
         );

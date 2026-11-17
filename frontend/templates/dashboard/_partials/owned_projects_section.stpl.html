@@ -28,7 +28,8 @@
             </div>
             <ul class="flex flex-wrap gap-x-6 gap-y-1 text-sm list-none m-0 p-0">
                 <li><a href="<%= row.card.link %>" class="text-primary-action hover:underline">View, Edit, and Review Project</a></li>
-                <li><a href="/dashboard/owned/<%= row.card.id %>/messages" class="text-primary-action hover:underline">View Project Inbox</a></li>
+                <li><a href="<%= crate::dashboard::entity_messages::inbox_path(&row.card.id) %>" class="text-primary-action hover:underline">View Project Inbox</a></li>
+                <li><a href="<%= crate::project::stats::path_from_page(&row.card.link) %>" class="text-primary-action hover:underline">View Project Stats</a></li>
             </ul>
         </div>
     </div>

@@ -326,7 +326,7 @@
                             </svg>
                           </span>
                         </a>
-                        <%+ SaveButton { id: "sidebar-save-button".into(), saved: self.project.saved, exchange_id: self.exchange.exchange_id(), project_id: self.project.id.clone() } %>
+                        <%+ SaveButton { saved: self.project.saved, exchange_id: self.exchange.exchange_id(), project_id: self.project.id.clone() } %>
                         <button type="button" class="el-button full-width btn-subdued btn-project el-button--default el-popover__reference" aria-describedby="el-popover-9958" tabindex="0" data-custom-open="share-modal">
                           <i class="el-icon-share"></i><span>
                             Share</span>

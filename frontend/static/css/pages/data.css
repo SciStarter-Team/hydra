@@ -1,23 +1,5 @@
 /* Site statistics page (/data) */
 
-/* Tabs on this page carry a subtitle under the name, so their label is a
-   stacked block rather than the single line .tabs-bar assumes. */
-.ss-data .tabs-bar .tab-icon {
-    @apply items-start text-left;
-}
-
-.ss-data .tab-text {
-    @apply flex flex-col;
-}
-
-.ss-data .tab-name {
-    @apply font-semibold;
-}
-
-.ss-data .tab-subtitle {
-    @apply text-sm opacity-80;
-}
-
 /* A bordered block grouping one set of figures. */
 .ss-data .data-panel {
     @apply border border-linework rounded-sm bg-white p-4;

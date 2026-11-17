@@ -8,7 +8,17 @@
     <span class="edit-toggle-label">Editing</span>
   </button>
   <% } %>
+  <% if self.can_edit && self.kind.is_project() { %>
+  <%+ crate::project::editor_nav::EditorNav::new(&self.slug, &self.target_id, crate::project::editor_nav::EditorPage::Project) %>
+  <% } %>
   <div class="ss-container mx-auto py-4!">
+
+    <% if self.is_staff_editor { %>
+    <p class="ss-staff-status">
+      <% if self.kind.is_project() { %><span><%= self.status.label() %></span><% } %>
+      <span><% if self.published { %>Published<% } else { %>Not Published<% } %></span>
+    </p>
+    <% } %>
 
     <% if !self.status.is_active() { %>
     <div class="ss-alert"><%= self.status.alert_message() %></div>

@@ -1,0 +1,16 @@
+<%# A ring divided among a few figures; each circle's circumference is 100,
+    so a segment's dash is its share. %>
+<div class="ps-donut">
+  <svg viewBox="0 0 42 42" role="img" aria-label="<%= self.caption %>: <%= self.figure %>">
+    <circle class="ps-donut-ring" cx="21" cy="21" r="15.9155" fill="none" stroke-width="5"></circle>
+    <% for segment in &self.donut.segments { %>
+    <circle class="<%= segment.class %>" cx="21" cy="21" r="15.9155" fill="none" stroke-width="5"
+            stroke-dasharray="<%= format!("{:.2}", segment.share) %> <%= format!("{:.2}", 100.0 - segment.share) %>"
+            stroke-dashoffset="<%= format!("{:.2}", segment.offset) %>"></circle>
+    <% } %>
+  </svg>
+  <div class="ps-donut-label">
+    <span class="ps-donut-figure"><%= self.figure %></span>
+    <span class="ps-donut-caption"><%= self.caption %></span>
+  </div>
+</div>

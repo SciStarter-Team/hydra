@@ -376,3 +376,22 @@
         position: relative;
         bottom:-1px;
     }
+
+/* A tab bar whose tabs carry a subtitle under the name (.tabs-subtitled on
+   the tablist): each label is a stacked block rather than the single line
+   .tabs-bar assumes. */
+.tabs-bar.tabs-subtitled .tab-icon {
+    @apply items-start text-left;
+}
+
+.tabs-subtitled .tab-text {
+    @apply flex flex-col;
+}
+
+.tabs-subtitled .tab-name {
+    @apply font-semibold;
+}
+
+.tabs-subtitled .tab-subtitle {
+    @apply text-sm opacity-80;
+}

@@ -13,8 +13,8 @@ use common::{
         },
         user::{
             BasicInfo, BookmarkCheckRequest, BookmarkCheckResponse, BookmarkCreateRequest,
-            BookmarkCreateResponse, JoinSource, ProjectJoinCheckRequest, ProjectJoinCheckResponse,
-            UserDisplayInfoBatchRequest, UserDisplayInfoBatchResponse,
+            BookmarkCreateResponse, BookmarkDeleteRequest, JoinSource, ProjectJoinCheckRequest,
+            ProjectJoinCheckResponse, UserDisplayInfoBatchRequest, UserDisplayInfoBatchResponse,
         },
     },
     service::{log_share, request},
@@ -120,6 +120,18 @@ impl DetailPageStatus {
             Self::Pending => "This project is pending review.",
             Self::Hidden => "This project is not currently visible.",
             Self::Cancelled => "This event has been cancelled.",
+        }
+    }
+
+    /// The status as staff are shown it.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Active => "Active",
+            Self::Finished => "Complete",
+            Self::Hiatus => "On hiatus",
+            Self::Pending => "Pending review",
+            Self::Hidden => "Hidden",
+            Self::Cancelled => "Cancelled",
         }
     }
 }
@@ -327,6 +339,8 @@ pub struct DetailPage {
     pub slug: String,
     pub kind: DetailPageKind,
     pub target_id: Ulid,
+    /// Whether the page is published, which staff are shown.
+    pub published: bool,
     /// The path and query the page was requested at, which signing in from
     /// it comes back to.
     pub return_to: String,
@@ -361,6 +375,7 @@ pub struct DetailPageContent {
     pub kind: DetailPageKind,
     pub slug: String,
     pub target_id: String,
+    pub published: bool,
 
     // Hero
     pub name: String,
@@ -1184,6 +1199,7 @@ impl DetailPage {
             kind: DetailPageKind::Project,
             editable_fields,
             slug: self.slug,
+            published: self.published,
             target_id: self.target_id.to_string(),
             name: row.name,
             presenter: row.presenter,
@@ -1522,6 +1538,7 @@ impl DetailPage {
             kind: DetailPageKind::Event,
             editable_fields,
             slug: self.slug,
+            published: self.published,
             target_id: self.target_id.to_string(),
             name: row.name,
             presenter: row.presenter,
@@ -1719,18 +1736,13 @@ pub async fn toggle_like(
     Ok(Html(html).into_response())
 }
 
-/// Save/bookmark a project
+/// Save a project for later.
 #[handler]
 pub async fn save_project(
     Path(id): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> poem::Result<poem::Response> {
-    let user = user_info.ok_or_else(|| {
-        poem::Error::from_string(
-            "Authentication required",
-            poem::http::StatusCode::UNAUTHORIZED,
-        )
-    })?;
+    let user = signed_in(user_info)?;
 
     let _response: BookmarkCreateResponse = request(
         "user.bookmarks.create",
@@ -1740,25 +1752,46 @@ pub async fn save_project(
         },
     )
     .await
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+    .map_err(internal_error)?;
 
-    #[derive(TemplateOnce)]
-    #[template(path = "pages/detail_page_save_button.stpl.html")]
-    struct SaveButton {
-        saved: bool,
-        target_id: String,
-    }
+    save_button(true, &id)
+}
 
-    let html = SaveButton {
-        saved: true,
-        target_id: id,
-    }
-    .render_once()
-    .map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+/// Withdraw a save.
+#[handler]
+pub async fn unsave_project(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    let user = signed_in(user_info)?;
+
+    let _removed: bool = request(
+        "user.bookmarks.delete",
+        BookmarkDeleteRequest {
+            user_id: user.user_id,
+            project_id: id.clone(),
+        },
+    )
+    .await
+    .map_err(internal_error)?;
+
+    save_button(false, &id)
+}
+
+fn signed_in(user_info: Option<Arc<BasicInfo>>) -> poem::Result<Arc<BasicInfo>> {
+    user_info.ok_or_else(|| {
+        poem::Error::from_string(
+            "Authentication required",
+            poem::http::StatusCode::UNAUTHORIZED,
+        )
+    })
+}
+
+/// The save button, showing whether the project is `saved`.
+fn save_button(saved: bool, target_id: &str) -> poem::Result<poem::Response> {
+    let html = SaveButtonInclude { saved, target_id }
+        .render_once()
+        .map_err(|e| internal_error(e.into()))?;
 
     Ok(Html(html).into_response())
 }

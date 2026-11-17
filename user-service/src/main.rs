@@ -39,8 +39,10 @@ pub mod places;
 pub mod primary_since;
 pub mod profile;
 pub mod project_joins;
+pub mod project_stats;
 pub mod recipient_search;
 pub mod referrals;
+pub mod roster;
 pub mod secret_code;
 pub mod sessions;
 pub mod signup_tag_grants;
@@ -1700,7 +1702,7 @@ async fn userbadges_synchronize() {
 ///
 /// [`JoinSource::LegacyOrrery`]: common::message::user::JoinSource::LegacyOrrery
 async fn joins_synchronize() {
-    use common::{message::user::JoinSource, timestring::TimeString};
+    use common::timestring::TimeString;
 
     #[derive(serde::Deserialize)]
     struct JoinDataImport {
@@ -1708,9 +1710,11 @@ async fn joins_synchronize() {
         when: String,
         user_ulid: String,
         entity_ulid: String,
+        /// The star orrery's Participant Manager puts on a participant.
         active: bool,
         activity: String,
         kind: i64,
+        consented: Option<String>,
     }
 
     loop {
@@ -1775,17 +1779,21 @@ async fn joins_synchronize() {
         let mut stopped_early = false;
 
         for join in joins {
-            let result = if join.kind == 1 && join.active {
+            // Orrery counts a join confirmed by its kind alone; `active` is
+            // only the participant's star.
+            let result = if join.kind == 1 {
                 match TimeString::try_from(join.when.clone()) {
-                    Ok(when) => project_joins::store_join(
-                        db,
-                        &join.user_ulid,
-                        &join.entity_ulid,
-                        &when,
-                        JoinSource::LegacyOrrery,
-                    )
-                    .await
-                    .map(|_| ()),
+                    Ok(when) => {
+                        project_joins::store_legacy_join(
+                            db,
+                            &join.user_ulid,
+                            &join.entity_ulid,
+                            &when,
+                            join.active,
+                            join.consented.as_deref(),
+                        )
+                        .await
+                    }
                     Err(e) => Err(anyhow::anyhow!("unreadable time {:?}: {e}", join.when)),
                 }
             } else {
@@ -1829,10 +1837,12 @@ async fn joins_synchronize() {
     }
 }
 
-/// Mirror orrery's bookmarks into the `bookmarks` operational store,
-/// carrying the active flag so un-bookmarking in orrery is reflected
-/// here. Starting bookmarks at the epoch backfills the full orrery
-/// history on first run.
+/// Mirror orrery's bookmarks into the `bookmarks` operational store. Orrery's
+/// `active` is the star its Participant Manager puts on a saver, and is kept
+/// as `starred`; a save orrery withdraws it deletes, which this feed cannot
+/// show, so `bookmarks::reconcile_with_orrery` carries those across.
+/// Starting bookmarks at the epoch backfills the full orrery history on
+/// first run.
 async fn bookmarks_synchronize() {
     #[derive(serde::Deserialize)]
     struct BookmarkDataImport {
@@ -1909,13 +1919,13 @@ async fn bookmarks_synchronize() {
         for bm in bookmarks {
             let result = sqlx::query!(
                 r#"INSERT INTO "bookmarks"
-                       ("user_id", "project_id", "created", "activity", "contacted", "active")
+                       ("user_id", "project_id", "created", "activity", "contacted", "starred")
                    VALUES (?, ?, ?, ?, ?, ?)
                    ON CONFLICT ("user_id", "project_id") DO UPDATE SET
                        "created" = excluded."created",
                        "activity" = excluded."activity",
                        "contacted" = excluded."contacted",
-                       "active" = excluded."active""#,
+                       "starred" = excluded."starred""#,
                 bm.user_ulid,
                 bm.entity_ulid,
                 bm.when,
@@ -3400,6 +3410,8 @@ async fn main() {
 
     let _bookmarks_sync_task = spawn(bookmarks_synchronize());
 
+    let _bookmarks_reconcile_task = spawn(bookmarks::reconcile_with_orrery());
+
     let _certificates_sync_task = spawn(certificates_synchronize());
 
     let _workflow_states_sync_task = spawn(workflow_states_synchronize());
@@ -3594,6 +3606,7 @@ async fn main() {
     let bookmarks = service.group("user.bookmarks");
     toplevel.spawn(handler!(bookmarks, "create", bookmarks::create_bookmark));
     toplevel.spawn(handler!(bookmarks, "check", bookmarks::check_bookmark));
+    toplevel.spawn(handler!(bookmarks, "delete", bookmarks::delete_bookmark));
     toplevel.spawn(handler!(bookmarks, "list_by_user", bookmarks::list_by_user));
     toplevel.spawn(handler!(
         bookmarks,
@@ -3630,6 +3643,19 @@ async fn main() {
         "count_by_projects",
         project_joins::count_by_projects
     ));
+
+    // The parts of each project's stats held here, for the log service's
+    // daily snapshot.
+    toplevel.spawn(handler!(stats, "joins", project_stats::joins));
+    toplevel.spawn(handler!(stats, "saves", project_stats::saves));
+    toplevel.spawn(handler!(stats, "people", project_stats::people));
+    toplevel.spawn(handler!(stats, "primary_since", project_stats::primary_since));
+
+    // Each project's roster, for its Participant Manager.
+    let roster_group = service.group("user.roster");
+    toplevel.spawn(handler!(roster_group, "list", roster::list));
+    toplevel.spawn(handler!(roster_group, "star", roster::star));
+    toplevel.spawn(handler!(roster_group, "members", roster::members));
 
     let forms_group = service.group("user.forms");
     toplevel.spawn(handler!(forms_group, "get", forms::get));

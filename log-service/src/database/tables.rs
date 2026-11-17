@@ -167,14 +167,17 @@ pub struct ParticipationRow {
 }
 
 impl ParticipationRow {
-    /// Whether the row reports that the account joined the project, rather
-    /// than that it contributed anything. Partners name the task `signup`;
-    /// rows synced from orrery carry orrery's name for it.
+    /// The task names of a row that reports that the account joined the
+    /// project, rather than that it contributed anything. Partners name the
+    /// task `signup`; rows synced from orrery carry orrery's name for it.
+    pub const JOIN_TASK_NAMES: [&'static str; 2] = ["signup", "Joined the project"];
+
+    /// Whether the row reports that the account joined the project; see
+    /// [`Self::JOIN_TASK_NAMES`].
     pub fn joins_project(&self) -> bool {
-        matches!(
-            self.task_name.as_deref(),
-            Some("signup" | "Joined the project")
-        )
+        self.task_name
+            .as_deref()
+            .is_some_and(|task| Self::JOIN_TASK_NAMES.contains(&task))
     }
 }
 

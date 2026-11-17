@@ -1,0 +1,3 @@
+<button type="button" id="<%= self.id %>" class="pm-star" <% if self.starred { %>hx-delete<% } else { %>hx-post<% } %>="<%= self.path %>" hx-swap="outerHTML" aria-pressed="<%= self.starred %>" aria-label="Star" title="<% if self.starred { %>Starred<% } else { %>Not starred<% } %>">
+  <svg width="20" height="19" aria-hidden="true"><use xlink:href="/-static/img/icons.svg#icon--star"></use></svg>
+</button>

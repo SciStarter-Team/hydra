@@ -1,0 +1,8 @@
+<%# Links to the project's editor-only pages; see crate::project::editor_nav. %>
+<nav class="ss-editor-nav" aria-label="Project management">
+  <ul class="ss-container mx-auto">
+    <% for link in &self.links { %>
+    <li><a href="<%= link.href %>"<% if link.current { %> aria-current="page"<% } %>><%= link.label %></a></li>
+    <% } %>
+  </ul>
+</nav>

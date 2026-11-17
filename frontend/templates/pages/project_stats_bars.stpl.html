@@ -1,0 +1,9 @@
+<ul class="ps-bars">
+  <% for row in self.rows { %>
+  <li>
+    <span class="ps-bars-label"><%= row.label %></span>
+    <span class="ps-bars-track"><span class="ps-bars-fill" style="width: <%= format!("{:.1}", row.width) %>%"></span></span>
+    <span class="ps-bars-count"><%= row.count %></span>
+  </li>
+  <% } %>
+</ul>

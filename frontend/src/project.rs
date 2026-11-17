@@ -1,13 +1,16 @@
 pub mod ala;
 pub mod all;
+pub mod editor_nav;
 pub mod field;
 pub mod field_source;
 pub mod inaturalist;
 pub mod investigator;
 pub mod linked_platform;
 pub mod location;
+pub mod participants;
 pub mod publish;
 pub mod reference;
+pub mod stats;
 
 /// Join `user_id` to `project_id`, on the evidence `source` names.
 pub async fn join(

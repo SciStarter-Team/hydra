@@ -1218,10 +1218,11 @@ struct LikeButton {
     user_id: Option<Ulid>,
 }
 
+/// The save button on an exchange's project page. `project_id` is the
+/// project's slug, which the exchange's routes address it by.
 #[derive(TemplateOnce)]
 #[template(path = "exchange/savebutton.stpl.html")]
 struct SaveButton {
-    id: String,
     saved: bool,
     exchange_id: i64,
     project_id: String,
@@ -3058,11 +3059,52 @@ pub async fn save_project(
     )
     .await?;
 
-    if response.success {
-        Ok(Html("Project saved").into_response())
-    } else {
-        Ok(Html(format!("Error: {}", response.message)).into_response())
+    if !response.success {
+        return Ok(Html(format!("Error: {}", response.message)).into_response());
     }
+
+    save_button(true, exchange_id, project_slug)
+}
+
+/// Withdraw a save made from an exchange's project page.
+#[handler]
+pub async fn unsave_project(
+    Path((exchange_id, project_slug)): Path<(i64, String)>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, Error> {
+    use common::message::user::BookmarkDeleteRequest;
+
+    let user_info = user_info.ok_or_else(|| anyhow::anyhow!("Authentication required"))?;
+    let project_id = project_by_slug(&project_slug)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Project not found"))?;
+
+    let _removed: bool = request(
+        "user.bookmarks.delete",
+        BookmarkDeleteRequest {
+            user_id: user_info.user_id,
+            project_id: project_id.to_string(),
+        },
+    )
+    .await?;
+
+    save_button(false, exchange_id, project_slug)
+}
+
+/// The project page's save button, showing whether the project is `saved`.
+fn save_button(
+    saved: bool,
+    exchange_id: i64,
+    project_slug: String,
+) -> Result<poem::Response, Error> {
+    let html = SaveButton {
+        saved,
+        exchange_id,
+        project_id: project_slug,
+    }
+    .render_once()?;
+
+    Ok(Html(html).into_response())
 }
 
 /// "I have already joined this project": the visitor says they take part
