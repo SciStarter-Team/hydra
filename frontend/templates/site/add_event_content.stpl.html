@@ -125,36 +125,35 @@
         </details>
 
         <%# Not a question Facebook asks. Open to everyone unless the
-            organizer says otherwise; a limited event says who is eligible,
-            which the event page and the finder's cards show. Choosing to
-            limit it reveals that field and moves there; the server reads the
-            field only then. The summary says which, so it can be checked
-            without opening the section. %>
-        <% let attendance = if !self.values.limited { "Open to everyone" } else if self.values.limited_to.trim().is_empty() { "Limited to a specific group" } else { self.values.limited_to.trim() }; %>
+            organizer says otherwise; a restricted event says which group can
+            attend, which the event page and the finder's cards show, and what
+            ages it suits. Choosing to restrict it reveals those questions and
+            moves there; the server reads them only then. Its header has no
+            summary, which read as a dropdown. %>
         <details class="add-section" data-attendance>
-          <%+ SectionSummary::new(SectionIcon::Audience, "Who can attend").summary(attendance) %>
+          <%+ SectionSummary::new(SectionIcon::Audience, "Who can attend") %>
           <div class="add-section-body">
-            <fieldset class="choice-group" aria-describedby="attendance-help">
-              <legend>Who can attend?</legend>
-              <div class="toggle-options">
-                <label class="toggle-option">
+            <fieldset class="choice-group">
+              <legend>Who can attend?<span class="pill-required" aria-hidden="true"> *</span></legend>
+              <div class="radio-options">
+                <label class="radio-option">
                   <input type="radio" name="attendance" value="open"<% if !self.values.limited { %> checked<% } %>>
                   <span>Open to everyone</span>
                 </label>
-                <label class="toggle-option">
+                <label class="radio-option">
                   <input type="radio" name="attendance" value="limited"<% if self.values.limited { %> checked<% } %>>
-                  <span>Limited to a specific group</span>
+                  <span>Restricted to a specific group</span>
                 </label>
+                <%# Which group, asked under the answer that asks it. %>
+                <div class="radio-option-field" data-limited-only <% if !self.values.limited { %>hidden<% } %>>
+                  <%+ FloatingField::new(FieldKind::Text, "limited_to", "Which group can attend?", self.values.limited_to.as_str()).id("limited-to").required().hint("e.g., Library cardholders, Girl Scouts").limit(crate::event::rules::LIMITED_TO_LIMIT).described_by("attendance-help").errors(error) %>
+                  <p id="attendance-help" class="field-help">List any requirements for attending this event.</p>
+                </div>
               </div>
             </fieldset>
-            <p id="attendance-help" class="field-help">If your event is limited to a specific group, tell people who can attend. For example, &ldquo;Library cardholders only,&rdquo; &ldquo;Open to K&ndash;12 teachers,&rdquo; or &ldquo;For members of our book club.&rdquo;</p>
-            <div data-limited-only <% if !self.values.limited { %>hidden<% } %>>
-              <%+ FloatingField::new(FieldKind::Text, "limited_to", "Who is eligible to attend?", self.values.limited_to.as_str()).id("limited-to").required().limit(crate::event::rules::LIMITED_TO_LIMIT).described_by("attendance-help").errors(error) %>
+            <div class="attendance-ages" data-limited-only <% if !self.values.limited { %>hidden<% } %>>
+              <%+ self.audience %>
             </div>
-
-            <%# Who the event is for, read together with who may come: an
-                event open to everyone can still be aimed at families. %>
-            <%+ self.audience %>
           </div>
         </details>
 
@@ -264,26 +263,17 @@
       repeatToggle.focus();
     });
 
-    // Who can attend: limiting the event reveals who it's limited to, and
-    // moves there; the section's summary says which, as it's answered.
+    // Who can attend: restricting the event reveals which group can attend
+    // and what ages it suits, and moves there.
     var attendance = document.querySelector("[data-attendance]");
-    var limitedOnly = attendance.querySelector("[data-limited-only]");
-    var limitedTo = limitedOnly.querySelector("input");
-    var attendanceSummary = attendance.querySelector("[data-section-summary]");
-    function summarizeAttendance() {
-      var limited = attendance.querySelector('input[name="attendance"][value="limited"]').checked;
-      attendanceSummary.textContent = !limited
-        ? "Open to everyone"
-        : limitedTo.value.trim() || "Limited to a specific group";
-    }
+    var limitedOnly = attendance.querySelectorAll("[data-limited-only]");
+    var limitedTo = attendance.querySelector("#limited-to");
     attendance.addEventListener("change", function (e) {
       if (e.target.name !== "attendance") return;
       var limited = e.target.value === "limited";
-      limitedOnly.hidden = !limited;
+      limitedOnly.forEach(function (part) { part.hidden = !limited; });
       if (limited) limitedTo.focus();
-      summarizeAttendance();
     });
-    limitedTo.addEventListener("input", summarizeAttendance);
 
     // Events are added ahead of time, so dates the event itself happens on
     // start from today (the visitor's today; the server checks again in the

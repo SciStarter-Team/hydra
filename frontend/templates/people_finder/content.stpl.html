@@ -46,6 +46,23 @@
              hx-include="#people-finder-area">
           <%+ self.counts %>
         </div>
+
+        <%# Who the message goes to. Outside the count fragment, so a recount
+            never changes what the sender chose: both start ticked, and only
+            the sender changes them. %>
+        <% if self.standing.may_send() { %>
+          <fieldset id="people-finder-audience" class="mt-4" aria-live="polite">
+            <legend class="font-semibold mb-2">Send to the people in this area:</legend>
+            <label class="flex items-center gap-2 mb-1">
+              <input type="checkbox" name="participants" checked>
+              <%+ crate::people_finder::SideCount::participants(None) %>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" name="operators" checked>
+              <%+ crate::people_finder::SideCount::operators(None) %>
+            </label>
+          </fieldset>
+        <% } %>
       </div>
 
       <%+ self.compose %>

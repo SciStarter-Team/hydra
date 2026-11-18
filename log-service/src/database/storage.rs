@@ -782,6 +782,9 @@ pub async fn get_sync_entry(database: &Database, key: &str) -> Result<Option<Str
     Ok(storage.bookmarks.get(key).cloned())
 }
 
+/// The bookmark kept under `key`. One never set reads as
+/// `1900-01-01T00:00:00Z`, the start of a timestamp watermark; a sync whose
+/// watermark is anything else reads `get_sync_entry` and supplies its own.
 pub async fn get_sync_bookmark(database: &Database, key: &str) -> Result<String> {
     Ok(get_sync_entry(database, key)
         .await?

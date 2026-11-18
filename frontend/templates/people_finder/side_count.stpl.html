@@ -1,0 +1,2 @@
+<% use crate::number::thousands; %>
+<span id="<%= self.id %>"<% if self.oob { %> hx-swap-oob="true"<% } %>><% if let Some(number) = self.number { %><b><%= thousands(number) %></b> <% if number == 1 { %><%= self.one %><% } else { %><%= self.many %><% } %><% } else { %><%= self.many %><% } %></span>

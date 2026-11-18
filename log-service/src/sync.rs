@@ -38,7 +38,8 @@ use futures::TryStreamExt;
 use jiff::Timestamp;
 use log_service::database::tables::ParticipationRow;
 use log_service::database::{
-    Database, get_sync_bookmark, get_sync_last_id, set_sync_bookmark, set_sync_last_id,
+    Database, get_sync_bookmark, get_sync_entry, get_sync_last_id, set_sync_bookmark,
+    set_sync_last_id,
 };
 use log_service::ledger::{self, Feed};
 use log_service::participation_feed::{self, FeedCursor, FeedItem};
@@ -1453,10 +1454,7 @@ async fn synchronize_orrery_feed<T: OrreryFeedRow>(
             return;
         }
 
-        let since = get_sync_bookmark(&database, T::BOOKMARK)
-            .await
-            .unwrap_or_else(|_| String::from(T::START));
-        let last_id = get_sync_last_id(&database, T::LAST_ID).await.unwrap_or(0);
+        let (since, last_id) = feed_cursor::<T>(&database).await;
 
         let page = fetch_orrery_feed::<T>(
             T::FEED,
@@ -1491,6 +1489,18 @@ async fn synchronize_orrery_feed<T: OrreryFeedRow>(
             }
         }
     }
+}
+
+/// Where a feed's next page starts: just past the last row taken, or at the
+/// feed's own `START` before anything has been taken.
+async fn feed_cursor<T: OrreryFeedRow>(database: &Database) -> (String, i32) {
+    let since = get_sync_entry(database, T::BOOKMARK)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| String::from(T::START));
+    let last_id = get_sync_last_id(database, T::LAST_ID).await.unwrap_or(0);
+    (since, last_id)
 }
 
 /// Store a page of a feed, then move the cursor up to the last row stored.
@@ -1672,4 +1682,47 @@ pub async fn project_share_synchronize(
     cancellation_token: CancellationToken,
 ) {
     synchronize_orrery_feed::<ProjectShareData>(database, cancellation_token).await
+}
+
+#[cfg(test)]
+mod tests {
+    use assert2::check;
+    use tempfile::TempDir;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn a_feed_starts_at_its_own_start() {
+        let dir = TempDir::new().unwrap();
+        let database = Database::new(dir.path().to_string_lossy().to_string())
+            .await
+            .unwrap();
+
+        // A feed paged by day must not be sent a timestamp, which orrery
+        // cannot read as a day.
+        check!(feed_cursor::<ProjectViewsData>(&database).await == (String::from("1900-01-01"), 0));
+        check!(
+            feed_cursor::<VisitClicksData>(&database).await
+                == (String::from("1900-01-01T00:00:00Z"), 0)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_feed_resumes_past_the_last_row_taken() {
+        let dir = TempDir::new().unwrap();
+        let database = Database::new(dir.path().to_string_lossy().to_string())
+            .await
+            .unwrap();
+
+        set_sync_bookmark(&database, ProjectViewsData::BOOKMARK, "2026-11-17")
+            .await
+            .unwrap();
+        set_sync_last_id(&database, ProjectViewsData::LAST_ID, 42)
+            .await
+            .unwrap();
+
+        check!(
+            feed_cursor::<ProjectViewsData>(&database).await == (String::from("2026-11-17"), 42)
+        );
+    }
 }

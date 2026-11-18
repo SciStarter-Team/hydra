@@ -284,6 +284,25 @@ struct AddEventForm {
     limited_to: String,
 }
 
+impl AddEventForm {
+    /// Whether the event is restricted to a group.
+    fn limited(&self) -> bool {
+        self.attendance == Attendance::Limited
+    }
+
+    /// The slugs of the ages ticked for the event, which are asked only of
+    /// an event restricted to a group: an event open to everyone ticks
+    /// none, whatever was left ticked. An event ticking none is saved with
+    /// the ages [`crate::event::ages_for_new_event`] gives it.
+    fn audience(&self) -> impl Iterator<Item = String> + '_ {
+        self.limited()
+            .then_some(&self.audience)
+            .into_iter()
+            .flatten()
+            .cloned()
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct InstanceInput {
     #[serde(default)]
@@ -446,7 +465,7 @@ struct AddEventContent {
     /// The collapsed section of what the event picks from the lists that
     /// aren't asked with its location or who can attend.
     categories: ChoiceGroup,
-    /// The audiences, asked with who can attend.
+    /// The ages the event suits, asked of an event restricted to a group.
     audience: ChoiceCheckboxes,
     location: LocationPicker,
     image: ImageField,
@@ -464,9 +483,6 @@ struct AddEventContent {
 struct SectionSummary {
     icon: SectionIcon,
     title: Cow<'static, str>,
-    /// What the section holds, beside its title, where that's worth seeing
-    /// without opening it; the page's script keeps it current.
-    summary: Option<String>,
 }
 
 impl SectionSummary {
@@ -474,13 +490,7 @@ impl SectionSummary {
         SectionSummary {
             icon,
             title: title.into(),
-            summary: None,
         }
-    }
-
-    fn summary(mut self, summary: impl Into<String>) -> Self {
-        self.summary = Some(summary.into());
-        self
     }
 }
 
@@ -591,6 +601,8 @@ fn event_choices(
     let limit = crate::event::pick_limit(list);
     ChoiceCheckboxes::new(field, values, picked.iter().cloned().collect(), limit)
         .with_legend(crate::event::choice_legend(list))
+        .with_help(crate::event::choice_help(list))
+        .stacked(crate::event::choice_stacked(list))
 }
 
 /// What an add-event submission picks from each event-type list: the
@@ -843,8 +855,10 @@ pub async fn add_event_submit(
                 ChoiceValue::known(ChoiceList::EventVenue, picked(ChoiceList::EventVenue)).await?;
             event.topics =
                 ChoiceValue::known(ChoiceList::Topic, form.topics.iter().cloned()).await?;
-            event.audience =
-                ChoiceValue::known(ChoiceList::Audience, form.audience.iter().cloned()).await?;
+            event.audience = crate::event::ages_for_new_event(
+                ChoiceValue::known(ChoiceList::Audience, form.audience()).await?,
+            )
+            .await?;
 
             let name = event.name.clone();
             let event_id = event.event_id;
@@ -950,8 +964,8 @@ async fn render_event_form(
             .is_some_and(|error| error.is_about(ImageUrlInput::NAME)),
     };
     // Whether the event is online, and the kind of venue it's held at, are
-    // asked with its location, and its audience with who can attend; the
-    // rest of what it picks is here.
+    // asked with its location, and the ages it suits with who can attend;
+    // the rest of what it picks is here.
     let audience = event_choices(
         "audience",
         ChoiceList::Audience,
@@ -1738,7 +1752,7 @@ fn validate_and_build(form: &AddEventForm, author: Editor) -> Result<EventAll, F
     .map_err(refused)?
     .map(TimeString::from);
 
-    let limited = form.attendance == Attendance::Limited;
+    let limited = form.limited();
     rules::limited_to(&form.limited_to, limited).map_err(refused)?;
     let limited_to = if limited { form.limited_to.trim() } else { "" };
 
@@ -2797,7 +2811,7 @@ mod tests {
         check!(refused.is_about("limited_to"));
         check!(
             refused.message
-                == "Please say who is eligible to attend, such as \u{201c}Library cardholders only.\u{201d}"
+                == "Please say which group can attend, such as \u{201c}Library cardholders.\u{201d}"
         );
 
         let at_limit = "é".repeat(rules::LIMITED_TO_LIMIT);
@@ -2808,9 +2822,7 @@ mod tests {
         let refused =
             submit_event(&[("attendance", "limited"), ("limited_to", &over)]).unwrap_err();
         check!(refused.is_about("limited_to"));
-        check!(
-            refused.message == "Please say who is eligible to attend in 140 characters or fewer."
-        );
+        check!(refused.message == "Please say which group can attend in 140 characters or fewer.");
     }
 
     /// What a fresh add-event form shows: one date, not repeating.
@@ -2857,7 +2869,8 @@ mod tests {
         let html = event_form(EventFormValues::default(), None);
         let at = |text: &str| html.find(text).unwrap();
         check!(
-            at("<legend>Who can attend?</legend>") < at("<legend>Audience (choose any)</legend>")
+            at("<legend>Who can attend?<")
+                < at("<legend>What ages is this event suitable for?</legend>")
         );
     }
 
@@ -2886,26 +2899,31 @@ mod tests {
     }
 
     #[test]
-    fn who_can_attend_says_who_without_being_opened() {
-        let summary = |values: EventFormValues| {
-            let html = event_form(values, None);
-            let at = html.find("data-section-summary>").unwrap() + "data-section-summary>".len();
-            html[at..at + html[at..].find('<').unwrap()].to_string()
-        };
-        check!(summary(EventFormValues::default()) == "Open to everyone");
-        check!(
-            summary(EventFormValues {
-                limited: true,
-                ..Default::default()
-            }) == "Limited to a specific group"
-        );
-        check!(
-            summary(EventFormValues {
-                limited: true,
-                limited_to: "Library cardholders only".to_string(),
-                ..Default::default()
-            }) == "Library cardholders only"
-        );
+    fn who_can_attend_asks_ages_only_once_restricted() {
+        let html = event_form(EventFormValues::default(), None);
+        check!(html.contains(r#"<details class="add-section" data-attendance>"#));
+        check!(!html.contains("add-section-summary"));
+
+        let restricted = html
+            .find(r#"<div class="attendance-ages" data-limited-only hidden>"#)
+            .unwrap();
+        let ages = html
+            .find("<legend>What ages is this event suitable for?</legend>")
+            .unwrap();
+        let section_end = restricted + html[restricted..].find("</details>").unwrap();
+        check!(restricted < ages && ages < section_end);
+        // After the ages, the restricted part and the section's body close.
+        let after = &html[ages..section_end];
+        check!(after.matches("</div>").count() == after.matches("<div").count() + 2);
+        check!(html[ages..].contains(r#"<div class="choice-checkboxes stacked-options">"#));
+    }
+
+    #[test]
+    fn each_toggle_is_a_list_of_radio_buttons() {
+        let html = event_form(EventFormValues::default(), None);
+        check!(!html.contains("toggle-option"));
+        check!(html.matches(r#"<div class="radio-options">"#).count() == 2);
+        check!(html.contains(r#"<label class="radio-option">"#));
     }
 
     #[test]
@@ -2984,19 +3002,29 @@ mod tests {
     }
 
     #[test]
-    fn the_attendance_hint_describes_the_question_and_the_field() {
+    fn the_attendance_help_describes_the_group_field() {
         let html = event_form(EventFormValues::default(), None);
-        check!(
-            html.contains(r#"<fieldset class="choice-group" aria-describedby="attendance-help""#)
-        );
+        check!(html.contains(
+            r#"<fieldset class="choice-group">
+              <legend>Who can attend?<span class="pill-required" aria-hidden="true"> *</span></legend>"#
+        ));
         check!(html.contains(r#"name="attendance" value="open" checked>"#));
         check!(html.contains("<span>Open to everyone</span>"));
-        check!(html.contains("<span>Limited to a specific group</span>"));
-        check!(html.contains(
-            r#"<p id="attendance-help" class="field-help">If your event is limited to a specific group, tell people who can attend. For example, &ldquo;Library cardholders only,&rdquo; &ldquo;Open to K&ndash;12 teachers,&rdquo; or &ldquo;For members of our book club.&rdquo;</p>"#
-        ));
-        check!(html.contains("<div data-limited-only hidden>"));
-        check!(html.contains("Who is eligible to attend?"));
+        check!(html.contains("<span>Restricted to a specific group</span>"));
+        // The group is asked under the answer that asks it, inside the list
+        // of answers.
+        let help = r#"<p id="attendance-help" class="field-help">List any requirements for attending this event.</p>"#;
+        let restricted = html
+            .find("<span>Restricted to a specific group</span>")
+            .unwrap();
+        let field = html
+            .find(r#"<div class="radio-option-field" data-limited-only hidden>"#)
+            .unwrap();
+        let help_at = html.find(help).unwrap();
+        let answers_end = restricted + html[restricted..].find("</fieldset>").unwrap();
+        check!(restricted < field && field < help_at && help_at < answers_end);
+        check!(html.contains("Which group can attend?"));
+        check!(html.contains(r#"placeholder="e.g., Library cardholders, Girl Scouts""#));
         check!(!html.contains("limited-to-help"));
 
         let refused = submit_event(&[("attendance", "limited"), ("limited_to", "")]).unwrap_err();
@@ -3006,7 +3034,7 @@ mod tests {
         };
         let html = event_form(values, Some(refused));
         check!(html.contains(r#"name="attendance" value="limited" checked>"#));
-        check!(html.contains("<div data-limited-only >"));
+        check!(html.contains(r#"<div class="radio-option-field" data-limited-only >"#));
         let field = &html[html.find(r#"id="limited-to""#).unwrap()..];
         let field = &field[..field.find('>').unwrap()];
         check!(field.contains("attendance-help"), "{field}");
@@ -3036,6 +3064,12 @@ mod tests {
     /// check, with the fields in `changes` set as given (an empty value
     /// leaves one unanswered).
     fn submit_event(changes: &[(&str, &str)]) -> Result<EventAll, FormError> {
+        validate_and_build(&event_form_submitted(changes), test_author())
+    }
+
+    /// An add-event submission, otherwise complete, with the fields in
+    /// `changes` set as given.
+    fn event_form_submitted(changes: &[(&str, &str)]) -> AddEventForm {
         let mut fields = vec![
             ("name", "Bioblitz".to_string()),
             ("description", "Count bugs".to_string()),
@@ -3061,10 +3095,26 @@ mod tests {
             .map(|(name, value)| format!("{name}={}", urlencoding::encode(value)))
             .collect::<Vec<_>>()
             .join("&");
-        let form: AddEventForm = serde_qs::Config::new(10, false)
+        serde_qs::Config::new(10, false)
             .deserialize_bytes(body.as_bytes())
-            .unwrap();
-        validate_and_build(&form, test_author())
+            .unwrap()
+    }
+
+    #[test]
+    fn only_a_restricted_event_has_ages() {
+        let ages =
+            |changes: &[(&str, &str)]| event_form_submitted(changes).audience().collect::<Vec<_>>();
+        let families = ("audience[]", "families");
+
+        check!(ages(&[families]).is_empty());
+        check!(ages(&[("attendance", "open"), families]).is_empty());
+        check!(
+            ages(&[
+                ("attendance", "limited"),
+                ("limited_to", "Girl Scouts"),
+                families
+            ]) == ["families"]
+        );
     }
 
     #[test]
@@ -3329,7 +3379,14 @@ mod tests {
         )
         .render_once()
         .unwrap();
-        check!(audience.contains("<legend>Audience (choose any)</legend>"));
+        check!(audience.contains(
+            r#"<fieldset class="choice-group choice-category" aria-describedby="audience-help">
+  <legend>What ages is this event suitable for?</legend>"#
+        ));
+        check!(
+            audience
+                .contains(r#"<p id="audience-help" class="field-help">Select all that apply.</p>"#)
+        );
 
         let topics = event_choices(
             "topics",

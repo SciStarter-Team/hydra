@@ -47,8 +47,33 @@ struct SesBounceNotification {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SesBounce {
-    bounce_type: String,
+    bounce_type: SesBounceType,
     bounced_recipients: Vec<SesBouncedRecipient>,
+}
+
+impl SesBounce {
+    /// The recipients whose addresses will never take mail, which are the
+    /// ones a bounce suppresses: all of them for a permanent bounce, and
+    /// none for any other. Orrery's `handle_bounce` keeps the same rule.
+    fn suppressed_recipients(&self) -> &[SesBouncedRecipient] {
+        match self.bounce_type {
+            SesBounceType::Permanent => &self.bounced_recipients,
+            SesBounceType::Transient | SesBounceType::Undetermined | SesBounceType::Other => &[],
+        }
+    }
+}
+
+/// What SES says of a bounce. Only a permanent bounce says anything about
+/// the address: a transient one is a full mailbox or a server that asked to
+/// be tried later, and an undetermined one is a bounce SES could not read.
+#[derive(Debug, Deserialize)]
+enum SesBounceType {
+    Permanent,
+    Transient,
+    Undetermined,
+    /// A kind SES has added since, which is not taken to be permanent.
+    #[serde(other)]
+    Other,
 }
 
 #[derive(Debug, Deserialize)]
@@ -119,7 +144,16 @@ async fn handle_bounce(Json(notification): Json<SnsNotification>) -> Response {
 
     match bounce_msg {
         Ok(bounce) => {
-            for recipient in &bounce.bounce.bounced_recipients {
+            let suppressed = bounce.bounce.suppressed_recipients();
+            if suppressed.is_empty() {
+                tracing::info!(
+                    bounce_type = ?bounce.bounce.bounce_type,
+                    ses_message_id = %bounce.mail.message_id,
+                    "Bounce is not permanent, so no address is suppressed"
+                );
+            }
+
+            for recipient in suppressed {
                 // Look up user_id from email address
                 use common::message::user::{UserDetailsListResponse, UserDetailsSearchRequest};
                 use common::service::request;
@@ -145,7 +179,7 @@ async fn handle_bounce(Json(notification): Json<SnsNotification>) -> Response {
                     ses_message_id: Some(bounce.mail.message_id.clone()),
                     user_id,
                     email_address: recipient.email_address.clone(),
-                    bounce_type: bounce.bounce.bounce_type.clone(),
+                    bounce_type: "Permanent".to_string(),
                     details: recipient
                         .diagnostic_code
                         .clone()
@@ -365,6 +399,7 @@ async fn track_open(Query(params): Query<OpenParams>, req: &poem::Request) -> Re
 
 #[cfg(test)]
 mod tests {
+    use assert2::check;
     use poem::test::TestClient;
 
     use super::*;
@@ -391,5 +426,48 @@ mod tests {
     #[tokio::test]
     async fn the_logo_loads_whatever_else_the_url_holds() {
         assert_serves_the_logo("/open?a=123&b=someone@example.invalid").await;
+    }
+
+    /// The `Message` of SES's bounce notification, as SNS delivers it.
+    fn bounce(bounce_type: &str) -> SesBounceNotification {
+        serde_json::from_value(serde_json::json!({
+            "notificationType": "Bounce",
+            "bounce": {
+                "bounceType": bounce_type,
+                "bounceSubType": "General",
+                "bouncedRecipients": [
+                    {"emailAddress": "one@example.invalid", "status": "5.1.1", "diagnosticCode": "smtp; 550"},
+                    {"emailAddress": "two@example.invalid"}
+                ],
+                "timestamp": "2026-11-18T00:00:00.000Z",
+                "feedbackId": "feedback"
+            },
+            "mail": {"messageId": "message", "source": "from@example.invalid", "destination": ["one@example.invalid"]}
+        }))
+        .expect("an SES bounce notification")
+    }
+
+    #[test]
+    fn a_permanent_bounce_suppresses_every_bounced_recipient() {
+        let notification = bounce("Permanent");
+        let addresses: Vec<&str> = notification
+            .bounce
+            .suppressed_recipients()
+            .iter()
+            .map(|recipient| recipient.email_address.as_str())
+            .collect();
+        check!(addresses == ["one@example.invalid", "two@example.invalid"]);
+    }
+
+    #[test]
+    fn no_other_bounce_suppresses_anyone() {
+        for bounce_type in ["Transient", "Undetermined", "SomethingNew"] {
+            check!(
+                bounce(bounce_type)
+                    .bounce
+                    .suppressed_recipients()
+                    .is_empty()
+            );
+        }
     }
 }

@@ -97,6 +97,20 @@ impl ChoiceList {
         }
     }
 
+    /// Whether visitors see what an entity picked from the list. Staff and
+    /// the entity's editors always do. An event's program or campaign is
+    /// asked and kept, but not shown on the event.
+    pub fn shown_to_visitors(self) -> bool {
+        match self {
+            ChoiceList::EventProgram => false,
+            ChoiceList::EventFormat
+            | ChoiceList::EventVenue
+            | ChoiceList::Topic
+            | ChoiceList::Activity
+            | ChoiceList::Audience => true,
+        }
+    }
+
     /// The list's segment of `/-admin/choice-lists/…`.
     pub fn path(self) -> &'static str {
         match self {
@@ -223,6 +237,28 @@ impl OrreryValue {
         from: OrreryList::EventType,
         id: 208,
     };
+
+    /// The ages an event added with none is saved with: every school level
+    /// (elementary, middle and high school), and adults. Orrery's
+    /// `EVENT_AGES_WHEN_NONE` names the same four.
+    pub const EVENT_AGES_WHEN_NONE: [OrreryValue; 4] = [
+        OrreryValue {
+            from: OrreryList::Audience,
+            id: 111,
+        },
+        OrreryValue {
+            from: OrreryList::Audience,
+            id: 112,
+        },
+        OrreryValue {
+            from: OrreryList::Audience,
+            id: 113,
+        },
+        OrreryValue {
+            from: OrreryList::Audience,
+            id: 116,
+        },
+    ];
 
     /// Whether `value` is this one.
     pub fn is(self, value: &ChoiceValue) -> bool {
@@ -589,6 +625,10 @@ pub struct ChoiceCheckboxes {
     /// The form field, which is submitted as `field[]`.
     field: String,
     legend: Option<Cow<'static, str>>,
+    /// A line under the legend, which describes the fieldset.
+    help: Option<&'static str>,
+    /// Whether the boxes are one column rather than a grid.
+    stacked: bool,
     values: Vec<ChoiceValue>,
     picked: BTreeSet<String>,
     limit: Option<usize>,
@@ -605,6 +645,8 @@ impl ChoiceCheckboxes {
         ChoiceCheckboxes {
             field: field.into(),
             legend: None,
+            help: None,
+            stacked: false,
             values,
             picked,
             limit,
@@ -639,6 +681,18 @@ impl ChoiceCheckboxes {
     /// The boxes as a fieldset under `legend`.
     pub fn with_legend(mut self, legend: impl Into<Cow<'static, str>>) -> Self {
         self.legend = Some(legend.into());
+        self
+    }
+
+    /// `help` under the legend, when the boxes have one.
+    pub fn with_help(mut self, help: Option<&'static str>) -> Self {
+        self.help = help;
+        self
+    }
+
+    /// The boxes in one column, when `stacked`, rather than a grid.
+    pub fn stacked(mut self, stacked: bool) -> Self {
+        self.stacked = stacked;
         self
     }
 

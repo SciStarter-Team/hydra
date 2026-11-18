@@ -1,11 +1,74 @@
 use anyhow::Error;
 use aws_sdk_sesv2::{
     Client as SesClient,
-    config::{Credentials, Region},
+    config::{Credentials, Region, http::HttpResponse},
+    error::{ProvideErrorMetadata, SdkError},
+    operation::send_email::SendEmailError,
     primitives::Blob,
     types::{Destination, EmailContent, RawMessage},
 };
 use ulid::Ulid;
+
+/// Why SES did not take a message.
+#[derive(Debug)]
+pub enum SendFailure {
+    /// SES will take the message later, and nothing is wrong with it: the
+    /// account's sending rate or daily quota is used up, its sending is
+    /// paused or restricted, its configuration is broken, or SES could not
+    /// be reached or failed on its side.
+    Deferred(Error),
+
+    /// Something about the message itself, which sending it again will not
+    /// change.
+    Failed(Error),
+}
+
+impl SendFailure {
+    fn of(err: SdkError<SendEmailError, HttpResponse>) -> Self {
+        let deferred = match &err {
+            SdkError::ServiceError(service) => {
+                deferrable(service.err()) || service.raw().status().is_server_error()
+            }
+            SdkError::TimeoutError(_)
+            | SdkError::DispatchFailure(_)
+            | SdkError::ResponseError(_) => true,
+            // A request the SDK could not build, or a kind of failure it has
+            // added since.
+            _ => false,
+        };
+        let err = Error::new(err);
+        if deferred {
+            SendFailure::Deferred(err)
+        } else {
+            SendFailure::Failed(err)
+        }
+    }
+}
+
+impl std::fmt::Display for SendFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SendFailure::Deferred(err) => write!(f, "deferred: {err:#}"),
+            SendFailure::Failed(err) => write!(f, "failed: {err:#}"),
+        }
+    }
+}
+
+/// Whether SES refused a message for a reason that is about the account
+/// rather than the message, and so will pass.
+fn deferrable(err: &SendEmailError) -> bool {
+    match err {
+        SendEmailError::TooManyRequestsException(_)
+        | SendEmailError::LimitExceededException(_)
+        | SendEmailError::SendingPausedException(_)
+        | SendEmailError::AccountSuspendedException(_)
+        | SendEmailError::MailFromDomainNotVerifiedException(_)
+        | SendEmailError::NotFoundException(_) => true,
+        SendEmailError::BadRequestException(_) | SendEmailError::MessageRejected(_) => false,
+        // SES's older API names throttling this way.
+        other => matches!(other.code(), Some("Throttling" | "ThrottlingException")),
+    }
+}
 
 /// Initialize AWS SES client with compile-time credentials
 pub async fn init_ses_client() -> Result<SesClient, Error> {
@@ -44,7 +107,7 @@ pub async fn send_email(
     sending_id: Ulid,
     user_id: Option<Ulid>,
     offer_unsubscribe: bool,
-) -> Result<String, Error> {
+) -> Result<String, SendFailure> {
     // One-click unsubscribe headers (RFC 8058), emitted only when the email
     // offers to unsubscribe.
     let unsubscribe_headers = if offer_unsubscribe {
@@ -113,7 +176,8 @@ pub async fn send_email(
     // Create raw message
     let raw_message = RawMessage::builder()
         .data(Blob::new(raw_email.as_bytes()))
-        .build()?;
+        .build()
+        .map_err(|err| SendFailure::Failed(err.into()))?;
 
     let email_content = EmailContent::builder().raw(raw_message).build();
 
@@ -123,7 +187,8 @@ pub async fn send_email(
         .destination(destination)
         .content(email_content)
         .send()
-        .await?;
+        .await
+        .map_err(SendFailure::of)?;
 
     // Get the message ID from SES
     let message_id = result.message_id().unwrap_or("unknown").to_string();
@@ -178,4 +243,44 @@ fn quoted_printable_encode(text: &str) -> String {
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use assert2::check;
+    use aws_sdk_sesv2::{error::ErrorMetadata, types::error as ses};
+
+    use super::*;
+
+    #[test]
+    fn what_is_wrong_with_the_account_defers_the_message() {
+        for err in [
+            SendEmailError::TooManyRequestsException(
+                ses::TooManyRequestsException::builder().build(),
+            ),
+            SendEmailError::LimitExceededException(ses::LimitExceededException::builder().build()),
+            SendEmailError::SendingPausedException(ses::SendingPausedException::builder().build()),
+            SendEmailError::AccountSuspendedException(
+                ses::AccountSuspendedException::builder().build(),
+            ),
+            SendEmailError::MailFromDomainNotVerifiedException(
+                ses::MailFromDomainNotVerifiedException::builder().build(),
+            ),
+            SendEmailError::NotFoundException(ses::NotFoundException::builder().build()),
+            SendEmailError::generic(ErrorMetadata::builder().code("Throttling").build()),
+        ] {
+            check!(deferrable(&err), "{err:?}");
+        }
+    }
+
+    #[test]
+    fn what_is_wrong_with_the_message_fails_it() {
+        for err in [
+            SendEmailError::MessageRejected(ses::MessageRejected::builder().build()),
+            SendEmailError::BadRequestException(ses::BadRequestException::builder().build()),
+            SendEmailError::generic(ErrorMetadata::builder().code("SomethingNew").build()),
+        ] {
+            check!(!deferrable(&err), "{err:?}");
+        }
+    }
 }

@@ -225,13 +225,67 @@ enum Tally {
 }
 
 /// How many people the chosen area holds, on each side of the operator
-/// divide. For someone who may send, each side is a checkbox choosing whether
-/// the message goes to it.
+/// divide. For someone who may not send, the numbers are here. For someone
+/// who may, each side is a checkbox on the page, outside this fragment, so
+/// that a recount never touches what the sender chose; a recount only
+/// replaces the counts in their labels, out of band.
 #[derive(TemplateOnce)]
 #[template(path = "people_finder/counts.stpl.html")]
 struct CountsFragment {
     standing: Standing,
     tally: Tally,
+    /// Whether this answers a recount, rather than being part of the page.
+    recount: bool,
+}
+
+impl CountsFragment {
+    fn counted(&self) -> Option<PeopleFinderCounts> {
+        match self.tally {
+            Tally::Counted(counts) => Some(counts),
+            Tally::Unchosen | Tally::Refused(_) => None,
+        }
+    }
+}
+
+/// How many people one side of the operator divide holds, as the label of
+/// the sender's checkbox for it says, once an area is counted.
+#[derive(TemplateOnce)]
+#[template(path = "people_finder/side_count.stpl.html")]
+struct SideCount {
+    id: &'static str,
+    one: &'static str,
+    many: &'static str,
+    /// How many, once an area is counted.
+    number: Option<i64>,
+    /// Whether it replaces the label's count on the page, out of band.
+    oob: bool,
+}
+
+impl SideCount {
+    fn participants(number: Option<i64>) -> SideCount {
+        SideCount {
+            id: "people-finder-participants",
+            one: "participant",
+            many: "participants",
+            number,
+            oob: false,
+        }
+    }
+
+    fn operators(number: Option<i64>) -> SideCount {
+        SideCount {
+            id: "people-finder-operators",
+            one: "project and event operator",
+            many: "project and event operators",
+            number,
+            oob: false,
+        }
+    }
+
+    fn out_of_band(mut self) -> SideCount {
+        self.oob = true;
+        self
+    }
 }
 
 /// The compose form, or what stands in its place: a note for someone who may
@@ -272,6 +326,7 @@ pub async fn page(Authenticated(user_info): Authenticated) -> Result<Response, E
         counts: CountsFragment {
             standing,
             tally: Tally::Unchosen,
+            recount: false,
         },
         compose: ComposeSection::blank(standing),
     };
@@ -315,7 +370,13 @@ pub async fn count(
         }
     };
 
-    CountsFragment { standing, tally }.into_response(None).await
+    CountsFragment {
+        standing,
+        tally,
+        recount: true,
+    }
+    .into_response(None)
+    .await
 }
 
 /// `POST /people-finder/send`: submit a message for review, answering with
@@ -442,6 +503,80 @@ mod tests {
     fn a_missing_radius_is_the_default() {
         let choice = Choice::from_pairs(pairs(&[("latitude", "40.7"), ("longitude", "-74.0")]));
         assert_eq!(choice.area.unwrap().radius_miles, DEFAULT_RADIUS_MILES);
+    }
+
+    fn recount(standing: Standing, tally: Tally) -> String {
+        CountsFragment {
+            standing,
+            tally,
+            recount: true,
+        }
+        .render_once()
+        .unwrap()
+    }
+
+    #[test]
+    fn a_recount_never_touches_the_senders_choice() {
+        let counted = Tally::Counted(PeopleFinderCounts {
+            participants: 10_489,
+            operators: 1,
+        });
+
+        let html = recount(Standing::Operator, counted);
+        assert!(!html.contains("checkbox"), "{html}");
+        assert!(html.contains(
+            r#"<span id="people-finder-participants" hx-swap-oob="true"><b>10,489</b> participants</span>"#
+        ), "{html}");
+        assert!(html.contains(
+            r#"<span id="people-finder-operators" hx-swap-oob="true"><b>1</b> project and event operator</span>"#
+        ), "{html}");
+
+        // An area no longer counted takes the counts out of the labels.
+        let html = recount(Standing::Operator, Tally::Unchosen);
+        assert!(!html.contains("checkbox"), "{html}");
+        assert!(
+            html.contains(
+                r#"<span id="people-finder-participants" hx-swap-oob="true">participants</span>"#
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn someone_who_may_not_send_sees_numbers_and_no_choice() {
+        let html = recount(
+            Standing::Member,
+            Tally::Counted(PeopleFinderCounts {
+                participants: 2,
+                operators: 0,
+            }),
+        );
+        assert!(!html.contains("checkbox"), "{html}");
+        assert!(!html.contains("hx-swap-oob"), "{html}");
+        assert!(html.contains("<b>2</b> participants"), "{html}");
+    }
+
+    #[test]
+    fn the_senders_choice_starts_ticked_outside_what_a_recount_replaces() {
+        let html = PeopleFinderContent {
+            standing: Standing::Operator,
+            counts: CountsFragment {
+                standing: Standing::Operator,
+                tally: Tally::Unchosen,
+                recount: false,
+            },
+            compose: ComposeSection::blank(Standing::Operator),
+        }
+        .render_once()
+        .unwrap();
+
+        let counts = html.find(r#"id="people-finder-counts""#).unwrap();
+        let counts_end = counts + html[counts..].find("</div>").unwrap();
+        let audience = html.find(r#"id="people-finder-audience""#).unwrap();
+        assert!(audience > counts_end);
+        assert!(html.contains(r#"<input type="checkbox" name="participants" checked>"#));
+        assert!(html.contains(r#"<input type="checkbox" name="operators" checked>"#));
+        assert!(!html.contains("hx-swap-oob"));
     }
 
     #[test]

@@ -230,7 +230,10 @@ fn vocabulary_options(vocabulary: &[&'static str]) -> Vec<(&'static str, &'stati
 pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
     if let Some(list) = choice_field(field_type, kind) {
         return Some(FieldMeta {
-            label: list.heading(),
+            label: match kind {
+                DetailPageKind::Event => crate::event::choice_question(list),
+                DetailPageKind::Project => list.heading(),
+            },
             input_kind: FieldInputKind::MultiCheckbox(list),
         });
     }
@@ -538,7 +541,7 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
             input_kind: FieldInputKind::Text,
         }),
         ("limited_to", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Who is eligible to attend? (empty if anyone can attend)",
+            label: "Which group can attend? (empty if it's open to everyone)",
             input_kind: FieldInputKind::Text,
         }),
 
@@ -1364,7 +1367,11 @@ impl FieldEditForm {
                 };
                 (
                     heading,
-                    Some(ChoiceCheckboxes::new("value", values, picked, limit)),
+                    Some(
+                        ChoiceCheckboxes::new("value", values, picked, limit).stacked(
+                            kind == DetailPageKind::Event && crate::event::choice_stacked(list),
+                        ),
+                    ),
                 )
             }
             _ => (meta.label.into(), None),
@@ -1401,6 +1408,9 @@ pub struct FieldDisplay {
     /// rendered content already includes a heading (ribbon boxes, the online
     /// toggle) or that are icon-only adornments.
     pub show_label: bool,
+    /// Whether only the entity's editors see the field, in editing mode, and
+    /// visitors not at all.
+    pub editor_only: bool,
     /// Whether the display replaces the one on the page out of band, beside a
     /// response to a change that changed this field too.
     pub oob: bool,
@@ -1420,6 +1430,8 @@ impl FieldDisplay {
             wrapper_extra: field_wrapper_extra(field_type, kind),
             inline_button: field_inline_button(field_type),
             show_label: !field_self_labeled(field_type, kind),
+            editor_only: choice_field(field_type, kind)
+                .is_some_and(|list| !list.shown_to_visitors()),
             target_id,
             field_type: field_type.to_string(),
             label,
@@ -2007,8 +2019,8 @@ async fn picked_values(list: ChoiceList, value: &str) -> Vec<ChoiceValue> {
     }
 }
 
-/// A row of pills, one per value `picked` from `list`, headed with the
-/// question the list answers. Picking nothing is a row reading "not set" for
+/// A row of an event's pills, one per value `picked` from `list`, headed as
+/// the event's page heads the list. Picking nothing is a row reading "not set" for
 /// an editor, and nothing for anyone else.
 fn choice_row(list: ChoiceList, picked: &[ChoiceValue], can_edit: bool) -> String {
     let pills = if !picked.is_empty() {
@@ -2030,7 +2042,7 @@ fn choice_row(list: ChoiceList, picked: &[ChoiceValue], can_edit: bool) -> Strin
 
     format!(
         r#"<div class="flex flex-wrap items-baseline gap-1"><span class="text-xs font-semibold uppercase tracking-wide text-neutral-mid mr-1">{}</span>{pills}</div>"#,
-        html_escape(list.heading())
+        html_escape(crate::event::choice_row_heading(list))
     )
 }
 
@@ -4408,6 +4420,34 @@ mod choice_field_tests {
     }
 
     #[test]
+    fn only_editors_see_an_events_program() {
+        let display = |field: &str, can_edit: bool| {
+            FieldDisplay::build(
+                "01J0000000000000000000000".to_string(),
+                field,
+                DetailPageKind::Event,
+                "Label".to_string(),
+                can_edit,
+                "<p>Shown</p>".to_string(),
+                false,
+            )
+            .render_once()
+            .unwrap()
+        };
+
+        check!(display("programs", false).trim().is_empty());
+        let editor = display("programs", true);
+        check!(editor.contains("<p>Shown</p>"));
+        check!(editor.contains(" edit-only\""));
+
+        for field in ["formats", "venues", "topics", "audience"] {
+            let visitor = display(field, false);
+            check!(visitor.contains("<p>Shown</p>"));
+            check!(!visitor.contains("edit-only"));
+        }
+    }
+
+    #[test]
     fn the_topic_editor_says_how_many_may_be_picked() {
         check!(
             limited_heading(
@@ -4434,8 +4474,22 @@ mod choice_field_tests {
         check!(choice_row(ChoiceList::Audience, &[], false).is_empty());
 
         let html = choice_row(ChoiceList::Audience, &[], true);
-        check!(html.contains(">Audience</span>"));
+        check!(html.contains(">Recommended ages</span>"));
         check!(html.contains(not_set()));
+    }
+
+    #[test]
+    fn an_events_audience_is_asked_about_ages() {
+        let label = |field, kind| field_meta(field, kind).unwrap().label;
+        check!(label("audience", DetailPageKind::Event) == "What ages is this event suitable for?");
+        check!(label("audiences", DetailPageKind::Project) == "Audience");
+        check!(
+            crate::event::choice_legend(ChoiceList::Audience)
+                == "What ages is this event suitable for?"
+        );
+        check!(
+            crate::event::choice_legend(ChoiceList::EventFormat) == "Type of event (choose any)"
+        );
     }
 
     #[test]
@@ -4450,9 +4504,13 @@ mod choice_field_tests {
         ] {
             check!(choice_field(field, kind) == Some(list));
             check!(editable_field_list(kind).contains(&field));
+            let label = match kind {
+                DetailPageKind::Event => crate::event::choice_question(list),
+                DetailPageKind::Project => list.heading(),
+            };
             check!(
                 field_meta(field, kind).map(|meta| (meta.label, meta.input_kind))
-                    == Some((list.heading(), FieldInputKind::MultiCheckbox(list)))
+                    == Some((label, FieldInputKind::MultiCheckbox(list)))
             );
         }
         check!(choice_field("formats", DetailPageKind::Project).is_none());

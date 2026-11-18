@@ -132,7 +132,7 @@
 
         <!-- Who can attend -->
         <div>
-          <label for="event-limited-to" class="block text-sm font-medium text-gray-700">Who is eligible to attend (empty if it's open to everyone)</label>
+          <label for="event-limited-to" class="block text-sm font-medium text-gray-700">Which group can attend? (empty if it's open to everyone)</label>
           <form class="mt-1 flex" hx-put="/-admin/events/<%= self.event.id %>/field/limited_to" hx-target="this" hx-swap="none">
             <input
                 type="text"

@@ -22,13 +22,13 @@
 <%# Attributes marking a hand-written control the form's error is about. %>
 <% let invalid_attrs = |field: &str| if error.is_some_and(|e| e.is_about(field)) { format!(r#" aria-invalid="true" aria-describedby="{}""#, FormError::ELEMENT_ID) } else { String::new() }; %>
 <div data-location-picker class="space-y-2">
-  <fieldset class="choice-group location-toggle">
+  <fieldset class="choice-group">
     <legend>Is it in person or virtual?<span class="pill-required" aria-hidden="true"> *</span></legend>
-    <div class="toggle-options">
+    <div class="radio-options">
       <% for (value, label) in toggle { %>
       <% let in_person = value == "in_person"; %>
       <% let checked = if in_person { in_person_toggled } else { self.mode == value }; %>
-      <label class="toggle-option">
+      <label class="radio-option">
         <input type="radio" name="location_mode" value="<%= if in_person { in_person_value } else { value } %>"<% if in_person { %> data-in-person<% } %> required<%- invalid_attrs("location_mode") %><% if checked { %> checked<% } %>>
         <span><%= label %></span>
       </label>

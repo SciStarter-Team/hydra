@@ -9,6 +9,7 @@ use common::{
         participants::{LastContacted, LastContactedRequest},
         user::{BasicInfo, PROTECTED_SENDER_REFUSAL},
     },
+    primary::CopyKeeper,
     service::request as nats_request,
     service::send_email,
     shared::db,
@@ -145,8 +146,12 @@ pub(crate) async fn check_sender_may_send(from_id: Ulid) -> Result<()> {
     Ok(())
 }
 
-async fn ensure_personal_forum(user_id: Ulid) -> Result<()> {
-    let user_id_str = user_id.to_string();
+/// Make the personal forum (inbox) of the user `user_id_str`, unless it has
+/// one.
+pub(crate) async fn ensure_personal_forum<'e, E: sqlx::SqliteExecutor<'e>>(
+    executor: E,
+    user_id_str: &str,
+) -> Result<()> {
     // Shares the `inbox-{id}` slug convention with forums::get_personal_forum.
     let slug = format!("inbox-{}", user_id_str);
     let name = format!("Inbox for {}", user_id_str);
@@ -160,7 +165,7 @@ async fn ensure_personal_forum(user_id: Ulid) -> Result<()> {
         name,
         now,
     )
-    .execute(db())
+    .execute(executor)
     .await?;
 
     Ok(())
@@ -184,7 +189,7 @@ pub(crate) async fn create_conversation(
     approved: i64,
     batch: Option<&str>,
 ) -> Result<(Ulid, Ulid)> {
-    ensure_personal_forum(to_id).await?;
+    ensure_personal_forum(db(), &to_id.to_string()).await?;
 
     let topic_id = Ulid::new();
     let post_id = Ulid::new();
@@ -487,7 +492,7 @@ pub async fn inbox(req: &Request) -> Result<InboxResponse> {
     let db = db();
 
     // Ensure personal forum exists
-    ensure_personal_forum(query.user_id).await?;
+    ensure_personal_forum(db, &query.user_id.to_string()).await?;
 
     // Get conversations from the user's personal forum (where they are recipient)
     // plus conversations they started in others' personal forums (where they are author)
@@ -781,8 +786,10 @@ pub async fn recipients_since(req: &Request) -> Result<Vec<Ulid>, anyhow::Error>
 
 /// The staff review queue: every direct message awaiting approval, newest
 /// last. A pending message is one whose post is not yet approved and not
-/// deleted (rejected), in a personal-forum (DM) topic.
+/// deleted (rejected), in a personal-forum (DM) topic. Until cutover, a copy
+/// of one of orrery's messages is orrery's to review, and isn't listed.
 pub async fn pending_list(_req: &Request) -> Result<Vec<ReviewMessageRow>> {
+    let orrery_reviews = CopyKeeper::NOW.orrery_keeps_copies();
     let rows = sqlx::query!(
         r#"SELECT p.post_id as "post_id!: String", p.content as "content!: String",
                   p.author_id as "author_id!: String", p.created_at as "created_at!: String",
@@ -793,8 +800,10 @@ pub async fn pending_list(_req: &Request) -> Result<Vec<ReviewMessageRow>> {
            JOIN topics t ON t.topic_id = p.topic_id
            JOIN forums f ON f.forum_id = t.forum_id
            WHERE p.approved = 0 AND p.is_deleted = 0 AND f.slug LIKE 'inbox-%'
+             AND NOT (? AND EXISTS (SELECT 1 FROM orrery_messages om WHERE om.post_id = p.post_id))
            ORDER BY p.created_at ASC
            LIMIT 500"#,
+        orrery_reviews,
     )
     .fetch_all(db())
     .await?;
@@ -831,10 +840,25 @@ pub async fn pending_list(_req: &Request) -> Result<Vec<ReviewMessageRow>> {
 }
 
 /// Apply a staff review decision: accept delivers the message (approved = 1);
-/// reject drops it (is_deleted = 1, hidden from everyone).
+/// reject drops it (is_deleted = 1, hidden from everyone). Until cutover, a
+/// copy of one of orrery's messages is orrery's to review, and is refused.
 pub async fn review_message(req: &Request) -> Result<()> {
     let decision: ReviewMessageDecision = flexbuffers::from_slice(&req.message.payload)?;
     let post_id_str = decision.post_id.to_string();
+
+    if CopyKeeper::NOW.orrery_keeps_copies() {
+        let copied = sqlx::query_scalar!(
+            r#"SELECT 1 AS "copied!: i64" FROM "orrery_messages" WHERE "post_id" = ?"#,
+            post_id_str,
+        )
+        .fetch_optional(db())
+        .await?;
+        if copied.is_some() {
+            return Err(anyhow::anyhow!(
+                "This message is a copy of one on orrery; review it there."
+            ));
+        }
+    }
 
     if decision.accept {
         sqlx::query!(

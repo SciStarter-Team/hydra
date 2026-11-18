@@ -879,8 +879,8 @@ pub struct ExchangeEventDetail {
     pub description: String,
     /// Rendered, sanitized HTML.
     pub how_to_join: String,
-    /// The names of the event's formats, programs or campaigns, and kinds
-    /// of venue, in that order, each in list order.
+    /// The names of the event's types that visitors see (its formats and
+    /// kinds of venue), in that order, each in list order.
     pub event_types: Vec<String>,
     /// When it happens, earliest first.
     pub instances: Vec<super::events::Session>,
@@ -978,7 +978,10 @@ async fn load_exchange_event_detail(id: Ulid, slug: &str) -> Result<ExchangeEven
 
     // All in one row, as orrery's exchange shows them.
     let mut event_types = Vec::new();
-    for list in ChoiceList::EVENT_TYPES {
+    for list in ChoiceList::EVENT_TYPES
+        .into_iter()
+        .filter(|list| list.shown_to_visitors())
+    {
         event_types.extend(ChoiceValue::names_of_target(list, &id_str).await?);
     }
 

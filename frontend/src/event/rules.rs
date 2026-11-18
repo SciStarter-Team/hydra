@@ -235,16 +235,14 @@ pub fn limited_to(group: &str, limited: bool) -> Checked {
     if limited && group.is_empty() {
         return Err(Refusal::new(
             Field::LimitedTo,
-            "Please say who is eligible to attend, such as \u{201c}Library cardholders only.\u{201d}",
+            "Please say which group can attend, such as \u{201c}Library cardholders.\u{201d}",
         ));
     }
     // Counted in characters, as the field counts them.
     if group.chars().count() > LIMITED_TO_LIMIT {
         return Err(Refusal::new(
             Field::LimitedTo,
-            format!(
-                "Please say who is eligible to attend in {LIMITED_TO_LIMIT} characters or fewer."
-            ),
+            format!("Please say which group can attend in {LIMITED_TO_LIMIT} characters or fewer."),
         ));
     }
     Ok(())

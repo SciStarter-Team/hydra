@@ -15,7 +15,7 @@ use crate::{
     opens,
     ratelimit::{mark_sent, wait_until_can_send},
     sends::send_email_queued,
-    ses::{from_email, send_email},
+    ses::{SendFailure, from_email, send_email},
     template::merge_template,
     triggers::resolve_trigger_recipients,
 };
@@ -44,15 +44,43 @@ fn is_valid_email_format(email: &str) -> bool {
     }
 }
 
+/// How long the queue waits after SES defers a message, before it sends
+/// anything again.
+const HOLD_OFF: Duration = Duration::from_secs(15 * 60);
+
+/// How long a message SES keeps deferring stays in the queue before it is
+/// given up.
+const GIVE_UP_AFTER: jiff::SignedDuration = jiff::SignedDuration::from_hours(7 * 24);
+
+/// What taking the next message from the queue came to.
+#[derive(Debug, PartialEq)]
+enum QueueStep {
+    /// There was none.
+    Empty,
+
+    /// It was sent, skipped or given up, and is out of the queue.
+    Handled,
+
+    /// SES will take it later, so it stays in the queue, and nothing more is
+    /// sent until `HOLD_OFF` has passed.
+    Deferred,
+}
+
 /// Background task to process the email queue
 pub async fn run_queue_processor(ses_client: SesClient) {
     loop {
         match process_next_email(&ses_client).await {
-            Ok(processed) => {
-                if !processed {
-                    // No emails in queue, wait before checking again
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-                }
+            Ok(QueueStep::Handled) => {}
+            Ok(QueueStep::Empty) => {
+                // No emails in queue, wait before checking again
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+            Ok(QueueStep::Deferred) => {
+                tracing::warn!(
+                    hold_off_secs = HOLD_OFF.as_secs(),
+                    "SES deferred a message, holding off sending"
+                );
+                tokio::time::sleep(HOLD_OFF).await;
             }
             Err(e) => {
                 tracing::error!("Error processing email: {:?}", e);
@@ -84,13 +112,12 @@ pub async fn run_scheduled_processor() {
 }
 
 /// Process the next email in the queue
-/// Returns Ok(true) if an email was processed, Ok(false) if queue was empty
-async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
+async fn process_next_email(ses_client: &SesClient) -> Result<QueueStep, Error> {
     // Fetch next pending email from queue: a message addressed to one person
     // ahead of a mailing to a set, and the oldest first among equals (a
     // queue_id is a ULID, so it sorts by when the message was queued).
     let queue_item = sqlx::query!(
-        r#"SELECT queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, reply_to, retry_count, no_unsubscribe
+        r#"SELECT queue_id, sending_id, target_type, target_value, data_sets, template_html, subject, additional_data, reply_to, retry_count, no_unsubscribe, queued_at
            FROM send_queue
            WHERE status = 'pending'
            ORDER BY priority DESC, queue_id
@@ -100,7 +127,7 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
     .await?;
 
     let Some(item) = queue_item else {
-        return Ok(false); // Queue is empty
+        return Ok(QueueStep::Empty);
     };
 
     let queue_id = item.queue_id.as_deref().unwrap_or("unknown");
@@ -172,7 +199,7 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
                     .await?;
                     delete_from_queue(queue_id).await?;
                     update_sending_skipped(&item.sending_id, SkipReason::Unverified).await?;
-                    return Ok(true);
+                    return Ok(QueueStep::Handled);
                 }
 
                 if !user_info.accept_emails {
@@ -191,7 +218,7 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
                     .await?;
                     delete_from_queue(queue_id).await?;
                     update_sending_skipped(&item.sending_id, SkipReason::OptedOut).await?;
-                    return Ok(true);
+                    return Ok(QueueStep::Handled);
                 }
 
                 tracing::debug!(
@@ -219,7 +246,7 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             record_skip(queue_id, &item.sending_id, &email_address, "invalid").await?;
             delete_from_queue(queue_id).await?;
             update_sending_skipped(&item.sending_id, SkipReason::Invalid).await?;
-            return Ok(true);
+            return Ok(QueueStep::Handled);
         }
 
         // Check do_not_send table and break out the skip by suppression reason.
@@ -250,7 +277,7 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             record_skip(queue_id, &item.sending_id, &email_address, &row.reason).await?;
             delete_from_queue(queue_id).await?;
             update_sending_skipped(&item.sending_id, skip_reason).await?;
-            return Ok(true);
+            return Ok(QueueStep::Handled);
         }
 
         // Load data sets and collect merge fields
@@ -362,7 +389,7 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             record_skip(queue_id, &item.sending_id, &email_address, "not_primary").await?;
             delete_from_queue(queue_id).await?;
             update_sending_skipped(&item.sending_id, SkipReason::NotPrimary).await?;
-            return Ok(true);
+            return Ok(QueueStep::Handled);
         }
 
         // Wait for rate limit and quota
@@ -406,7 +433,7 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
                 );
                 msg_id
             }
-            Err(e) => {
+            Err(SendFailure::Failed(e)) => {
                 tracing::error!(
                     email = %email_address,
                     sending_id = %item.sending_id,
@@ -414,6 +441,14 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
                     "SES rejected email"
                 );
                 return Err(e);
+            }
+            Err(SendFailure::Deferred(e)) => {
+                let queue_id = item
+                    .queue_id
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("queue_id is NULL"))?;
+                let queued_at: jiff::Timestamp = item.queued_at.parse()?;
+                return defer(queue_id, &item.sending_id, &email_address, queued_at, e).await;
             }
         };
 
@@ -453,13 +488,13 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             "Email sent successfully"
         );
 
-        Ok(true)
+        Ok(QueueStep::Handled)
     }
     .await;
 
     // Handle result with retry logic
     match result {
-        Ok(success) => Ok(success),
+        Ok(step) => Ok(step),
         Err(e) => {
             tracing::error!(
                 queue_id = %queue_id,
@@ -508,6 +543,52 @@ async fn process_next_email(ses_client: &SesClient) -> Result<bool, Error> {
             Err(e)
         }
     }
+}
+
+/// Leave a message SES deferred in the queue, without counting it as a
+/// failed attempt, unless it has waited longer than `GIVE_UP_AFTER`, when it
+/// is given up.
+async fn defer(
+    queue_id: &str,
+    sending_id: &str,
+    email_address: &str,
+    queued_at: jiff::Timestamp,
+    e: Error,
+) -> Result<QueueStep, Error> {
+    if jiff::Timestamp::now().duration_since(queued_at) > GIVE_UP_AFTER {
+        tracing::error!(
+            queue_id = %queue_id,
+            sending_id = %sending_id,
+            email = %email_address,
+            error = %e,
+            "SES deferred the email too long, giving up"
+        );
+        record_skip(
+            queue_id,
+            sending_id,
+            email_address,
+            &format!("deferred too long: {e}"),
+        )
+        .await?;
+        delete_from_queue(queue_id).await?;
+        update_sending_skipped(sending_id, SkipReason::Failed).await?;
+        return Ok(QueueStep::Handled);
+    }
+
+    tracing::warn!(
+        queue_id = %queue_id,
+        sending_id = %sending_id,
+        email = %email_address,
+        error = %e,
+        "SES deferred email, leaving it in the queue"
+    );
+    sqlx::query!(
+        r#"UPDATE send_queue SET status = 'pending' WHERE queue_id = ?"#,
+        queue_id
+    )
+    .execute(db())
+    .await?;
+    Ok(QueueStep::Deferred)
 }
 
 async fn record_sent(

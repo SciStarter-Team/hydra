@@ -1,5 +1,5 @@
 use anyhow::Error;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use common::{
     insensitivestring::InsensitiveString, timestring::TimeString, transaction::Immediate,
@@ -146,12 +146,81 @@ pub enum EventStatus {
     Expired,
 }
 
-/// What the event forms ask of `list`: its heading, and how many may be
-/// picked from it ("Topics (up to 3)", "Type of event (choose any)").
+/// The question the event forms ask of `list`. The audience is asked in
+/// words of its own; every other list by the heading it has everywhere.
+pub fn choice_question(list: ChoiceList) -> &'static str {
+    match list {
+        ChoiceList::Audience => "What ages is this event suitable for?",
+        _ => list.heading(),
+    }
+}
+
+/// What the event forms say under the question of `list`, if anything.
+pub fn choice_help(list: ChoiceList) -> Option<&'static str> {
+    match list {
+        ChoiceList::Audience => Some("Select all that apply."),
+        _ => None,
+    }
+}
+
+/// The slugs of the ages to save for an event being added that picks
+/// `picked` from the audience list: those it picks, or, when it picks none,
+/// the ages an event added with none is saved with
+/// ([`OrreryValue::EVENT_AGES_WHEN_NONE`]). Only adding an event goes
+/// through here: an edit saves exactly the ages chosen, none included, as
+/// orrery's does.
+pub async fn ages_for_new_event(picked: BTreeSet<String>) -> Result<BTreeSet<String>, Error> {
+    if !picked.is_empty() {
+        return Ok(picked);
+    }
+
+    let ages = ages_when_none(&ChoiceValue::all(ChoiceList::Audience).await?);
+    if ages.len() < OrreryValue::EVENT_AGES_WHEN_NONE.len() {
+        tracing::warn!(
+            found = ?ages,
+            "Not every age an event added with none is saved with is in the audience list"
+        );
+    }
+    Ok(ages)
+}
+
+/// The slugs, among the audience list's `values`, of the ages an event
+/// added with none is saved with.
+fn ages_when_none(values: &[ChoiceValue]) -> BTreeSet<String> {
+    values
+        .iter()
+        .filter(|value| {
+            OrreryValue::EVENT_AGES_WHEN_NONE
+                .iter()
+                .any(|age| age.is(value))
+        })
+        .map(|value| value.slug.clone())
+        .collect()
+}
+
+/// Whether the event forms ask `list` as one column of boxes rather than a
+/// grid: the ages are a short list read top to bottom, youngest first.
+pub fn choice_stacked(list: ChoiceList) -> bool {
+    list == ChoiceList::Audience
+}
+
+/// How an event's page heads what it picked from `list`.
+pub fn choice_row_heading(list: ChoiceList) -> &'static str {
+    match list {
+        ChoiceList::Audience => "Recommended ages",
+        _ => list.heading(),
+    }
+}
+
+/// What the event forms ask of `list`: its question, and how many may be
+/// picked from it ("Topics (up to 3)", "Type of event (choose any)"). A list
+/// with help under its question says there that any may be picked.
 pub fn choice_legend(list: ChoiceList) -> std::borrow::Cow<'static, str> {
+    let question = choice_question(list);
     match pick_limit(list) {
-        Some(limit) => crate::choice::limited_heading(list.heading(), Some(limit)),
-        None => format!("{} (choose any)", list.heading()).into(),
+        Some(limit) => crate::choice::limited_heading(question, Some(limit)),
+        None if choice_help(list).is_some() => question.into(),
+        None => format!("{question} (choose any)").into(),
     }
 }
 
@@ -175,4 +244,43 @@ pub fn in_format_order(mut formats: Vec<ChoiceValue>) -> Vec<ChoiceValue> {
         )
     });
     formats
+}
+
+#[cfg(test)]
+mod tests {
+    use assert2::check;
+
+    use super::*;
+
+    fn age(slug: &str, orrery_id: Option<i64>) -> ChoiceValue {
+        ChoiceValue {
+            list: ChoiceList::Audience,
+            slug: slug.to_string(),
+            name: slug.to_string(),
+            position: 0,
+            orrery_id,
+        }
+    }
+
+    #[test]
+    fn an_event_added_with_no_ages_is_saved_with_the_school_levels_and_adults() {
+        let values = [
+            age("elementary", Some(111)),
+            age("middle", Some(112)),
+            age("high", Some(113)),
+            age("families", Some(117)),
+            age("adults", Some(116)),
+            age("local", None),
+        ];
+        check!(
+            ages_when_none(&values)
+                == BTreeSet::from(["adults", "elementary", "high", "middle"].map(String::from))
+        );
+    }
+
+    #[tokio::test]
+    async fn the_ages_an_event_is_added_with_are_saved_as_picked() {
+        let picked = BTreeSet::from(["families".to_string()]);
+        check!(ages_for_new_event(picked.clone()).await.unwrap() == picked);
+    }
 }

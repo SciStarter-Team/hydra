@@ -1,9 +1,12 @@
 <% let full = self.full(); %>
 <% if let Some(legend) = &self.legend { %>
-<fieldset class="choice-group choice-category">
+<fieldset class="choice-group choice-category"<% if self.help.is_some() { %> aria-describedby="<%= self.field %>-help"<% } %>>
   <legend><%= legend %></legend>
+  <% if let Some(help) = self.help { %>
+  <p id="<%= self.field %>-help" class="field-help"><%= help %></p>
+  <% } %>
 <% } %>
-  <div class="choice-checkboxes checkbox-grid"<% if let Some(limit) = self.limit { %> data-pick-limit="<%= limit %>"<% } %>>
+  <div class="choice-checkboxes <% if self.stacked { %>stacked-options<% } else { %>checkbox-grid<% } %>"<% if let Some(limit) = self.limit { %> data-pick-limit="<%= limit %>"<% } %>>
     <% for value in &self.values { let picked = self.picked.contains(&value.slug); %>
     <label class="checkbox-option">
       <input type="checkbox" name="<%= self.field %>[]" value="<%= value.slug %>"<% if picked { %> checked<% } else if full { %> disabled<% } %>>
