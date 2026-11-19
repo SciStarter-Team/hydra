@@ -150,7 +150,7 @@ pub(crate) fn get_tools() -> Value {
         },
         {
             "name": "get_event",
-            "description": "Get detailed information about a specific citizen science event.",
+            "description": "Get detailed information about a specific citizen science event. Each of its instances (dates) has a begin and an end; the end is null when none was given.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -510,7 +510,11 @@ async fn tool_get_event(args: Value) -> Result<String, Error> {
 
     let instances_json: Vec<Value> = instances
         .into_iter()
-        .map(|i| json!({"begin": i.begin, "end": i.end}))
+        // An instance stored as ending when it begins was given no end.
+        .map(|i| {
+            let end = (i.end != i.begin).then_some(i.end);
+            json!({"begin": i.begin, "end": end})
+        })
         .collect();
 
     let result = json!({

@@ -134,7 +134,9 @@
   // "Add end time" reveals a row's end fields (and checks the hidden has_end
   // box that carries the state to the server); "Remove end time" undoes it.
   // Each hides the control that was used, so focus moves to the one that
-  // takes its place.
+  // takes its place. Most events end the day they start, so, as Facebook
+  // does, the end date starts out as the start date and the end time is
+  // what's asked for.
   function setEnd(row, on) {
     var toggle = row.querySelector(".has-end-toggle");
     var block = row.querySelector(".end-block");
@@ -146,8 +148,10 @@
       block.querySelectorAll("input").forEach(function (el) { el.value = ""; });
     }
     if (on && block) {
-      var endDate = block.querySelector("input");
-      if (endDate) endDate.focus();
+      var endDate = control(row, "end_date");
+      if (endDate && !endDate.value) endDate.value = control(row, "begin_date").value;
+      var endTime = control(row, "end_time");
+      if (endTime) endTime.focus();
     } else if (!on && link) {
       link.focus();
     }
@@ -156,7 +160,10 @@
     var row = e.target.closest && e.target.closest("[data-date-row]");
     if (!row) return;
     // The chips hold icons, which a click can land on.
+    // Either changes the saved date, as typing over it does, and the end
+    // date "Add end time" fills in is the start's on the clocks shown now.
     if (e.target.closest(".end-toggle")) {
+      row.dataset.touched = "1";
       setEnd(row, true);
     } else if (e.target.closest(".end-remove")) {
       row.dataset.touched = "1";

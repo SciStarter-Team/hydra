@@ -168,11 +168,20 @@ pub fn zoned_time_range(begin: &str, end: &str, format: TimeFormat, clocks: Cloc
     if begin_ts == end_ts {
         return zoned_time(begin, format, clocks);
     }
-    format!(
-        r#"<time datetime="{begin_ts}" data-end="{end_ts}" data-format="{format}"{}>{} &ndash; {}</time>"#,
-        clocks.attributes(),
+    // A span within what `format` tells (a session within a day, told as
+    // dates) is told once, as the script's `formatRange` tells it.
+    let (from, to) = (
         clocks.fallback(begin_ts, format),
-        clocks.fallback(end_ts, format)
+        clocks.fallback(end_ts, format),
+    );
+    let text = if from == to {
+        from
+    } else {
+        format!("{from} &ndash; {to}")
+    };
+    format!(
+        r#"<time datetime="{begin_ts}" data-end="{end_ts}" data-format="{format}"{}>{text}</time>"#,
+        clocks.attributes(),
     )
 }
 
@@ -212,6 +221,29 @@ mod tests {
                 Clocks::Viewer
             ),
             r#"<time datetime="2027-03-05T14:30:00Z" data-format="datetime" data-named-zone>March 5, 2027, 2:30 PM UTC</time>"#
+        );
+    }
+
+    #[test]
+    fn a_span_within_a_day_told_as_dates_is_told_once() {
+        let tz = TimeZone::get("America/New_York").unwrap();
+        assert_eq!(
+            zoned_time_range(
+                "2027-03-05T14:30:00Z",
+                "2027-03-05T16:00:00Z",
+                TimeFormat::ShortDate,
+                Clocks::Zone(&tz)
+            ),
+            r#"<time datetime="2027-03-05T14:30:00Z" data-end="2027-03-05T16:00:00Z" data-format="short-date" data-named-zone data-zone="America/New_York">Mar 5, 2027</time>"#
+        );
+        assert!(
+            zoned_time_range(
+                "2027-03-05T14:30:00Z",
+                "2027-03-07T16:00:00Z",
+                TimeFormat::ShortDate,
+                Clocks::Zone(&tz)
+            )
+            .contains("Mar 5, 2027 &ndash; Mar 7, 2027")
         );
     }
 

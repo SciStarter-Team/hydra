@@ -1,13 +1,18 @@
 use anyhow::Error;
-use common::shared::db;
-use jiff::Timestamp;
+use common::{shared::db, timestring::TimeString};
+use jiff::{Timestamp, tz::TimeZone};
 use ulid::Ulid;
 
-use crate::{entity::EntityKind, peering::LoadStorePeered};
+use crate::{
+    component::html_escape,
+    entity::EntityKind,
+    local_time::{Clocks, TimeFormat, zoned_time, zoned_time_range},
+    peering::LoadStorePeered,
+};
 
 /// Featured item with all data needed for display in the homepage card.
 /// Schedule fields (title, content, url) override entity fields when present.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone)]
 pub struct FeaturedItem {
     pub schedule_id: Ulid,
     pub entity_slug: String,
@@ -21,7 +26,7 @@ pub struct FeaturedItem {
     /// Custom URL from schedule, if any (otherwise link to entity page)
     pub custom_url: Option<String>,
     pub location_display: String,
-    pub timing_display: String,
+    pub timing: Timing,
     pub topics: Vec<String>,
 }
 
@@ -33,6 +38,45 @@ impl FeaturedItem {
         match &self.custom_url {
             Some(url) => url.clone(),
             None => format!("{}{}", self.entity_kind.path_prefix(), self.entity_slug),
+        }
+    }
+}
+
+/// When a featured item happens, as its card tells it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Timing {
+    /// A project's timing, in its own words.
+    Described(String),
+    /// An event's session that is under way or next to come: its start, and
+    /// its end, which is its start when it was given none. Told on the
+    /// clocks of its venue's `zone`, or the viewer's when it has none.
+    Next {
+        begin: String,
+        end: String,
+        zone: Option<TimeZone>,
+    },
+    /// An event whose sessions are all over: when the last of them began.
+    Past {
+        begin: String,
+        zone: Option<TimeZone>,
+    },
+    /// An event with no sessions.
+    Unscheduled,
+}
+
+impl Timing {
+    /// The card's line, as HTML.
+    pub fn html(&self) -> String {
+        match self {
+            Timing::Described(text) => html_escape(text),
+            Timing::Next { begin, end, zone } => {
+                zoned_time_range(begin, end, TimeFormat::ShortDate, Clocks::of(zone.as_ref()))
+            }
+            Timing::Past { begin, zone } => format!(
+                "Was {}",
+                zoned_time(begin, TimeFormat::ShortDate, Clocks::of(zone.as_ref()))
+            ),
+            Timing::Unscheduled => "Date TBD".to_string(),
         }
     }
 }
@@ -190,7 +234,8 @@ impl Schedule {
 
     /// Get currently active featured items with entity details
     pub async fn get_current_featured_items() -> Result<Vec<FeaturedItem>, Error> {
-        let now = Timestamp::now().strftime("%Y-%m-%d").to_string();
+        let today = Timestamp::now().strftime("%Y-%m-%d").to_string();
+        let now = TimeString::now().to_string();
         let schedule_type = "featured";
 
         let items_raw = sqlx::query!(
@@ -216,25 +261,27 @@ impl Schedule {
                        WHERE cn.target = e.target
                          AND cn.list = 'Topic'
                          AND e.kind = 'Project') as "topics: String",
+                      ST_Y(ev.point) as "latitude?: f64",
+                      ST_X(ev.point) as "longitude?: f64",
                       (SELECT ei.begin
                        FROM event_instances ei
                        WHERE ei.event_id = e.target
                          AND e.kind = 'Event'
-                         AND ei.begin >= ?2
-                       ORDER BY ei.begin ASC
+                         AND ei.end >= ?3
+                       ORDER BY ei.begin ASC, ei.end ASC
                        LIMIT 1) as "next_instance_begin: String",
                       (SELECT ei.end
                        FROM event_instances ei
                        WHERE ei.event_id = e.target
                          AND e.kind = 'Event'
-                         AND ei.begin >= ?2
-                       ORDER BY ei.begin ASC
+                         AND ei.end >= ?3
+                       ORDER BY ei.begin ASC, ei.end ASC
                        LIMIT 1) as "next_instance_end: String",
                       (SELECT ei.begin
                        FROM event_instances ei
                        WHERE ei.event_id = e.target
                          AND e.kind = 'Event'
-                         AND ei.end < ?2
+                         AND ei.end < ?3
                        ORDER BY ei.end DESC
                        LIMIT 1) as "last_instance_begin: String"
                FROM schedules s
@@ -248,6 +295,7 @@ impl Schedule {
                  AND s.featured_entity IS NOT NULL
                ORDER BY s.start_date DESC"#,
             schedule_type,
+            today,
             now
         )
         .fetch_all(db())
@@ -294,13 +342,18 @@ impl Schedule {
                     &row.country,
                 );
 
-                // Compute timing display string
-                let timing_display = compute_timing_display(
+                let zone = crate::event::zone::of_venue(
+                    row.latitude,
+                    row.longitude,
+                    &row.location_type,
+                    row.entirely_online,
+                );
+                let timing = timing(
                     &entity_kind,
-                    row.project_timing.as_deref(),
-                    row.next_instance_begin.as_deref(),
-                    row.next_instance_end.as_deref(),
-                    row.last_instance_begin.as_deref(),
+                    row.project_timing,
+                    row.next_instance_begin.zip(row.next_instance_end),
+                    row.last_instance_begin,
+                    zone,
                 );
 
                 // Parse topics from comma-separated string
@@ -319,7 +372,7 @@ impl Schedule {
                     description,
                     custom_url,
                     location_display,
-                    timing_display,
+                    timing,
                     topics,
                 })
             })
@@ -361,62 +414,28 @@ fn compute_location_display(
     "Location varies".to_string()
 }
 
-/// Compute human-readable timing display
-fn compute_timing_display(
+/// When a featured item happens: a project's timing as it describes it, an
+/// event's session under way or next to come (`next`, its begin and end), or
+/// else when the last of them began.
+fn timing(
     entity_kind: &EntityKind,
-    project_timing: Option<&str>,
-    next_instance_begin: Option<&str>,
-    next_instance_end: Option<&str>,
-    last_instance_begin: Option<&str>,
-) -> String {
+    project_timing: Option<String>,
+    next: Option<(String, String)>,
+    last_begin: Option<String>,
+    zone: Option<TimeZone>,
+) -> Timing {
     match entity_kind {
-        EntityKind::Project => {
-            // Use project_timing if available
-            if let Some(timing) = project_timing {
-                if !timing.is_empty() {
-                    return timing.to_string();
-                }
-            }
-            "Ongoing".to_string()
-        }
-        EntityKind::Event => {
-            // Try to show the next upcoming instance
-            if let Some(begin) = next_instance_begin {
-                return format_event_date(begin, next_instance_end);
-            }
-            // If no upcoming instance, show the last one as past
-            if let Some(begin) = last_instance_begin {
-                return format!("Was {}", format_event_date(begin, None));
-            }
-            // No instances at all
-            "Date TBD".to_string()
-        }
-        _ => String::new(),
-    }
-}
-
-/// Format an event date for display
-fn format_event_date(begin: &str, end: Option<&str>) -> String {
-    // Parse the date string (expected format: YYYY-MM-DD or ISO timestamp)
-    let begin_date = begin.split('T').next().unwrap_or(begin);
-
-    if let Ok(date) = jiff::civil::Date::strptime("%Y-%m-%d", begin_date) {
-        let formatted = date.strftime("%b %d, %Y").to_string();
-
-        // If end date is different, show range
-        if let Some(end) = end {
-            let end_date = end.split('T').next().unwrap_or(end);
-            if end_date != begin_date {
-                if let Ok(end_parsed) = jiff::civil::Date::strptime("%Y-%m-%d", end_date) {
-                    return format!("{} - {}", formatted, end_parsed.strftime("%b %d, %Y"));
-                }
-            }
-        }
-
-        formatted
-    } else {
-        // Fallback: return as-is
-        begin.to_string()
+        EntityKind::Project => Timing::Described(
+            project_timing
+                .filter(|timing| !timing.is_empty())
+                .unwrap_or_else(|| "Ongoing".to_string()),
+        ),
+        EntityKind::Event => match (next, last_begin) {
+            (Some((begin, end)), _) => Timing::Next { begin, end, zone },
+            (None, Some(begin)) => Timing::Past { begin, zone },
+            (None, None) => Timing::Unscheduled,
+        },
+        _ => Timing::Described(String::new()),
     }
 }
 
@@ -499,5 +518,72 @@ impl LoadStorePeered for Schedule {
         .execute(db())
         .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use assert2::check;
+
+    use super::*;
+
+    #[test]
+    fn an_events_date_is_told_on_its_venues_clocks() {
+        // 01:00 UTC on the 6th is still the evening of the 5th in Los Angeles.
+        let zone = TimeZone::get("America/Los_Angeles").ok();
+        let next = timing(
+            &EntityKind::Event,
+            None,
+            Some((
+                "2027-03-06T01:00:00Z".to_string(),
+                "2027-03-06T03:00:00Z".to_string(),
+            )),
+            None,
+            zone,
+        );
+        check!(next.html().contains(">Mar 5, 2027</time>"));
+    }
+
+    #[test]
+    fn a_session_with_no_end_is_one_date() {
+        let next = timing(
+            &EntityKind::Event,
+            None,
+            Some((
+                "2027-03-06T15:00:00Z".to_string(),
+                "2027-03-06T15:00:00Z".to_string(),
+            )),
+            None,
+            None,
+        );
+        check!(!next.html().contains("data-end"));
+    }
+
+    #[test]
+    fn an_event_whose_sessions_are_over_says_when_it_was() {
+        let past = timing(
+            &EntityKind::Event,
+            None,
+            None,
+            Some("2026-03-06T15:00:00Z".to_string()),
+            None,
+        );
+        check!(past.html().starts_with("Was <time"));
+        check!(timing(&EntityKind::Event, None, None, None, None) == Timing::Unscheduled);
+    }
+
+    #[test]
+    fn a_projects_timing_is_its_own_words_escaped() {
+        let described = timing(
+            &EntityKind::Project,
+            Some("Spring & <fall>".to_string()),
+            None,
+            None,
+            None,
+        );
+        check!(described.html() == "Spring &amp; &lt;fall&gt;");
+        check!(
+            timing(&EntityKind::Project, Some(String::new()), None, None, None).html() == "Ongoing"
+        );
     }
 }

@@ -953,9 +953,12 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
 
     let total_pages = (total_count + EVENTS_PAGE_SIZE - 1) / EVENTS_PAGE_SIZE;
 
-    // Results query
+    // Results query. An event is shown by its first session in the window,
+    // begin and end together: with a single min() aggregate in the query,
+    // SQLite takes the bare `ei.end` from the row that holds the minimum, so
+    // the end is that session's own, never another session's.
     let mut results_qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
-        "SELECT e.slug, ev.name, MIN(ei.begin), MIN(ei.end), \
+        "SELECT e.slug, ev.name, MIN(ei.begin) AS first_begin, ei.end, \
          ev.entirely_online, ev.location_type = ",
     );
     results_qb.push_bind(ANYWHERE);
@@ -986,7 +989,7 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
         lat,
         lng,
     );
-    results_qb.push(" GROUP BY ev.event_id ORDER BY MIN(ei.begin) ASC, ev.name ASC LIMIT ");
+    results_qb.push(" GROUP BY ev.event_id ORDER BY first_begin ASC, ev.name ASC LIMIT ");
     results_qb.push_bind(EVENTS_PAGE_SIZE);
     results_qb.push(" OFFSET ");
     results_qb.push_bind(offset);

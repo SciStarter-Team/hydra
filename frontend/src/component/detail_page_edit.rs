@@ -2564,10 +2564,16 @@ async fn instance_editor(id: &str, user: Option<&BasicInfo>) -> poem::Result<boo
 
 /// The rules' refusal, about the date row's control it names.
 fn row_refusal(refusal: Refusal) -> FormError {
-    match refusal.field {
-        RulesField::Date(part) => FormError::at(part.name(), refusal.message),
-        _ => FormError::general(refusal.message),
-    }
+    let RulesField::Date(part) = refusal.field else {
+        return FormError::general(refusal.message);
+    };
+    refusal.also.iter().fold(
+        FormError::at(part.name(), refusal.message),
+        |error, field| match field {
+            RulesField::Date(part) => error.also(part.name()),
+            _ => error,
+        },
+    )
 }
 
 /// GET /-detail/:id/instances — the event's dates

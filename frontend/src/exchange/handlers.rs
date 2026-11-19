@@ -1716,6 +1716,20 @@ struct ExchangeCsvRowFull {
     contact_url: Option<String>,
 }
 
+/// The CSV export's own reading of `global`, beside [`SearchParams`].
+///
+/// The finder's "include global projects" box is absent from a submission
+/// when it is clear, so there absence means false. A CSV link can say
+/// either way, so there absence means the exchange's
+/// [`global_by_default`](super::ExchangeSettings::global_by_default), as
+/// orrery's export reads it. A link built from a finder search with the box
+/// clear must therefore send `global=false`.
+#[derive(serde::Deserialize)]
+struct CsvGlobal {
+    #[serde(default)]
+    global: Option<bool>,
+}
+
 /// Exchange CSV export.
 ///
 /// Whatever the search asks for, as a spreadsheet. Anybody may have the
@@ -1724,10 +1738,12 @@ struct ExchangeCsvRowFull {
 #[handler]
 pub async fn exchange_csv(
     Path(exchange_id): Path<i64>,
-    crate::form::QsQuery(params): crate::form::QsQuery<SearchParams>,
+    crate::form::QsQuery(mut params): crate::form::QsQuery<SearchParams>,
+    crate::form::QsQuery(CsvGlobal { global }): crate::form::QsQuery<CsvGlobal>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, Error> {
     let exchange = ExchangeInfo::load_by_id(exchange_id).await?;
+    params.global = global.unwrap_or(exchange.settings.global_by_default);
     let full = access::may_manage(exchange.exchange_id, user_info.as_deref()).await?;
     let scope = SearchScope::resolve(&params, full).await?;
 
@@ -4193,6 +4209,21 @@ mod tests {
 
         exchange.settings.global_by_default = false;
         assert!(!exchange.initial_search().global);
+    }
+
+    #[test]
+    fn the_csv_tells_an_absent_global_from_a_false_one() {
+        let global = |query: &str| {
+            serde_qs::Config::new(10, false)
+                .deserialize_str::<CsvGlobal>(query)
+                .unwrap()
+                .global
+        };
+
+        check!(global("") == None);
+        check!(global("phrase[]=bird&page=2") == None);
+        check!(global("phrase[]=bird&global=false") == Some(false));
+        check!(global("global=true&audience[]=k-12") == Some(true));
     }
 
     #[test]

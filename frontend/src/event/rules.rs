@@ -58,6 +58,7 @@ pub enum RowPart {
     BeginDate,
     BeginTime,
     EndDate,
+    EndTime,
     Timezone,
 }
 
@@ -68,6 +69,7 @@ impl RowPart {
             RowPart::BeginDate => "begin_date",
             RowPart::BeginTime => "begin_time",
             RowPart::EndDate => "end_date",
+            RowPart::EndTime => "end_time",
             RowPart::Timezone => "timezone",
         }
     }
@@ -429,16 +431,27 @@ pub fn date_row(
 
     let begin = parse_datetime(begin_date, begin_time, timezone)
         .map_err(|message| Refusal::new(Field::Date(RowPart::BeginDate), message))?;
-    let end = match row.end {
-        Some((end_date, end_time))
-            if !end_date.trim().is_empty() && !end_time.trim().is_empty() =>
-        {
-            Some(
-                parse_datetime(end_date.trim(), end_time.trim(), timezone)
-                    .map_err(|message| Refusal::new(Field::Date(RowPart::EndDate), message))?,
-            )
+    // An end is both a date and a time; with one of them missing, the row
+    // can't be saved with the end it was meant to have, so it is refused
+    // rather than saved with none. With both left blank, there's no end.
+    let end = match row.end.map(|(date, time)| (date.trim(), time.trim())) {
+        None | Some(("", "")) => None,
+        Some((_, "")) => {
+            return refuse(
+                RowPart::EndTime,
+                "Please choose the time the event ends, or remove the end time.",
+            );
         }
-        _ => None,
+        Some(("", _)) => {
+            return refuse(
+                RowPart::EndDate,
+                "Please choose the date the event ends, or remove the end time.",
+            );
+        }
+        Some((end_date, end_time)) => Some(
+            parse_datetime(end_date, end_time, timezone)
+                .map_err(|message| Refusal::new(Field::Date(RowPart::EndDate), message))?,
+        ),
     };
     let instance = ZonedInstance { begin, end };
 
@@ -452,15 +465,18 @@ pub fn date_row(
             "An event can't start on a date that has already passed.",
         );
     }
+    // An end at the start would be stored as no end at all, so an end has to
+    // come after the start.
     if instance
         .end
         .as_ref()
-        .is_some_and(|end| *end < instance.begin)
+        .is_some_and(|end| *end <= instance.begin)
     {
-        return refuse(
-            RowPart::EndDate,
-            "An event's end time can't be before its start time.",
-        );
+        return Err(Refusal::new(
+            Field::Date(RowPart::EndDate),
+            "An event's end time must be after its start time.",
+        )
+        .also(Field::Date(RowPart::EndTime)));
     }
 
     Ok(RowReading::Dated(instance))
@@ -588,6 +604,71 @@ mod tests {
         )
         .unwrap_err();
         check!(refusal.field == Field::Date(RowPart::EndDate));
+        check!(refusal.also == vec![Field::Date(RowPart::EndTime)]);
+        check!(refusal.message == "An event's end time must be after its start time.");
+    }
+
+    #[test]
+    fn an_end_cant_be_the_start() {
+        // Stored, it would read as no end at all.
+        let refusal = date_row(
+            row("2027-03-12", "11:00", Some(("2027-03-12", "11:00"))),
+            None,
+            &now(),
+        )
+        .unwrap_err();
+        check!(refusal.field == Field::Date(RowPart::EndDate));
+        check!(refusal.message == "An event's end time must be after its start time.");
+    }
+
+    #[test]
+    fn a_half_given_end_is_refused_not_dropped() {
+        let refusal = date_row(
+            row("2027-03-12", "11:00", Some(("2027-03-12", " "))),
+            None,
+            &now(),
+        )
+        .unwrap_err();
+        check!(refusal.field == Field::Date(RowPart::EndTime));
+        check!(refusal.message == "Please choose the time the event ends, or remove the end time.");
+
+        let refusal = date_row(
+            row("2027-03-12", "11:00", Some(("", "12:00"))),
+            None,
+            &now(),
+        )
+        .unwrap_err();
+        check!(refusal.field == Field::Date(RowPart::EndDate));
+        check!(refusal.message == "Please choose the date the event ends, or remove the end time.");
+    }
+
+    #[test]
+    fn a_saved_end_half_cleared_is_refused() {
+        let saved = stored("2027-03-12T16:00:00Z", "2027-03-12T17:00:00Z");
+        let refusal = date_row(
+            row("2027-03-12", "11:00", Some(("2027-03-12", ""))),
+            Some(&saved),
+            &now(),
+        )
+        .unwrap_err();
+        check!(refusal.field == Field::Date(RowPart::EndTime));
+    }
+
+    #[test]
+    fn an_end_left_blank_is_no_end() {
+        let RowReading::Dated(instance) =
+            date_row(row("2027-03-12", "11:00", Some(("", ""))), None, &now()).unwrap()
+        else {
+            panic!("not dated");
+        };
+        check!(instance.end == None);
+    }
+
+    #[test]
+    fn a_saved_date_without_an_end_left_alone_is_kept() {
+        let saved = stored("2027-03-12T16:00:00Z", "2027-03-12T16:00:00Z");
+        let reading = date_row(row("2027-03-12", "11:00", None), Some(&saved), &now()).unwrap();
+        check!(reading == RowReading::Kept);
     }
 
     #[test]
