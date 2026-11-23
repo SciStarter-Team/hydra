@@ -1,7 +1,8 @@
 <% let full = self.full(); %>
 <% if let Some(legend) = &self.legend { %>
-<fieldset class="choice-group choice-category"<% if self.help.is_some() { %> aria-describedby="<%= self.field %>-help"<% } %>>
-  <legend><%= legend %></legend>
+<% let described_by = [self.problem.clone(), self.help.map(|_| format!("{}-help", self.field))].into_iter().flatten().collect::<Vec<_>>().join(" "); %>
+<fieldset class="choice-group choice-category"<% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %>>
+  <legend><%= legend %><% if self.required { %><span class="pill-required" aria-hidden="true"> *</span><% } %></legend>
   <% if let Some(help) = self.help { %>
   <p id="<%= self.field %>-help" class="field-help"><%= help %></p>
   <% } %>
@@ -9,7 +10,7 @@
   <div class="choice-checkboxes <% if self.stacked { %>stacked-options<% } else { %>checkbox-grid<% } %>"<% if let Some(limit) = self.limit { %> data-pick-limit="<%= limit %>"<% } %>>
     <% for value in &self.values { let picked = self.picked.contains(&value.slug); %>
     <label class="checkbox-option">
-      <input type="checkbox" name="<%= self.field %>[]" value="<%= value.slug %>"<% if picked { %> checked<% } else if full { %> disabled<% } %>>
+      <input type="checkbox" name="<%= self.field %>[]" value="<%= value.slug %>"<% if picked { %> checked<% } else if full { %> disabled<% } %><% if self.problem.is_some() { %> aria-invalid="true"<% } %>>
       <%= value.name %>
     </label>
     <% } %>

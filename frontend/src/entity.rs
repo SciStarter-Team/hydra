@@ -669,6 +669,7 @@ impl Entity {
                         .path_and_query()
                         .map_or("/", |pq| pq.as_str())
                         .to_string(),
+                    new_submission: false,
                 };
 
                 let content = detail.prepare(user_info.clone()).await?;
@@ -696,7 +697,6 @@ impl Entity {
                     og_description,
                     og_image,
                     og_url,
-                    edits_event: false,
                 }
                 .into_response(None)
                 .await?
@@ -719,6 +719,11 @@ impl Entity {
                         .path_and_query()
                         .map_or("/", |pq| pq.as_str())
                         .to_string(),
+                    new_submission: req.uri().query().is_some_and(|query| {
+                        query
+                            .split('&')
+                            .any(|pair| pair == crate::event::NEW_SUBMISSION_QUERY)
+                    }),
                 };
 
                 let content = detail.prepare(user_info.clone()).await?;
@@ -735,7 +740,7 @@ impl Entity {
 
                 let mut head = Head::default().with_maplibre();
                 if can_edit {
-                    head = head.with_quill().with_region_editor();
+                    head = head.with_quill().with_event_editors();
                 }
 
                 crate::component::detail_page::DetailPageWrapper {
@@ -746,7 +751,6 @@ impl Entity {
                     og_description,
                     og_image,
                     og_url,
-                    edits_event: can_edit,
                 }
                 .into_response(None)
                 .await?

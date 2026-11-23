@@ -1,6 +1,9 @@
 // Date/time rows (site/date_row.stpl.html), in the add event form and the
-// event page's date editor: the time-zone chip, the end-time chip, and a
-// saved date shown on the clocks of whichever zone is chosen.
+// event page's date editor: the time zone, named as it is on the date it
+// goes with, the end-time chip, the add form's repetition of each date, and
+// a saved date shown on the clocks of whichever zone is chosen. A zone
+// outside a row (when registration opens) is named as of the date and time
+// in its own `[data-zone-scope]`.
 (function () {
   // Preselect a sensible time zone: the zone of a venue picked in the
   // location search when there is one, else the visitor's browser zone.
@@ -13,30 +16,67 @@
     return Array.prototype.some.call(select.options, function (o) { return o.value === tz; });
   }
 
-  // The zone's short name ("PDT", "GMT+3") at `at`, or now: New York is EDT
-  // in July and EST in January.
-  function shortName(tz, at) {
-    try {
-      var parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "short" })
-        .formatToParts(at ? new Date(at) : new Date());
-      var name = parts.find(function (p) { return p.type === "timeZoneName"; });
-      return name ? name.value : tz;
-    } catch (e) {
-      return tz;
-    }
-  }
+  // The zone's short name ("PDT", "GMT+3") at `at`, or now, as the event
+  // page names it (js/local_time.js): New York is EDT in July and EST in
+  // January.
+  var shortName = window.LocalTime.zoneName;
 
   function control(row, part) {
     return row.querySelector('[name="' + part + '"], [name$="[' + part + ']"]');
   }
 
-  // The moment a row's start names, roughly (for the zone's name as of that
-  // date); null when it names none yet.
-  function rowMoment(row) {
-    var date = control(row, "begin_date");
-    if (!date || !date.value) return null;
-    var time = control(row, "begin_time");
-    return date.value + "T" + (time && time.value ? time.value : "12:00") + ":00Z";
+  // The numeric parts of instant `t` (milliseconds) on `zone`'s clocks.
+  function zoneParts(zone, t) {
+    var p = {};
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: zone, hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    }).formatToParts(new Date(t)).forEach(function (part) {
+      if (part.type !== "literal") p[part.type] = parseInt(part.value, 10);
+    });
+    // Some engines spell midnight "24" even under h23.
+    if (p.hour === 24) p.hour = 0;
+    return p;
+  }
+
+  // Milliseconds to add to UTC to get `zone`'s wall-clock time at `t`.
+  function zoneOffset(zone, t) {
+    var p = zoneParts(zone, t);
+    var wholeSeconds = t - (((t % 1000) + 1000) % 1000);
+    return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - wholeSeconds;
+  }
+
+  // The instant `date` ("YYYY-MM-DD") and `time` ("HH:MM") name on `zone`'s
+  // clocks, or null when they name none: the earlier, where a clock change
+  // repeats the time, and the time after the gap, where it skips it. Each
+  // offset in force a day either side proposes an instant; a proposal is
+  // real when the zone uses that offset at it.
+  function zonedInstant(date, time, zone) {
+    var d = date.split("-").map(Number);
+    var h = time.split(":").map(Number);
+    if (d.length !== 3 || h.length < 2 || d.concat(h.slice(0, 2)).some(isNaN)) return null;
+    var guess = Date.UTC(d[0], d[1] - 1, d[2], h[0], h[1]);
+    var day = 24 * 60 * 60 * 1000;
+    var proposals = [guess - zoneOffset(zone, guess - day), guess - zoneOffset(zone, guess + day)];
+    var real = proposals.filter(function (t) { return zoneOffset(zone, t) === guess - t; });
+    return real.length > 0 ? Math.min.apply(null, real) : Math.max.apply(null, proposals);
+  }
+
+  // The moment the date and time beside a zone name on its clocks (noon,
+  // before a time is given), for the zone's name as of then; null, for now,
+  // before a date is. They are the first date and time in the zone's scope:
+  // a row's start, or when registration opens.
+  function zoneMoment(select) {
+    var scope = select.closest("[data-zone-scope]");
+    var date = scope && scope.querySelector('input[type="date"]');
+    if (!date || !date.value || !select.value) return null;
+    var time = scope.querySelector('input[type="time"]');
+    try {
+      return zonedInstant(date.value, time && time.value ? time.value : "12:00", select.value);
+    } catch (e) {
+      return null;
+    }
   }
 
   // The field shows the zone's short name over the full list, which lies
@@ -47,13 +87,7 @@
     if (!field) return;
     field.classList.add("tz-enhanced");
     var short = field.querySelector(".tz-short");
-    var row = select.closest("[data-date-row]");
-    // A chip names the field until a zone is chosen.
-    if (short) {
-      short.textContent = select.value
-        ? shortName(select.value, row && rowMoment(row))
-        : short.getAttribute("data-placeholder") || "";
-    }
+    if (short) short.textContent = select.value ? shortName(select.value, zoneMoment(select)) : "";
   }
 
   function addOption(select, tz) {
@@ -156,6 +190,41 @@
       link.focus();
     }
   }
+
+  // "Repeat until" and its help show only while the row repeats; the server
+  // ignores the date while it doesn't.
+  function repeatUntilShown(row) {
+    var block = row.querySelector("[data-repeat]");
+    if (!block) return;
+    var frequency = block.querySelector("[data-repeat-frequency]");
+    var repeating = frequency.value !== "once";
+    block.querySelectorAll("[data-repeat-only]").forEach(function (el) { el.hidden = !repeating; });
+    var help = block.querySelector("p[data-repeat-only]");
+    if (repeating && help) {
+      frequency.setAttribute("aria-describedby", help.id);
+    } else {
+      frequency.removeAttribute("aria-describedby");
+    }
+  }
+
+  // "Make this a recurring event" shows a row's repetition, which stays;
+  // "Never" among the frequencies stops it repeating. The link is gone once
+  // used, so focus moves to the frequency, unless `quietly`. Put away
+  // (`on` false), the row doesn't repeat: a blank row's.
+  function setRepeat(row, on, quietly) {
+    var block = row.querySelector("[data-repeat]");
+    var chip = row.querySelector("[data-repeat-toggle]");
+    if (!block || !chip) return;
+    if (!on) {
+      block.querySelector("[data-repeat-frequency]").value = "once";
+      control(row, "repeat_until").value = "";
+      repeatUntilShown(row);
+    }
+    block.hidden = !on;
+    chip.hidden = on;
+    if (!quietly) block.querySelector("[data-repeat-frequency]").focus();
+  }
+
   document.addEventListener("click", function (e) {
     var row = e.target.closest && e.target.closest("[data-date-row]");
     if (!row) return;
@@ -168,19 +237,58 @@
     } else if (e.target.closest(".end-remove")) {
       row.dataset.touched = "1";
       setEnd(row, false);
+    } else if (e.target.closest("[data-repeat-toggle]")) {
+      setRepeat(row, true);
     }
   });
 
-  // Typing over a saved date's date or time changes it.
+  // A copy of a row, as a new date/time: nothing entered, no end, not
+  // repeating, its zone not chosen by hand, and no mark of a refusal that
+  // was about the row it was copied from.
+  function blank(row) {
+    row.querySelectorAll("input").forEach(function (el) {
+      if (el.type === "checkbox") { el.checked = false; } else { el.value = ""; }
+    });
+    // The refusal's messages (`FormError::id`, which ends "-problem") no
+    // longer describe it.
+    row.querySelectorAll("[aria-invalid]").forEach(function (el) {
+      el.removeAttribute("aria-invalid");
+      var described = (el.getAttribute("aria-describedby") || "").split(/\s+/).filter(function (id) {
+        return id && !/-problem$/.test(id);
+      });
+      if (described.length) {
+        el.setAttribute("aria-describedby", described.join(" "));
+      } else {
+        el.removeAttribute("aria-describedby");
+      }
+    });
+    row.querySelectorAll("select.tz-select").forEach(function (select) {
+      select.selectedIndex = 0;
+      delete select.dataset.userSet;
+    });
+    row.querySelectorAll(".end-block").forEach(function (end) { end.hidden = true; });
+    row.querySelectorAll(".end-toggle").forEach(function (link) { link.hidden = false; });
+    row.querySelectorAll("[data-date-row]").forEach(function (dateRow) {
+      delete dateRow.dataset.touched;
+      setRepeat(dateRow, false, true);
+    });
+  }
+
+  // Typing over a saved date's date or time changes it, and the zone is
+  // named afresh for the date and time it goes with.
   document.addEventListener("input", function (e) {
-    if (!e.isTrusted || !e.target.matches || !e.target.matches("[data-date-row] input")) return;
-    e.target.closest("[data-date-row]").dataset.touched = "1";
-    var select = e.target.closest("[data-date-row]").querySelector("select.tz-select");
+    if (!e.target.matches || !e.target.matches("[data-zone-scope] input")) return;
+    var row = e.target.closest("[data-date-row]");
+    if (row && e.isTrusted) row.dataset.touched = "1";
+    var select = e.target.closest("[data-zone-scope]").querySelector("select.tz-select");
     if (select) syncTz(select);
   });
 
   // A hand-picked zone is an explicit choice; remember not to overwrite it.
   document.addEventListener("change", function (e) {
+    if (e.target.matches && e.target.matches("[data-repeat-frequency]")) {
+      repeatUntilShown(e.target.closest("[data-date-row]"));
+    }
     if (e.target.matches && e.target.matches("select.tz-select")) {
       if (e.isTrusted) e.target.dataset.userSet = "1";
       var row = e.target.closest("[data-date-row]");
@@ -206,7 +314,7 @@
     });
   });
 
-  window.DateRows = { ensureTz: ensureTz };
+  window.DateRows = { ensureTz: ensureTz, blank: blank };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () { init(document); });

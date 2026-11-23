@@ -93,20 +93,76 @@ impl LocationMode {
     }
 }
 
-/// Why an in-person event or project (`noun`) given neither an address nor a
-/// city can't be saved, or `None` when it has one. Words left in the place
-/// search (`place_query`) were never picked or used as the address, so the
+/// What a form's location section says of the place an event or project is
+/// held at.
+#[derive(Debug, Clone, Copy)]
+pub struct PlaceGiven<'a> {
+    pub location_name: &'a str,
+    pub address: &'a str,
+    pub city: &'a str,
+    /// What was left typed in the place search, never picked or used.
+    pub place_query: &'a str,
+}
+
+/// Which form's location section a place is given in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaceOf {
+    /// An event's, where the words typed in the place search are used as the
+    /// venue name, as orrery's event forms use them.
+    Event,
+    /// A project's, where they are used as the address.
+    Project,
+}
+
+impl PlaceOf {
+    fn noun(self) -> &'static str {
+        match self {
+            PlaceOf::Event => "event",
+            PlaceOf::Project => "project",
+        }
+    }
+
+    /// What the words typed in the place search are used as.
+    pub fn typed_as(self) -> &'static str {
+        match self {
+            PlaceOf::Event => "venue name",
+            PlaceOf::Project => "address",
+        }
+    }
+
+    /// The field the words typed in the place search are used as.
+    pub fn typed_into(self) -> &'static str {
+        match self {
+            PlaceOf::Event => "location_name",
+            PlaceOf::Project => "address",
+        }
+    }
+}
+
+/// Why an in-person event or project given neither an address nor a city
+/// can't be saved, or `None` when it has one. An event's venue named without
+/// either (as the words typed in the place search are used) still needs its
+/// address; words left in the search were never picked or used, so the
 /// reason then says to do one or the other.
-pub fn missing_place(address: &str, city: &str, place_query: &str, noun: &str) -> Option<String> {
-    if !address.trim().is_empty() || !city.trim().is_empty() {
+pub fn missing_place(place: PlaceGiven, of: PlaceOf) -> Option<String> {
+    if !place.address.trim().is_empty() || !place.city.trim().is_empty() {
         return None;
     }
-    Some(if place_query.trim().is_empty() {
-        format!("Please provide an address or city for the in-person {noun}.")
-    } else {
-        "Please choose a place from the list, or choose to use what you typed as the address."
-            .to_string()
-    })
+    Some(
+        if of == PlaceOf::Event && !place.location_name.trim().is_empty() {
+            "Please add the venue\u{2019}s city or street address.".to_string()
+        } else if !place.place_query.trim().is_empty() {
+            format!(
+                "Please choose a place from the list, or choose to use what you typed as the {}.",
+                of.typed_as()
+            )
+        } else {
+            format!(
+                "Please provide an address or city for the in-person {}.",
+                of.noun()
+            )
+        },
+    )
 }
 
 /// A project's location, as a reader should see it.

@@ -9,6 +9,7 @@ use tracing::Level;
 
 pub mod categories;
 pub mod content_filter;
+pub mod deletion;
 pub mod forums;
 pub mod health;
 pub mod messaging;
@@ -57,6 +58,10 @@ async fn main() {
         .expect("Unable to start forum service");
 
     let mut toplevel = JoinSet::new();
+
+    toplevel.spawn(common::user_deletions::follow("forum", |user_id| {
+        deletion::forget(db(), user_id)
+    }));
 
     // Topic management endpoints
     let topics = service.group("forum.topics");

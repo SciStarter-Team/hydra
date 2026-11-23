@@ -1,6 +1,6 @@
 //! The time-zone control of a date/time row.
 
-use crate::component::floating_field::FormError;
+use crate::component::floating_field::FormErrors;
 
 /// Time zones offered in the start-time picker. The page's script adds the
 /// visitor's actual browser time zone if it isn't already listed and
@@ -73,22 +73,21 @@ fn all_timezones() -> &'static [(String, Vec<(String, String)>)] {
     })
 }
 
-/// The time-zone control for one date/time row, a field in the row beside
-/// the date and time. Zones are inferred from the picked venue or the
-/// browser, so the list is there to correct an inference rather than to ask a
-/// question. With JavaScript the field shows the zone's short name ("PDT",
-/// "GMT+3") over the full list, which opens on click; without it, the list
-/// itself shows.
+/// The time-zone control of a date/time: the right half of a date's start
+/// time, or a field of its own beside when registration opens. Zones are
+/// inferred from the picked venue or the browser, so the list is there to
+/// correct an inference rather than to ask a question. With JavaScript the
+/// field shows the zone's short name as of the date and time it goes with
+/// ("EDT" in July, "EST" in January) over the full list, which opens on
+/// click; without it, the list itself shows.
 #[derive(sailfish::TemplateOnce)]
 #[template(path = "site/timezone_field.stpl.html")]
 pub struct TimezoneField {
     field_name: String,
     selected: String,
     required: bool,
-    invalid: bool,
-    /// Shown as one of the small grey links under a date's start ("🌐 PDT"),
-    /// as Facebook shows the zone, rather than as a field.
-    chip: bool,
+    /// The id of the message telling the field's problem, when it has one.
+    problem: Option<String>,
     timezones: &'static [(&'static str, &'static str)],
     all_timezones: &'static [(String, Vec<(String, String)>)],
 }
@@ -100,22 +99,15 @@ impl TimezoneField {
             field_name: field_name.into(),
             selected: selected.to_string(),
             required,
-            invalid: false,
-            chip: false,
+            problem: None,
             timezones: COMMON_TIMEZONES,
             all_timezones: all_timezones(),
         }
     }
 
-    /// Show the zone as a chip under a date's start rather than as a field.
-    pub fn chip(mut self) -> Self {
-        self.chip = true;
-        self
-    }
-
-    /// Mark the field invalid when `error` is about it.
-    pub fn errors(mut self, error: Option<&FormError>) -> Self {
-        self.invalid = error.is_some_and(|e| e.is_about(&self.field_name));
+    /// Mark the field invalid when one of `errors` is about it.
+    pub fn errors(mut self, errors: &FormErrors) -> Self {
+        self.problem = errors.described_by(&self.field_name);
         self
     }
 }

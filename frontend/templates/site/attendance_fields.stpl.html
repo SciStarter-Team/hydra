@@ -1,0 +1,25 @@
+<% use crate::component::floating_field::{FieldKind, FloatingField}; %>
+<% use crate::event::attendance::Attendance; %>
+<% let limited = self.attendance == Attendance::Limited; %>
+<%# The audience and its ages are asked only of an event for a specific
+    audience; the server reads them only then. %>
+<div data-attendance>
+  <fieldset class="choice-group">
+    <legend<% if !self.legend_shown { %> class="sr-only"<% } %>>Who can participate?<% if self.legend_shown { %><span class="pill-required" aria-hidden="true"> *</span><% } %></legend>
+    <div class="radio-options">
+      <% for answer in Attendance::ALL { %>
+      <label class="radio-option">
+        <input type="radio" name="attendance" value="<%= answer.as_str() %>"<% if self.attendance == answer { %> checked<% } %>>
+        <span><%= answer.label() %></span>
+      </label>
+      <% } %>
+      <%# Which audience, asked under the answer that asks it. %>
+      <div class="radio-option-field" data-limited-only <% if !limited { %>hidden<% } %>>
+        <%+ FloatingField::new(FieldKind::Text, "limited_to", "Who is this event for?", self.limited_to).id("limited-to").required().hint("e.g., Educators, library cardholders, Girl Scouts, registered volunteers").limit(crate::event::rules::LIMITED_TO_LIMIT).errors(self.errors) %>
+      </div>
+    </div>
+  </fieldset>
+  <div class="attendance-ages" data-limited-only <% if !limited { %>hidden<% } %>>
+    <%+ self.ages %>
+  </div>
+</div>

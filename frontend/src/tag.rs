@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 
-use common::insensitivestring::InsensitiveString;
+use common::{insensitivestring::InsensitiveString, message::user::normalize_tag};
 
 /// Whether `tag` is staff's own, hidden from everyone else.
 pub fn is_hidden(tag: &str) -> bool {
@@ -23,9 +23,10 @@ pub fn shown_to(tag: &str, is_staff: bool) -> bool {
 }
 
 /// The tags left by someone, staff or not (`is_staff`), who `typed` these
-/// over the tags `stored` before. Staff set the tags as they typed them;
-/// anyone else sets only those that aren't hidden, and the hidden ones
-/// already there, which they weren't shown, stay.
+/// over the tags `stored` before. What's typed is set in the one form tags
+/// are stored in ([`normalize_tag`]: no `#`, lowercase), as orrery sets it.
+/// Staff set every tag they typed; anyone else sets only those that aren't
+/// hidden, and the hidden ones already there, which they weren't shown, stay.
 pub fn as_set_by<'a>(
     typed: impl IntoIterator<Item = &'a str>,
     stored: impl IntoIterator<Item = &'a str>,
@@ -33,9 +34,12 @@ pub fn as_set_by<'a>(
 ) -> HashSet<InsensitiveString> {
     let typed = typed
         .into_iter()
-        .map(str::trim)
+        .map(normalize_tag)
         .filter(|tag| !tag.is_empty() && shown_to(tag, is_staff));
-    let kept = stored.into_iter().filter(|tag| !is_staff && is_hidden(tag));
+    let kept = stored
+        .into_iter()
+        .filter(|tag| !is_staff && is_hidden(tag))
+        .map(str::to_string);
     typed.chain(kept).map(InsensitiveString::from).collect()
 }
 
@@ -73,6 +77,12 @@ mod tests {
     fn staff_set_the_tags_as_typed() {
         let tags = as_set_by(["_nasa", "birds"], ["_old", "fish"], true);
         check!(sorted(tags) == ["_nasa", "birds"]);
+    }
+
+    #[test]
+    fn tags_are_set_as_they_are_stored() {
+        let tags = as_set_by([" #Birds", "FISH#", "#"], [], false);
+        check!(sorted(tags) == ["birds", "fish"]);
     }
 
     #[test]

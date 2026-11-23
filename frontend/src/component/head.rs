@@ -11,6 +11,7 @@ pub struct Head {
     enable_slick: bool,
     enable_jquery: bool,
     enable_geosearch: bool,
+    enable_event_editors: bool,
 }
 
 impl Default for Head {
@@ -24,6 +25,7 @@ impl Default for Head {
             enable_slick: false,
             enable_jquery: false,
             enable_geosearch: false,
+            enable_event_editors: false,
         }
     }
 }
@@ -121,9 +123,41 @@ impl Head {
         self.without_slick()
     }
 
+    /// Enable the scripts that drive an event's editors, wherever they are:
+    /// the add event form, and the event page's and the admin's editors of
+    /// its dates, location, registration and admission.
+    #[tracing::instrument]
+    pub fn with_event_editors(mut self) -> Self {
+        self.enable_event_editors = true;
+        // Where an event is held is picked on a map, as an area or a place.
+        self.with_region_editor()
+    }
+
     #[tracing::instrument]
     pub fn without_geosearch(mut self) -> Self {
         self.enable_geosearch = false;
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use assert2::check;
+
+    use super::*;
+
+    #[test]
+    fn the_event_editors_scripts_come_once_and_only_when_asked() {
+        let scripts = ["date-rows.js", "location-picker.js", "event-answers.js"];
+
+        let html = Head::default().with_event_editors().render_once().unwrap();
+        for script in scripts {
+            check!(html.matches(script).count() == 1, "{script}");
+        }
+
+        let html = Head::default().render_once().unwrap();
+        for script in scripts {
+            check!(!html.contains(script), "{script}");
+        }
     }
 }

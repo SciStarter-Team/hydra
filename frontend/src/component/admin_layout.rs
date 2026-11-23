@@ -17,6 +17,7 @@ pub struct AdminLayout<C: TemplateOnce> {
     pub sidebar_active: String,
     pub content: C,
     pub enable_quill: bool,
+    pub enable_event_editors: bool,
 }
 
 #[derive(Debug, TemplateOnce)]
@@ -43,6 +44,7 @@ impl<C: TemplateOnce> AdminLayout<C> {
             sidebar_active: String::new(),
             content,
             enable_quill: false,
+            enable_event_editors: false,
         }
     }
 
@@ -78,6 +80,12 @@ impl<C: TemplateOnce> AdminLayout<C> {
         self.enable_quill = true;
         self
     }
+
+    /// The page shows an event's own editors (see `Head::with_event_editors`).
+    pub fn with_event_editors(mut self) -> Self {
+        self.enable_event_editors = true;
+        self
+    }
 }
 
 impl<C: TemplateOnce> Component for AdminLayout<C> {
@@ -90,6 +98,9 @@ impl<C: TemplateOnce> Component for AdminLayout<C> {
         let mut head = Head::default().with_webawesome();
         if self.enable_quill {
             head = head.with_quill();
+        }
+        if self.enable_event_editors {
+            head = head.with_event_editors();
         }
 
         Ok(AdminLayoutPrepared {

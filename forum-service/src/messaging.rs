@@ -14,7 +14,6 @@ use common::{
     service::send_email,
     shared::db,
 };
-use sqlx::SqlitePool;
 use ulid::Ulid;
 
 /// Minimal HTML escaping for interpolating message content into the staff
@@ -62,9 +61,9 @@ async fn notify_reviewers(subject: &str, body: &str, sender_id: &str, recipient_
     }
 }
 
-/// Like `notify_reviewers`, but for a bulk send: one email covering the whole
-/// batch (all `recipient_count` copies) rather than one per recipient.
-async fn notify_reviewers_batch(subject: &str, body: &str, sender_id: &str, recipient_count: i64) {
+/// Like `notify_reviewers`, but for a bulk send: one email covering every copy
+/// of the batch that is held (`held` of them) rather than one per recipient.
+async fn notify_reviewers_batch(subject: &str, body: &str, sender_id: &str, held: i64) {
     let sender = resolve_participant_name(sender_id, NameAudience::Staff)
         .await
         .unwrap_or_else(|| sender_id.to_string());
@@ -74,9 +73,9 @@ async fn notify_reviewers_batch(subject: &str, body: &str, sender_id: &str, reci
          <p><strong>From:</strong> {}<br><strong>Recipients:</strong> {}<br><strong>Subject:</strong> {}</p>\
          <blockquote>{}</blockquote>\
          <p><a href=\"https://scistarter.org/-admin/messages\">Review pending messages (approve or reject in bulk)</a></p>",
-        recipient_count,
+        held,
         escape_html(&sender),
-        recipient_count,
+        held,
         escape_html(subject),
         escape_html(body),
     );
@@ -173,22 +172,24 @@ pub(crate) async fn ensure_personal_forum<'e, E: sqlx::SqliteExecutor<'e>>(
 
 /// Create a fresh direct-message conversation: a topic plus its first post in
 /// the recipient's personal inbox, marked seen for the sender. Shared by
-/// `send_message` (single recipient) and `send_bulk` (one call per recipient).
+/// `send_message` (single recipient), `send_bulk` (one call per recipient) and
+/// the People Finder (likewise).
 ///
-/// `approved` decides whether the post is delivered immediately (`1`) or held
-/// for staff review (`0`); `batch` ties this copy to the others in a bulk send
-/// (`None` for a single send). This helper never notifies reviewers — the
-/// caller does that once per message, or once per batch. Returns the new
-/// `(topic_id, post_id)`.
+/// Whether the post is delivered at once or held for staff review is decided
+/// as for any message ([`NewMessage::insert`]): `pre_approved` lets it
+/// through. `batch` ties this copy to the others in a bulk send (`None` for a
+/// single send). This helper never notifies reviewers — the caller does that
+/// once per message, or once per batch. Returns the new `(topic_id, post_id)`,
+/// and whether the post was delivered.
 pub(crate) async fn create_conversation(
     to_id: Ulid,
     from_id: Ulid,
     subject: &str,
     body: &str,
     reply_ref: Option<&str>,
-    approved: i64,
+    pre_approved: bool,
     batch: Option<&str>,
-) -> Result<(Ulid, Ulid)> {
+) -> Result<(Ulid, Ulid, bool)> {
     ensure_personal_forum(db(), &to_id.to_string()).await?;
 
     let topic_id = Ulid::new();
@@ -216,20 +217,17 @@ pub(crate) async fn create_conversation(
     .execute(db)
     .await?;
 
-    // Create the first post, pending or approved per the caller, tagged with
-    // the batch id when this is one copy of a bulk send.
-    sqlx::query!(
-        r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "created_at", "is_deleted", "is_flagged", "approved", "batch")
-           VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)"#,
-        post_id_str,
-        topic_id_str,
+    let delivered = NewMessage {
+        post_id: &post_id_str,
+        topic_id: &topic_id_str,
         body,
-        from_str,
-        now_str,
-        approved,
+        sender: &from_str,
+        recipient: &to_str,
+        now: &now_str,
+        pre_approved,
         batch,
-    )
-    .execute(db)
+    }
+    .insert(db)
     .await?;
 
     // Store reply_ref if provided (for orrery dedup)
@@ -252,7 +250,7 @@ pub(crate) async fn create_conversation(
     .execute(db)
     .await?;
 
-    Ok((topic_id, post_id))
+    Ok((topic_id, post_id, delivered))
 }
 
 pub async fn send_message(req: &Request) -> Result<SendMessageResponse> {
@@ -260,22 +258,18 @@ pub async fn send_message(req: &Request) -> Result<SendMessageResponse> {
 
     check_sender_may_send(msg.from_user_id).await?;
 
-    // Pre-approved messages (trusted, entity-authored) are delivered at once;
-    // everything else is held pending for staff review.
-    let approved = if msg.pre_approved { 1 } else { 0 };
-
-    let (topic_id, post_id) = create_conversation(
+    let (topic_id, post_id, delivered) = create_conversation(
         msg.to_id,
         msg.from_user_id,
         &msg.subject,
         &msg.body,
         msg.reply_ref.as_deref(),
-        approved,
+        msg.pre_approved,
         None,
     )
     .await?;
 
-    if !msg.pre_approved {
+    if !delivered {
         notify_reviewers(
             &msg.subject,
             &msg.body,
@@ -285,16 +279,20 @@ pub async fn send_message(req: &Request) -> Result<SendMessageResponse> {
         .await;
     }
 
-    Ok(SendMessageResponse { topic_id, post_id })
+    Ok(SendMessageResponse {
+        topic_id,
+        post_id,
+        delivered,
+    })
 }
 
 /// Send one message to many recipients as a single batch. Each recipient gets
 /// their own private conversation, all sharing one batch id so staff can
 /// approve or reject the whole batch together and reviewers are emailed once.
-/// A recipient that fails to be created is skipped rather than failing the
-/// whole batch. Today the only caller is pre-approved (a project/event
-/// messaging its participants), so nothing is held for review; the path is
-/// kept general for future non-bypassed bulk senders.
+/// Each copy is judged on its own: unless the batch is pre-approved, a copy
+/// is held for review unless its recipient has written to the sender. A
+/// recipient that fails to be created is skipped rather than failing the
+/// whole batch.
 pub async fn send_bulk(req: &Request) -> Result<SendBulkResponse> {
     let msg: SendBulkMessage = flexbuffers::from_slice(&req.message.payload)?;
 
@@ -302,9 +300,9 @@ pub async fn send_bulk(req: &Request) -> Result<SendBulkResponse> {
 
     let batch = Ulid::new();
     let batch_str = batch.to_string();
-    let approved = if msg.pre_approved { 1 } else { 0 };
 
     let mut sent: i64 = 0;
+    let mut held: i64 = 0;
     for to_id in &msg.to_ids {
         match create_conversation(
             *to_id,
@@ -312,19 +310,25 @@ pub async fn send_bulk(req: &Request) -> Result<SendBulkResponse> {
             &msg.subject,
             &msg.body,
             None,
-            approved,
+            msg.pre_approved,
             Some(&batch_str),
         )
         .await
         {
-            Ok(_) => sent += 1,
+            Ok((_, _, delivered)) => {
+                sent += 1;
+                if !delivered {
+                    held += 1;
+                }
+            }
             Err(e) => eprintln!("send_bulk: failed to deliver to {}: {}", to_id, e),
         }
     }
 
-    // One reviewer email for the whole batch, only when it needs review.
-    if !msg.pre_approved && sent > 0 {
-        notify_reviewers_batch(&msg.subject, &msg.body, &msg.from_id.to_string(), sent).await;
+    // One reviewer email for the whole batch, only when some of it needs
+    // review.
+    if held > 0 {
+        notify_reviewers_batch(&msg.subject, &msg.body, &msg.from_id.to_string(), held).await;
     }
 
     Ok(SendBulkResponse { batch, sent })
@@ -383,14 +387,15 @@ pub async fn reply_to_message(req: &Request) -> Result<ReplyToMessageResponse> {
         forum_owner.to_string()
     };
 
-    let delivered = NewReply {
+    let delivered = NewMessage {
         post_id: &post_id_str,
         topic_id: &topic_id_str,
         body: &msg.body,
-        author: &user_id_str,
-        other: &other_user,
+        sender: &user_id_str,
+        recipient: &other_user,
         now: &now_str,
         pre_approved: msg.pre_approved,
+        batch: None,
     }
     .insert(db)
     .await?;
@@ -431,48 +436,58 @@ pub async fn reply_to_message(req: &Request) -> Result<ReplyToMessageResponse> {
     Ok(ReplyToMessageResponse { post_id, delivered })
 }
 
-/// A reply by `author` to the conversation `topic_id` with `other`.
-struct NewReply<'a> {
+/// A post by `sender` to `recipient` in the conversation `topic_id`: the one
+/// that opens it, or a reply.
+struct NewMessage<'a> {
     post_id: &'a str,
     topic_id: &'a str,
     body: &'a str,
-    author: &'a str,
-    other: &'a str,
+    sender: &'a str,
+    recipient: &'a str,
     now: &'a str,
-    /// Sent as a project or event, so delivered without review.
+    /// Sent as a project or event, or a People Finder broadcast staff have
+    /// already approved, so delivered without review.
     pre_approved: bool,
+    /// The bulk send this is one copy of.
+    batch: Option<&'a str>,
 }
 
-impl NewReply<'_> {
-    /// Add the reply to its conversation, and say whether it is delivered at
-    /// once rather than held for staff review.
+impl NewMessage<'_> {
+    /// Add the post, and say whether it is delivered at once rather than held
+    /// for staff review.
     ///
-    /// Only a message that opens a conversation needs review. A reply is
-    /// delivered when it is pre-approved (sent as a project or event), or when
-    /// it answers what `other` has written in the conversation, which is to say
-    /// `other` has a post there that was delivered: approved by staff, or itself
-    /// an answer or an entity's send. A follow-up to one's own unanswered
-    /// message, or a reply to posts still pending or rejected, is held. Being a
-    /// two-party conversation, a reply always goes back the way the posts it
-    /// answers came. Decided in the insert itself, so a rejection made meanwhile
-    /// can't be missed.
-    async fn insert(&self, db: &SqlitePool) -> Result<bool> {
+    /// Only a message that opens a correspondence needs review. A message is
+    /// delivered when it is pre-approved, or when `recipient` has already
+    /// written to `sender` and that message was delivered, in this
+    /// conversation or any other between them (the `direct_messages` view
+    /// says who each post went to). Whether it answers anything in particular
+    /// plays no part. Writing again before being answered, answering a
+    /// message still pending or refused, and writing to someone who has never
+    /// written back are all held. This is orrery's rule
+    /// (`MessageBox.has_heard_from`), so that a member's message fares the
+    /// same on either side of the cutover.
+    ///
+    /// Decided in the insert itself, so a rejection made meanwhile can't be
+    /// missed.
+    async fn insert<'e, E: sqlx::SqliteExecutor<'e>>(&self, executor: E) -> Result<bool> {
         let approved = sqlx::query_scalar!(
-        r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "created_at", "is_deleted", "is_flagged", "approved")
-           VALUES (?1, ?2, ?3, ?4, ?5, 0, 0,
-                   ?6 OR EXISTS (SELECT 1 FROM "posts"
-                                  WHERE "topic_id" = ?2 AND "author_id" = ?7
-                                    AND "approved" = 1 AND "is_deleted" = 0))
-           RETURNING "approved" as "approved!: bool""#,
+            r#"INSERT INTO "posts" ("post_id", "topic_id", "content", "author_id", "created_at", "is_deleted", "is_flagged", "approved", "batch")
+               VALUES (?1, ?2, ?3, ?4, ?5, 0, 0,
+                       ?6 OR EXISTS (SELECT 1 FROM "direct_messages"
+                                      WHERE "sender_id" = ?7 AND "recipient_id" = ?4
+                                        AND "delivered"),
+                       ?8)
+               RETURNING "approved" as "approved!: bool""#,
             self.post_id,
             self.topic_id,
             self.body,
-            self.author,
+            self.sender,
             self.now,
             self.pre_approved,
-            self.other,
+            self.recipient,
+            self.batch,
         )
-        .fetch_one(db)
+        .fetch_one(executor)
         .await?;
 
         Ok(approved)
@@ -946,38 +961,53 @@ pub async fn last_contacted(req: &Request) -> Result<Vec<LastContacted>> {
 mod tests {
     use super::*;
     use assert2::check;
+    use sqlx::SqlitePool;
 
     const MEMBER: &str = "01HZZZZZZZZZZZZZZZZZZZMEMB";
     const OTHER: &str = "01HZZZZZZZZZZZZZZZZZZZOTHR";
+    const THIRD: &str = "01HZZZZZZZZZZZZZZZZZZTHIRD";
     const TOPIC: &str = "01HZZZZZZZZZZZZZZZZZZZTOPC";
 
-    /// A conversation `MEMBER` opened in `OTHER`'s inbox, its first post
-    /// approved or not as given.
-    async fn conversation(opener_approved: bool) -> SqlitePool {
+    async fn migrated() -> SqlitePool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
             .await
             .unwrap();
         sqlx::migrate!().run(&pool).await.unwrap();
+        pool
+    }
+
+    /// Start the conversation `topic`, by `author`, in the forum `forum`
+    /// (made if need be, with the slug given).
+    async fn start(pool: &SqlitePool, topic: &str, forum: &str, slug: &str, author: &str) {
         sqlx::query(
             r#"INSERT INTO "forums" ("forum_id", "slug", "name", "description", "created_at", "is_active", "display_order")
-               VALUES (?1, 'inbox-' || ?1, 'Inbox', '', '2026-11-17T00:00:00Z', 1, 0)"#,
+               VALUES (?, ?, 'Forum', '', '2026-11-17T00:00:00Z', 1, 0)
+               ON CONFLICT DO NOTHING"#,
         )
-        .bind(OTHER)
-        .execute(&pool)
+        .bind(forum)
+        .bind(slug)
+        .execute(pool)
         .await
         .unwrap();
         sqlx::query(
             r#"INSERT INTO "topics" ("topic_id", "forum_id", "title", "content", "author_id", "created_at", "updated_at", "is_pinned", "is_locked", "is_deleted", "is_flagged")
                VALUES (?, ?, 'Hello', 'Hi', ?, '2026-11-17T00:00:00Z', '2026-11-17T00:00:00Z', 0, 0, 0, 0)"#,
         )
-        .bind(TOPIC)
-        .bind(OTHER)
-        .bind(MEMBER)
-        .execute(&pool)
+        .bind(topic)
+        .bind(forum)
+        .bind(author)
+        .execute(pool)
         .await
         .unwrap();
+    }
+
+    /// A conversation, `TOPIC`, `MEMBER` opened in `OTHER`'s inbox, its first
+    /// post approved or not as given.
+    async fn conversation(opener_approved: bool) -> SqlitePool {
+        let pool = migrated().await;
+        start(&pool, TOPIC, OTHER, &format!("inbox-{OTHER}"), MEMBER).await;
         post(&pool, MEMBER, OTHER, false).await;
         sqlx::query(r#"UPDATE "posts" SET "approved" = ?"#)
             .bind(opener_approved)
@@ -987,20 +1017,49 @@ mod tests {
         pool
     }
 
-    /// Whether a reply by `author` to `other` is delivered at once.
-    async fn post(pool: &SqlitePool, author: &str, other: &str, pre_approved: bool) -> bool {
-        NewReply {
+    /// Whether a post by `sender` to `recipient` in `topic` is delivered at
+    /// once.
+    async fn post_in(
+        pool: &SqlitePool,
+        topic: &str,
+        sender: &str,
+        recipient: &str,
+        pre_approved: bool,
+    ) -> bool {
+        NewMessage {
             post_id: &Ulid::new().to_string(),
-            topic_id: TOPIC,
+            topic_id: topic,
             body: "Thanks",
-            author,
-            other,
+            sender,
+            recipient,
             now: "2026-11-17T01:00:00Z",
             pre_approved,
+            batch: None,
         }
         .insert(pool)
         .await
         .unwrap()
+    }
+
+    /// Whether a post by `sender` to `recipient` in `TOPIC` is delivered at
+    /// once.
+    async fn post(pool: &SqlitePool, sender: &str, recipient: &str, pre_approved: bool) -> bool {
+        post_in(pool, TOPIC, sender, recipient, pre_approved).await
+    }
+
+    /// Whether a message opening a new conversation, by `sender` in
+    /// `recipient`'s inbox, is delivered at once.
+    async fn open(pool: &SqlitePool, sender: &str, recipient: &str) -> bool {
+        let topic = Ulid::new().to_string();
+        start(
+            pool,
+            &topic,
+            recipient,
+            &format!("inbox-{recipient}"),
+            sender,
+        )
+        .await;
+        post_in(pool, &topic, sender, recipient, false).await
     }
 
     #[tokio::test]
@@ -1015,12 +1074,14 @@ mod tests {
     async fn a_follow_up_to_an_unanswered_message_is_held() {
         let pool = conversation(true).await;
         check!(!post(&pool, MEMBER, OTHER, false).await);
+        check!(!open(&pool, MEMBER, OTHER).await);
     }
 
     #[tokio::test]
     async fn a_reply_to_a_message_still_pending_is_held() {
         let pool = conversation(false).await;
         check!(!post(&pool, OTHER, MEMBER, false).await);
+        check!(!open(&pool, OTHER, MEMBER).await);
     }
 
     #[tokio::test]
@@ -1031,6 +1092,23 @@ mod tests {
             .await
             .unwrap();
         check!(!post(&pool, OTHER, MEMBER, false).await);
+        check!(!open(&pool, OTHER, MEMBER).await);
+    }
+
+    #[tokio::test]
+    async fn a_new_message_to_someone_who_has_written_is_delivered() {
+        let pool = conversation(true).await;
+        // Not an answer to anything: a conversation of its own.
+        check!(open(&pool, OTHER, MEMBER).await);
+        // And now each has written to the other, so either may open another.
+        check!(open(&pool, MEMBER, OTHER).await);
+    }
+
+    #[tokio::test]
+    async fn a_message_to_someone_who_has_not_written_is_held() {
+        let pool = conversation(true).await;
+        check!(!open(&pool, THIRD, MEMBER).await);
+        check!(!open(&pool, MEMBER, THIRD).await);
     }
 
     #[tokio::test]
@@ -1038,5 +1116,57 @@ mod tests {
         let pool = conversation(false).await;
         check!(post(&pool, OTHER, MEMBER, true).await);
         check!(post(&pool, MEMBER, OTHER, false).await);
+    }
+
+    #[tokio::test]
+    async fn a_post_in_a_community_forum_is_not_a_message() {
+        let pool = migrated().await;
+        start(
+            &pool,
+            TOPIC,
+            "01HZZZZZZZZZZZZZZZZZZGENRL",
+            "general",
+            MEMBER,
+        )
+        .await;
+        post(&pool, OTHER, MEMBER, true).await;
+        check!(!open(&pool, MEMBER, OTHER).await);
+    }
+
+    #[tokio::test]
+    async fn a_copy_of_orrerys_message_went_to_the_recipient_orrery_names() {
+        // The sync can place a copy in its thread's conversation although it
+        // went to someone else: here, from THIRD to OTHER, in a conversation
+        // between MEMBER and OTHER.
+        let pool = conversation(true).await;
+        let copy = Ulid::new().to_string();
+        NewMessage {
+            post_id: &copy,
+            topic_id: TOPIC,
+            body: "Copy",
+            sender: THIRD,
+            recipient: OTHER,
+            now: "2026-11-17T00:30:00Z",
+            pre_approved: true,
+            batch: None,
+        }
+        .insert(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "orrery_messages"
+                   ("orrery_id", "post_id", "reply_ref", "parent_reply_ref", "sender_id",
+                    "recipient_id", "sent", "seen", "discarded")
+               VALUES (1, ?, 'ref-1', NULL, ?, ?, '2026-11-17T00:30:00Z', 0, 0)"#,
+        )
+        .bind(&copy)
+        .bind(THIRD)
+        .bind(OTHER)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        check!(open(&pool, OTHER, THIRD).await);
+        check!(!open(&pool, MEMBER, THIRD).await);
     }
 }

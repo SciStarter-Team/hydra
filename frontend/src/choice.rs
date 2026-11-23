@@ -23,7 +23,7 @@ use std::{
 use anyhow::Error;
 use common::{shared::db, transaction::Immediate};
 
-use crate::peering::LoadStorePeered;
+use crate::{component::floating_field::FormErrors, peering::LoadStorePeered};
 
 /// The program Acts of Science Connected events pick, which the Citizen
 /// Science Month finder marks as signature events and can be narrowed to.
@@ -75,7 +75,7 @@ impl ChoiceList {
     /// What the list is called, for staff.
     pub fn label(self) -> &'static str {
         match self {
-            ChoiceList::EventFormat => "Types of event",
+            ChoiceList::EventFormat => "Event formats",
             ChoiceList::EventProgram => "Programs and campaigns",
             ChoiceList::EventVenue => "Kinds of venue",
             ChoiceList::Topic => "Topics",
@@ -88,26 +88,12 @@ impl ChoiceList {
     /// from it.
     pub fn heading(self) -> &'static str {
         match self {
-            ChoiceList::EventFormat => "Type of event",
+            ChoiceList::EventFormat => "Event format",
             ChoiceList::EventProgram => "Program or campaign",
             ChoiceList::EventVenue => "Kind of venue",
             ChoiceList::Topic => "Topics",
             ChoiceList::Activity => "Activities",
             ChoiceList::Audience => "Audience",
-        }
-    }
-
-    /// Whether visitors see what an entity picked from the list. Staff and
-    /// the entity's editors always do. An event's program or campaign is
-    /// asked and kept, but not shown on the event.
-    pub fn shown_to_visitors(self) -> bool {
-        match self {
-            ChoiceList::EventProgram => false,
-            ChoiceList::EventFormat
-            | ChoiceList::EventVenue
-            | ChoiceList::Topic
-            | ChoiceList::Activity
-            | ChoiceList::Audience => true,
         }
     }
 
@@ -632,6 +618,10 @@ pub struct ChoiceCheckboxes {
     values: Vec<ChoiceValue>,
     picked: BTreeSet<String>,
     limit: Option<usize>,
+    /// Whether at least one must be ticked, which the legend marks.
+    required: bool,
+    /// The id of the message telling the boxes' problem, when they have one.
+    problem: Option<String>,
 }
 
 impl ChoiceCheckboxes {
@@ -650,6 +640,8 @@ impl ChoiceCheckboxes {
             values,
             picked,
             limit,
+            required: false,
+            problem: None,
         }
     }
 
@@ -690,9 +682,21 @@ impl ChoiceCheckboxes {
         self
     }
 
+    /// Mark the legend, when `required`, as asking for at least one.
+    pub fn required(mut self, required: bool) -> Self {
+        self.required = required;
+        self
+    }
+
     /// The boxes in one column, when `stacked`, rather than a grid.
     pub fn stacked(mut self, stacked: bool) -> Self {
         self.stacked = stacked;
+        self
+    }
+
+    /// Mark the boxes invalid when one of `errors` is about their field.
+    pub fn errors(mut self, errors: &FormErrors) -> Self {
+        self.problem = errors.described_by(&self.field);
         self
     }
 
@@ -700,6 +704,67 @@ impl ChoiceCheckboxes {
     fn full(&self) -> bool {
         self.limit.is_some_and(|limit| self.picked.len() >= limit)
     }
+}
+
+/// Radio buttons for picking at most one value from a list, in the order
+/// given, under a legend, the last of them "None of these". Nothing is
+/// chosen until a value is; "None of these" takes a pick back. Submitted as
+/// `field`, empty or absent for none.
+#[derive(sailfish::TemplateOnce)]
+#[template(path = "site/choice_radios.stpl.html")]
+pub struct ChoiceRadios {
+    field: String,
+    legend: Cow<'static, str>,
+    values: Vec<ChoiceValue>,
+    /// The slug of the value chosen, when one is.
+    picked: Option<String>,
+    /// The id of the message telling the buttons' problem, when they have
+    /// one.
+    problem: Option<String>,
+}
+
+impl ChoiceRadios {
+    /// Radio buttons for `values`, all of one list, with `picked` chosen.
+    pub fn new(
+        field: impl Into<String>,
+        legend: impl Into<Cow<'static, str>>,
+        values: Vec<ChoiceValue>,
+        picked: Option<String>,
+    ) -> Self {
+        ChoiceRadios {
+            field: field.into(),
+            legend: legend.into(),
+            values,
+            picked,
+            problem: None,
+        }
+    }
+
+    /// Whether there are no values to pick.
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    /// Mark the buttons invalid when one of `errors` is about their field.
+    pub fn errors(mut self, errors: &FormErrors) -> Self {
+        self.problem = errors.described_by(&self.field);
+        self
+    }
+
+    /// Whether `value` is the one chosen.
+    fn is_picked(&self, value: &ChoiceValue) -> bool {
+        self.picked.as_deref() == Some(value.slug.as_str())
+    }
+}
+
+/// How many values a choice field's submitted `values` pick: a box ticked
+/// twice, or an empty value, is not another.
+pub fn distinct_picks(values: &[String]) -> usize {
+    values
+        .iter()
+        .filter(|value| !value.is_empty())
+        .collect::<BTreeSet<_>>()
+        .len()
 }
 
 /// Make what `target` picks from the list exactly `slugs`, inside the

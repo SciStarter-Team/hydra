@@ -5,17 +5,31 @@ use common::{
     insensitivestring::InsensitiveString, timestring::TimeString, transaction::Immediate,
 };
 
-use crate::choice::{ChoiceList, ChoiceValue, OrreryValue};
+use crate::choice::{ChoiceCheckboxes, ChoiceList, ChoiceValue, OrreryValue};
+use crate::event::attendance::Attendance;
 
+pub mod admission;
 pub mod all;
+pub mod attendance;
 pub mod facebook;
 pub mod field;
 pub mod location;
+pub mod part_of;
+pub mod registration;
+pub mod repeat;
 pub mod rules;
 pub mod zone;
 
 /// The most topics an event may pick, as orrery allows.
 pub const TOPIC_LIMIT: usize = 3;
+
+/// The query an event's page is opened with straight after it is submitted
+/// for review, which thanks its submitter, as orrery's `?new=true` does.
+pub const NEW_SUBMISSION_QUERY: &str = "new=true";
+
+/// What the event forms and page call an event's presenter (Darlene's
+/// review): the organization hosting it.
+pub const PRESENTER_LABEL: &str = "Host organization";
 
 /// The most values an event may pick from `list`, or `None` for a list it
 /// may pick any number from. Only its topics are limited.
@@ -46,6 +60,15 @@ pub fn refuse_picks(list: ChoiceList, picked: usize) -> Option<String> {
 pub struct EventInstance {
     pub begin: TimeString,
     pub end: TimeString,
+}
+
+/// When the last of `instances` ends, after which the event is over; `None`
+/// for an event with no dates.
+pub fn last_end(instances: &[EventInstance]) -> Option<jiff::Timestamp> {
+    instances
+        .iter()
+        .filter_map(|instance| instance.end.parse::<jiff::Timestamp>().ok())
+        .max()
 }
 
 /// The dates of the event `event_id`, in date order.
@@ -146,31 +169,45 @@ pub enum EventStatus {
     Expired,
 }
 
-/// The question the event forms ask of `list`. The audience is asked in
-/// words of its own; every other list by the heading it has everywhere.
+/// The question the event forms ask of `list`, as orrery's event form asks
+/// it. The ages and the program are asked in words of their own; every
+/// other list by the heading it has everywhere.
 pub fn choice_question(list: ChoiceList) -> &'static str {
     match list {
         ChoiceList::Audience => "What ages is this event suitable for?",
+        ChoiceList::EventProgram => "Is your event part of a SciStarter program or campaign?",
         _ => list.heading(),
     }
 }
 
-/// What the event forms say under the question of `list`, if anything.
+/// What the event forms say under the question of `list`, if anything: how
+/// to choose, with how many topics may be.
 pub fn choice_help(list: ChoiceList) -> Option<&'static str> {
     match list {
-        ChoiceList::Audience => Some("Select all that apply."),
-        _ => None,
+        ChoiceList::Topic => Some(TOPIC_HELP),
+        ChoiceList::EventFormat => Some("Select the format that best describes your event."),
+        ChoiceList::Audience | ChoiceList::EventProgram => Some("Select all that apply."),
+        ChoiceList::EventVenue | ChoiceList::Activity => None,
     }
 }
 
+/// The guidance over an event's topics, which says how many it may have.
+const TOPIC_HELP: &str = "Choose up to three topics that best describe your event.";
+
 /// The slugs of the ages to save for an event being added that picks
-/// `picked` from the audience list: those it picks, or, when it picks none,
-/// the ages an event added with none is saved with
-/// ([`OrreryValue::EVENT_AGES_WHEN_NONE`]). Only adding an event goes
-/// through here: an edit saves exactly the ages chosen, none included, as
-/// orrery's does.
-pub async fn ages_for_new_event(picked: BTreeSet<String>) -> Result<BTreeSet<String>, Error> {
-    if !picked.is_empty() {
+/// `picked` from the audience list, with the answer `attendance` to who can
+/// participate: those it picks, or, when an event open to everyone picks
+/// none, the ages an event added with none is saved with
+/// ([`OrreryValue::EVENT_AGES_WHEN_NONE`]). An event meant for a specific
+/// audience ("Senior citizens") is asked its ages, and leaving them blank
+/// there says nothing about them, where every age would contradict the
+/// audience. Only adding an event goes through here: an edit saves exactly
+/// the ages chosen, none included, as orrery's does.
+pub async fn ages_for_new_event(
+    attendance: Attendance,
+    picked: BTreeSet<String>,
+) -> Result<BTreeSet<String>, Error> {
+    if !picked.is_empty() || attendance == Attendance::Limited {
         return Ok(picked);
     }
 
@@ -212,38 +249,102 @@ pub fn choice_row_heading(list: ChoiceList) -> &'static str {
     }
 }
 
-/// What the event forms ask of `list`: its question, and how many may be
-/// picked from it ("Topics (up to 3)", "Type of event (choose any)"). A list
-/// with help under its question says there that any may be picked.
+/// Whether the event forms take one answer from `list`, or none: the kind of
+/// venue. An event saved with several shows, and is saved with, the first
+/// ([`first_offered`]).
+pub fn one_answer(list: ChoiceList) -> bool {
+    list == ChoiceList::EventVenue
+}
+
+/// What the event forms ask of `list`: its question, and, unless the help
+/// under it says how to choose, how many may be picked from it ("Topics (up
+/// to 3)"), or, for a list of one answer, that it's optional.
 pub fn choice_legend(list: ChoiceList) -> std::borrow::Cow<'static, str> {
     let question = choice_question(list);
     match pick_limit(list) {
+        _ if choice_help(list).is_some() => question.into(),
+        _ if one_answer(list) => format!("{question} (optional)").into(),
         Some(limit) => crate::choice::limited_heading(question, Some(limit)),
-        None if choice_help(list).is_some() => question.into(),
         None => format!("{question} (choose any)").into(),
     }
 }
 
-/// The values of `list`, one of the event-type lists, that the event forms
-/// offer: all but Online, which their location question answers.
-pub async fn offered_types(list: ChoiceList) -> Result<Vec<ChoiceValue>, Error> {
-    Ok(ChoiceValue::all(list)
-        .await?
-        .into_iter()
-        .filter(|value| !OrreryValue::EVENT_ONLINE.is(value))
-        .collect())
+/// Whether an event must pick from `list` ([`rules::topics`]): its topics.
+pub fn choice_required(list: ChoiceList) -> bool {
+    list == ChoiceList::Topic
 }
 
-/// Event formats as the event forms offer them: alphabetically, with
-/// the catch-all Other last.
-pub fn in_format_order(mut formats: Vec<ChoiceValue>) -> Vec<ChoiceValue> {
-    formats.sort_by_cached_key(|value| {
+/// Checkboxes for picking from `values` of `list` as the event forms'
+/// `field`, with `picked` ticked, under the list's question, marked when the
+/// event must pick from it, and how many may be picked.
+pub fn choice_checkboxes(
+    field: &'static str,
+    list: ChoiceList,
+    values: Vec<ChoiceValue>,
+    picked: &[String],
+) -> ChoiceCheckboxes {
+    ChoiceCheckboxes::new(
+        field,
+        values,
+        picked.iter().cloned().collect(),
+        pick_limit(list),
+    )
+    .with_legend(choice_legend(list))
+    .with_help(choice_help(list))
+    .required(choice_required(list))
+    .stacked(choice_stacked(list))
+}
+
+/// Whether `value`, of one of the event-type lists, is one an organizer
+/// chooses: all but Online, which where the event is held answers. The event
+/// forms offer only these, and the event page shows only these, beside the
+/// "Virtual" it says of where an online event is held.
+pub fn type_is_chosen(value: &ChoiceValue) -> bool {
+    !OrreryValue::EVENT_ONLINE.is(value)
+}
+
+/// The values of `list` the event forms offer, in the order they offer them,
+/// which is the order the event page lists an event's picks in: all but
+/// Online ([`type_is_chosen`]), the formats, programs and kinds of venue
+/// alphabetically with the catch-all Other last ([`in_type_order`]), and any
+/// other list in its own order, as orrery's `event_type_choices` orders them.
+pub async fn offered(list: ChoiceList) -> Result<Vec<ChoiceValue>, Error> {
+    let values = ChoiceValue::all(list)
+        .await?
+        .into_iter()
+        .filter(type_is_chosen)
+        .collect();
+    Ok(if ChoiceList::EVENT_TYPES.contains(&list) {
+        in_type_order(values)
+    } else {
+        values
+    })
+}
+
+/// The first of `picked`, slugs of `list`, in the order the event forms offer
+/// them ([`offered`]): what a form asking for one answer shows of an event
+/// saved with several, and saves.
+pub async fn first_offered(
+    list: ChoiceList,
+    picked: &std::collections::BTreeSet<String>,
+) -> Result<Option<String>, Error> {
+    Ok(offered(list)
+        .await?
+        .into_iter()
+        .map(|value| value.slug)
+        .find(|slug| picked.contains(slug)))
+}
+
+/// Event types (formats, programs, kinds of venue) as the event forms offer
+/// them: alphabetically, with the catch-all Other last.
+pub fn in_type_order(mut types: Vec<ChoiceValue>) -> Vec<ChoiceValue> {
+    types.sort_by_cached_key(|value| {
         (
             OrreryValue::EVENT_OTHER.is(value),
             value.name.to_lowercase(),
         )
     });
-    formats
+    types
 }
 
 #[cfg(test)]
@@ -251,6 +352,28 @@ mod tests {
     use assert2::check;
 
     use super::*;
+
+    #[test]
+    fn online_is_no_type_an_organizer_chooses() {
+        let format = |orrery_id| ChoiceValue {
+            list: ChoiceList::EventFormat,
+            slug: "x".to_string(),
+            name: "X".to_string(),
+            position: 0,
+            orrery_id,
+        };
+        check!(!type_is_chosen(&format(Some(OrreryValue::EVENT_ONLINE.id))));
+        check!(type_is_chosen(&format(Some(OrreryValue::EVENT_OTHER.id))));
+        check!(type_is_chosen(&format(None)));
+    }
+
+    #[test]
+    fn the_topic_guidance_says_how_many_topics_may_be_picked() {
+        // The guidance spells the limit out in words, so the two change
+        // together.
+        check!(TOPIC_LIMIT == 3);
+        check!(TOPIC_HELP.contains("up to three topics"));
+    }
 
     fn age(slug: &str, orrery_id: Option<i64>) -> ChoiceValue {
         ChoiceValue {
@@ -281,6 +404,19 @@ mod tests {
     #[tokio::test]
     async fn the_ages_an_event_is_added_with_are_saved_as_picked() {
         let picked = BTreeSet::from(["families".to_string()]);
-        check!(ages_for_new_event(picked.clone()).await.unwrap() == picked);
+        for attendance in Attendance::ALL {
+            check!(
+                ages_for_new_event(attendance, picked.clone())
+                    .await
+                    .unwrap()
+                    == picked
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn an_event_for_a_specific_audience_added_without_ages_gets_none() {
+        let ages = ages_for_new_event(Attendance::Limited, BTreeSet::new()).await;
+        check!(ages.unwrap().is_empty());
     }
 }

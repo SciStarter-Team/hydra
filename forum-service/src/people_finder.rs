@@ -329,7 +329,7 @@ async fn deliver(request_id: &str) -> Result<(), Error> {
                 &row.subject,
                 &row.body,
                 None,
-                1,
+                true,
                 Some(&row.batch),
             )
             .await

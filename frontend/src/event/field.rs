@@ -79,6 +79,15 @@ pub enum EventFieldValue {
     /// Where the event is held, saved all together; see
     /// `crate::event::location`.
     Location(crate::event::location::EventLocation),
+    /// Whether admission is free, paid or a suggested donation, with the
+    /// price, saved together; see `crate::event::admission`.
+    Admission(crate::event::admission::EventAdmission),
+    /// Whether people must register, where, and when registration opens,
+    /// saved together; see `crate::event::registration`.
+    Registration(crate::event::registration::EventRegistration),
+    /// Who can participate, with the audience and the ages, saved
+    /// together; see `crate::event::attendance`.
+    Attendance(crate::event::attendance::EventAttendance),
 }
 
 impl EventFieldValue {
@@ -154,6 +163,9 @@ impl EventField {
             EventFieldValue::Instances(_) => EventFieldType::Instances,
             EventFieldValue::Tags(_) => EventFieldType::Tags,
             EventFieldValue::Location(_) => EventFieldType::Location,
+            EventFieldValue::Admission(_) => EventFieldType::Admission,
+            EventFieldValue::Registration(_) => EventFieldType::Registration,
+            EventFieldValue::Attendance(_) => EventFieldType::Attendance,
             EventFieldValue::OutcomesLabel(_) => EventFieldType::OutcomesLabel,
             EventFieldValue::OutcomesLink(_) => EventFieldType::OutcomesLink,
             EventFieldValue::CircuitId(_) => EventFieldType::CircuitId,
@@ -1559,6 +1571,9 @@ impl LoadStorePeered for EventField {
             EventFieldValue::Instances(instances) => self.save_instances(instances).await,
             EventFieldValue::Tags(tags) => self.save_tags(tags).await,
             EventFieldValue::Location(location) => location.save(self.event_id).await,
+            EventFieldValue::Admission(admission) => admission.save(self.event_id).await,
+            EventFieldValue::Registration(registration) => registration.save(self.event_id).await,
+            EventFieldValue::Attendance(attendance) => attendance.save(self.event_id).await,
             EventFieldValue::OutcomesLabel(outcomes_label) => {
                 self.save_outcomes_label(outcomes_label).await
             }
@@ -1666,6 +1681,24 @@ impl LoadStorePeered for EventField {
                 event_id,
                 EventFieldValue::Location(
                     crate::event::location::EventLocation::read(event_id).await?,
+                ),
+            )),
+            EventFieldType::Admission => Ok(EventField::new(
+                event_id,
+                EventFieldValue::Admission(
+                    crate::event::admission::EventAdmission::read(event_id).await?,
+                ),
+            )),
+            EventFieldType::Registration => Ok(EventField::new(
+                event_id,
+                EventFieldValue::Registration(
+                    crate::event::registration::EventRegistration::read(event_id).await?,
+                ),
+            )),
+            EventFieldType::Attendance => Ok(EventField::new(
+                event_id,
+                EventFieldValue::Attendance(
+                    crate::event::attendance::EventAttendance::read(event_id).await?,
                 ),
             )),
             EventFieldType::Tags => Ok(EventField::new(

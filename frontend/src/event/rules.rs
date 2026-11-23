@@ -7,14 +7,21 @@
 //! that orrery's form makes only of a changed value takes the `stored` value,
 //! which is `None` for a new event.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::BTreeSet};
 
 use jiff::{Timestamp, Zoned, civil, tz::TimeZone};
 
 use crate::{
+    choice::ChoiceList,
+    component::{floating_field::FormError, image_field::ImageUrlInput},
     contact::Unreachable,
-    event::{EventInstance, location::VirtualJoin},
-    project::location::{LocationMode, missing_place},
+    event::{
+        EventInstance,
+        admission::{Admission, EventAdmission},
+        attendance::{Attendance, EventAttendance},
+        registration::Registration,
+    },
+    project::location::{LocationMode, PlaceGiven, PlaceOf, missing_place},
     upload::storage::untracked_file_id,
     web_address::is_web_address,
 };
@@ -23,22 +30,25 @@ use crate::{
 /// `SciStarter.EVENT_NAME_LIMIT`.
 pub const NAME_LIMIT: usize = 100;
 
-/// The most characters (code points) the group an event is limited to may
+/// The most characters (code points) the audience an event is meant for may
 /// have, as orrery's `SciStarter.EVENT_LIMITED_TO_LIMIT`.
 pub const LIMITED_TO_LIMIT: usize = 140;
 
-/// The control a refusal is about. Each form names its controls its own way,
-/// and maps these onto them.
+/// The control a refusal is about. The event forms name their controls alike
+/// ([`Field::control`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
     Name,
     Description,
+    /// The cover image, uploaded or linked.
     ImageLink,
     Url,
-    /// Whether a virtual event is joined at a link or by instructions.
-    VirtualJoin,
     HowToJoin,
     TicketUrl,
+    /// The answer to "Admission".
+    Admission,
+    /// The price, or the suggested donation.
+    Cost,
     LimitedTo,
     LocationMode,
     Address,
@@ -48,6 +58,9 @@ pub enum Field {
     ContactName,
     ContactEmail,
     ContactUrl,
+    Topics,
+    /// The larger event the event is part of.
+    PartOf,
     /// A part of a date/time row.
     Date(RowPart),
 }
@@ -60,6 +73,8 @@ pub enum RowPart {
     EndDate,
     EndTime,
     Timezone,
+    /// The date a repeating row repeats through (the add form's alone).
+    RepeatUntil,
 }
 
 impl RowPart {
@@ -71,6 +86,7 @@ impl RowPart {
             RowPart::EndDate => "end_date",
             RowPart::EndTime => "end_time",
             RowPart::Timezone => "timezone",
+            RowPart::RepeatUntil => "repeat_until",
         }
     }
 }
@@ -86,7 +102,7 @@ pub struct Refusal {
 }
 
 impl Refusal {
-    fn new(field: Field, message: impl Into<Cow<'static, str>>) -> Self {
+    pub(crate) fn new(field: Field, message: impl Into<Cow<'static, str>>) -> Self {
         Refusal {
             field,
             also: Vec::new(),
@@ -98,6 +114,48 @@ impl Refusal {
     fn also(mut self, field: Field) -> Self {
         self.also.push(field);
         self
+    }
+}
+
+impl Refusal {
+    /// The refusal as the event forms show it: told at the control `field`
+    /// names, marking the others too. The add event form and the event
+    /// page's editors name their controls alike; a date's are its date/time
+    /// row `row`'s.
+    pub fn into_form_error(self, row: usize) -> FormError {
+        self.also.iter().fold(
+            FormError::at(self.field.control(row), self.message),
+            |error, field| error.also(field.control(row)),
+        )
+    }
+}
+
+impl Field {
+    /// The name of the event forms' control for this, a date's in date/time
+    /// row `row`.
+    pub fn control(self, row: usize) -> String {
+        match self {
+            Field::Name => "name".to_string(),
+            Field::Description => "description".to_string(),
+            Field::ImageLink => ImageUrlInput::NAME.to_string(),
+            Field::Url => "url".to_string(),
+            Field::HowToJoin => "how_to_join".to_string(),
+            Field::TicketUrl => "ticket_url".to_string(),
+            Field::Admission => "admission".to_string(),
+            Field::Cost => "cost".to_string(),
+            Field::LimitedTo => "limited_to".to_string(),
+            Field::LocationMode => "location_mode".to_string(),
+            Field::Address => "address".to_string(),
+            Field::LocationDescription => "location_description".to_string(),
+            Field::TicketingDate => "ticketing_date".to_string(),
+            Field::TicketingTimezone => "ticketing_timezone".to_string(),
+            Field::ContactName => "contact_name".to_string(),
+            Field::ContactEmail => "contact_email".to_string(),
+            Field::ContactUrl => "contact_url".to_string(),
+            Field::Topics => "topics".to_string(),
+            Field::PartOf => "part_of".to_string(),
+            Field::Date(part) => format!("instances[{row}][{}]", part.name()),
+        }
     }
 }
 
@@ -143,12 +201,19 @@ pub fn description(description: &str) -> Checked {
     Ok(())
 }
 
-/// An uploaded image's address is the site's own; only a typed link needs
-/// checking.
-pub fn image_link(image: &str, stored: Option<&str>) -> Checked {
+/// Every new event has a cover image, uploaded or linked; an older event
+/// saved without one may be saved so until it's given one. An uploaded
+/// image's address is the site's own; only a typed link needs checking.
+pub fn image(image: &str, stored: Option<&str>) -> Checked {
     let image = image.trim();
-    if image.is_empty() || untracked_file_id(image).is_some() || !changed(image, stored) {
+    if !changed(image, stored) || untracked_file_id(image).is_some() {
         return Ok(());
+    }
+    if image.is_empty() {
+        return Err(Refusal::new(
+            Field::ImageLink,
+            "Please add a cover image for your event.",
+        ));
     }
     if !is_web_address(image) {
         return Err(Refusal::new(
@@ -159,95 +224,152 @@ pub fn image_link(image: &str, stored: Option<&str>) -> Checked {
     Ok(())
 }
 
-/// How people join an event, for a form that asks it: an event held
-/// somewhere keeps the link it was given, while a virtual one is joined at
-/// its link or, by Facebook's "Other", by instructions in place of one. The
-/// link the event is saved with, which is none for a virtual event joined by
-/// instructions, or why it can't be saved.
-pub fn join<'a>(
-    mode: LocationMode,
-    choice: Option<VirtualJoin>,
-    url: &'a str,
-    how_to_join: &str,
-) -> Checked<&'a str> {
-    if mode != LocationMode::Online {
-        return Ok(url);
-    }
-    match choice {
-        None => Err(Refusal::new(
-            Field::VirtualJoin,
-            "Please choose how people join the virtual event.",
-        )),
-        Some(VirtualJoin::Link) if url.trim().is_empty() => {
-            Err(Refusal::new(Field::Url, JOIN_LINK))
-        }
-        Some(VirtualJoin::Link) => Ok(url),
-        Some(VirtualJoin::Other) if how_to_join.trim().is_empty() => {
-            Err(Refusal::new(Field::HowToJoin, JOIN_INSTRUCTIONS))
-        }
-        Some(VirtualJoin::Other) => Ok(""),
-    }
-}
-
-/// A virtual event keeps a way to join, its link or its instructions, when
-/// one of them is changed on its own (`edited`, [`Field::Url`] or
-/// [`Field::HowToJoin`]), where the form's choice between them isn't asked.
-pub fn way_to_join(mode: LocationMode, url: &str, how_to_join: &str, edited: Field) -> Checked {
-    if mode == LocationMode::Online && url.trim().is_empty() && how_to_join.trim().is_empty() {
-        let message = if edited == Field::HowToJoin {
-            JOIN_INSTRUCTIONS
-        } else {
-            JOIN_LINK
-        };
-        return Err(Refusal::new(edited, message));
+/// A virtual event says how people join it: under "How to participate", or
+/// at its webpage, or where people register. The refusal is told under the
+/// instructions, and marks the links too.
+pub fn way_to_join(mode: LocationMode, how_to_join: &str, url: &str, ticket_url: &str) -> Checked {
+    let nothing = |value: &str| value.trim().is_empty();
+    if mode == LocationMode::Online && nothing(how_to_join) && nothing(url) && nothing(ticket_url) {
+        return Err(Refusal::new(
+            Field::HowToJoin,
+            "Please explain how people join the virtual event, or add its webpage or registration link.",
+        )
+        .also(Field::Url)
+        .also(Field::TicketUrl));
     }
     Ok(())
 }
 
-const JOIN_LINK: &str = "Please provide a link where people can join the virtual event.";
-const JOIN_INSTRUCTIONS: &str = "Please add instructions on how people join the virtual event.";
-
-/// The event's link, when it has one.
+/// The event's webpage, when it has one.
 pub fn link(url: &str, stored: Option<&str>) -> Checked {
     let url = url.trim();
     if !url.is_empty() && changed(url, stored) && !is_web_address(url) {
         return Err(Refusal::new(
             Field::Url,
-            "Please check the event's link; it should be a whole web address, such as https://example.org/event.",
+            "Please check the event's webpage; it should be a whole web address, such as https://example.org/event.",
         ));
     }
     Ok(())
 }
 
-pub fn ticket_link(url: &str, stored: Option<&str>) -> Checked {
+/// Where people register or get tickets: asked of every event, and required
+/// of one that requires registration.
+pub fn ticket_link(url: &str, registration: Option<Registration>, stored: Option<&str>) -> Checked {
     let url = url.trim();
+    if registration == Some(Registration::Required) && url.is_empty() {
+        return Err(Refusal::new(
+            Field::TicketUrl,
+            "Please add the link where people register.",
+        ));
+    }
     if !url.is_empty() && changed(url, stored) && !is_web_address(url) {
         return Err(Refusal::new(
             Field::TicketUrl,
-            "Please check the ticket / registration link; it should be a whole web address, such as https://example.org/tickets.",
+            "Please check the registration or ticket link; it should be a whole web address, such as https://example.org/register.",
         ));
     }
     Ok(())
 }
 
-/// Who may attend, when the event is `limited` to a group.
+/// Whether an event may pick `picked` distinct topics: at least one, and no
+/// more than [`crate::event::TOPIC_LIMIT`]. Topics are asked of every new
+/// event, as of every project, since the finder's topic filter is how most
+/// people narrow the listings. An event saved without any (`stored`, how
+/// many it was saved with) may be saved so until it's given some, as an
+/// unanswered admission may.
+pub fn topics(picked: usize, stored: Option<usize>) -> Checked {
+    if let Some(refusal) = crate::event::refuse_picks(ChoiceList::Topic, picked) {
+        return Err(Refusal::new(Field::Topics, refusal));
+    }
+    if picked == 0 && stored != Some(0) {
+        return Err(Refusal::new(
+            Field::Topics,
+            "Please choose at least one topic.",
+        ));
+    }
+    Ok(())
+}
+
+/// What attending costs, as it is saved: the answer to "Admission", with the
+/// price or the suggested donation when the answer asks for one (a free
+/// event saves none), or why it can't be saved. Admission is asked of every
+/// new event. An event saved before it was asked (`stored`) may be saved
+/// unanswered until it's answered, keeping the cost it was saved with; so
+/// may a paid one saved without a price.
+pub fn admission(
+    answer: Option<Admission>,
+    cost: &str,
+    stored: Option<&EventAdmission>,
+) -> Checked<EventAdmission> {
+    let answer_changed = stored.is_none_or(|stored| stored.admission != answer);
+    let cost_changed = changed(cost, stored.map(|stored| stored.cost.as_str()));
+    let cost = if answer.is_none_or(Admission::asks_cost) {
+        cost.trim()
+    } else {
+        ""
+    };
+
+    if answer.is_none() && answer_changed {
+        return Err(Refusal::new(
+            Field::Admission,
+            "Please choose whether admission is free, paid, or a suggested donation.",
+        ));
+    }
+    if answer == Some(Admission::Paid) && cost.is_empty() && (answer_changed || cost_changed) {
+        return Err(Refusal::new(
+            Field::Cost,
+            "Please give the admission price.",
+        ));
+    }
+    Ok(EventAdmission {
+        admission: answer,
+        cost: cost.to_string(),
+    })
+}
+
+/// Who the event is meant for, when it is `limited` to a specific audience.
 pub fn limited_to(group: &str, limited: bool) -> Checked {
-    // An event open to everyone has no group, whatever was left typed.
+    // An event for everyone names no audience, whatever was left typed.
     let group = if limited { group.trim() } else { "" };
     if limited && group.is_empty() {
         return Err(Refusal::new(
             Field::LimitedTo,
-            "Please say which group can attend, such as \u{201c}Library cardholders.\u{201d}",
+            "Please say who the event is for, such as \u{201c}Educators\u{201d} or \u{201c}Girl Scouts.\u{201d}",
         ));
     }
     // Counted in characters, as the field counts them.
     if group.chars().count() > LIMITED_TO_LIMIT {
         return Err(Refusal::new(
             Field::LimitedTo,
-            format!("Please say which group can attend in {LIMITED_TO_LIMIT} characters or fewer."),
+            format!("Please say who the event is for in {LIMITED_TO_LIMIT} characters or fewer."),
         ));
     }
     Ok(())
+}
+
+/// Who can participate, as it is saved: everyone, or the specific audience
+/// named and the `ages` picked for it, or why it can't be saved. An event for
+/// everyone names no audience, whatever was left typed, and keeps the ages
+/// it was saved with (`stored`), which it isn't asked; a new one has none.
+pub fn attendance(
+    answer: Attendance,
+    group: &str,
+    ages: BTreeSet<String>,
+    stored: Option<&EventAttendance>,
+) -> Checked<EventAttendance> {
+    let limited = answer == Attendance::Limited;
+    limited_to(group, limited)?;
+    Ok(if limited {
+        EventAttendance {
+            limited_to: group.trim().to_string(),
+            ages,
+        }
+    } else {
+        EventAttendance {
+            limited_to: String::new(),
+            ages: stored.map(|stored| stored.ages.clone()).unwrap_or_default(),
+        }
+    })
 }
 
 pub fn mode(mode: Option<LocationMode>) -> Checked<LocationMode> {
@@ -259,14 +381,13 @@ pub fn mode(mode: Option<LocationMode>) -> Checked<LocationMode> {
     })
 }
 
-/// An event held at an address has one, or at least a city. Words left in the
-/// place search (`place_query`) were never picked or used as the address, so
-/// the refusal then says to do one or the other.
-pub fn place(mode: LocationMode, address: &str, city: &str, place_query: &str) -> Checked {
+/// An event held at an address has one, or at least a city
+/// ([`missing_place`] says what to do instead).
+pub fn place(mode: LocationMode, place: PlaceGiven) -> Checked {
     if mode != LocationMode::InPerson {
         return Ok(());
     }
-    match missing_place(address, city, place_query, "event") {
+    match missing_place(place, PlaceOf::Event) {
         Some(message) => Err(Refusal::new(Field::Address, message)),
         None => Ok(()),
     }
@@ -325,18 +446,24 @@ pub fn contact(name: &str, email: &str, url: &str, stored: Option<(&str, &str)>)
     }
 }
 
-/// When tickets or registration open, on `timezone`'s clocks at `time` (or
-/// midnight) on `date`; `None` when no date is given.
-pub fn ticketing(date: &str, time: &str, timezone: &str) -> Checked<Option<Timestamp>> {
+/// When registration opens, on `timezone`'s clocks at `time` (or midnight)
+/// on `date`: `None` when no date is given, and for an event nobody
+/// registers for (`registration`), which is never asked.
+pub fn registration_opens(
+    registration: Option<Registration>,
+    date: &str,
+    time: &str,
+    timezone: &str,
+) -> Checked<Option<Timestamp>> {
     let date = date.trim();
-    if date.is_empty() {
+    if !Registration::asks_opening(registration) || date.is_empty() {
         return Ok(None);
     }
     let timezone = timezone.trim();
     if timezone.is_empty() {
         return Err(Refusal::new(
             Field::TicketingTimezone,
-            "Please choose a time zone for the ticketing date.",
+            "Please choose a time zone for the registration opening date.",
         ));
     }
     let time = match time.trim() {
@@ -538,6 +665,18 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn topics_are_asked_of_every_new_event_but_kept_unanswered_by_one_without() {
+        check!(topics(1, None).is_ok());
+        check!(topics(0, None).unwrap_err().message == "Please choose at least one topic.");
+        check!(topics(0, None).unwrap_err().field == Field::Topics);
+        // Taken away from an event that had some.
+        check!(topics(0, Some(2)).is_err());
+        // An event saved without any may stay so until it's given some.
+        check!(topics(0, Some(0)).is_ok());
+        check!(topics(4, Some(0)).unwrap_err().message == "Please pick no more than 3 topics.");
+    }
+
     fn now() -> Zoned {
         "2027-03-10T12:00:00-05:00[America/New_York]"
             .parse()
@@ -718,95 +857,132 @@ mod tests {
 
     #[test]
     fn a_virtual_event_says_how_people_join() {
-        let refusal = join(LocationMode::Online, None, "https://example.org", "").unwrap_err();
-        check!(refusal.field == Field::VirtualJoin);
-        check!(refusal.message == "Please choose how people join the virtual event.");
-    }
-
-    #[test]
-    fn a_virtual_event_joined_at_a_link_has_one() {
-        let refusal = join(
-            LocationMode::Online,
-            Some(VirtualJoin::Link),
-            " ",
-            "Dial in",
-        )
-        .unwrap_err();
-        check!(refusal.field == Field::Url);
-        check!(refusal.message == "Please provide a link where people can join the virtual event.");
-        check!(
-            join(
-                LocationMode::Online,
-                Some(VirtualJoin::Link),
-                "https://example.org",
-                ""
-            ) == Ok("https://example.org")
-        );
-    }
-
-    #[test]
-    fn a_virtual_event_joined_otherwise_has_instructions_and_no_link() {
-        let refusal = join(
-            LocationMode::Online,
-            Some(VirtualJoin::Other),
-            "https://example.org",
-            " ",
-        )
-        .unwrap_err();
+        let refusal = way_to_join(LocationMode::Online, " ", "", "").unwrap_err();
         check!(refusal.field == Field::HowToJoin);
-        check!(refusal.message == "Please add instructions on how people join the virtual event.");
+        check!(refusal.also == vec![Field::Url, Field::TicketUrl]);
         check!(
-            join(
-                LocationMode::Online,
-                Some(VirtualJoin::Other),
-                "https://example.org",
-                "Dial in"
-            ) == Ok("")
+            refusal.message
+                == "Please explain how people join the virtual event, or add its webpage or registration link."
         );
     }
 
     #[test]
-    fn an_event_held_somewhere_keeps_its_link_unasked() {
-        check!(join(LocationMode::InPerson, None, "", "") == Ok(""));
-        check!(
-            join(
-                LocationMode::Region,
-                Some(VirtualJoin::Other),
-                "https://example.org",
-                ""
-            ) == Ok("https://example.org")
-        );
+    fn instructions_a_webpage_or_a_registration_link_will_do() {
+        check!(way_to_join(LocationMode::Online, "Dial in", "", "").is_ok());
+        check!(way_to_join(LocationMode::Online, "", "https://example.org", "").is_ok());
+        check!(way_to_join(LocationMode::Online, "", "", "https://example.org/register").is_ok());
     }
 
     #[test]
-    fn a_virtual_event_keeps_a_link_or_instructions() {
-        let refusal = way_to_join(LocationMode::Online, " ", "", Field::Url).unwrap_err();
-        check!(refusal.field == Field::Url);
-        check!(refusal.message == "Please provide a link where people can join the virtual event.");
-
-        let refusal = way_to_join(LocationMode::Online, "", " ", Field::HowToJoin).unwrap_err();
-        check!(refusal.field == Field::HowToJoin);
-        check!(refusal.message == "Please add instructions on how people join the virtual event.");
-
-        check!(way_to_join(LocationMode::Online, "", "Dial in", Field::Url).is_ok());
-        check!(
-            way_to_join(
-                LocationMode::Online,
-                "https://example.org",
-                "",
-                Field::HowToJoin
-            )
-            .is_ok()
-        );
-        check!(way_to_join(LocationMode::InPerson, "", "", Field::Url).is_ok());
+    fn an_event_held_somewhere_needn_t_say_how_people_join() {
+        check!(way_to_join(LocationMode::InPerson, "", "", "").is_ok());
+        check!(way_to_join(LocationMode::Anywhere, "", "", "").is_ok());
     }
 
     #[test]
     fn a_saved_link_left_alone_is_not_checked_again() {
         check!(link("example.org", Some("example.org")).is_ok());
         check!(link("example.org", Some("")).is_err());
-        check!(ticket_link("tickets", Some("tickets")).is_ok());
-        check!(ticket_link("tickets", None).is_err());
+        check!(ticket_link("tickets", None, Some("tickets")).is_ok());
+        check!(ticket_link("tickets", None, None).is_err());
+    }
+
+    #[test]
+    fn an_event_requiring_registration_says_where() {
+        let refusal = ticket_link(" ", Some(Registration::Required), None).unwrap_err();
+        check!(refusal.field == Field::TicketUrl);
+        check!(refusal.message == "Please add the link where people register.");
+        check!(ticket_link("", Some(Registration::Optional), None).is_ok());
+        check!(ticket_link("", None, None).is_ok());
+    }
+
+    #[test]
+    fn a_new_event_has_a_cover_image() {
+        let refusal = image(" ", None).unwrap_err();
+        check!(refusal.field == Field::ImageLink);
+        check!(refusal.message == "Please add a cover image for your event.");
+        check!(image("https://example.org/photo.jpg", None).is_ok());
+        // An older event saved without one may stay so.
+        check!(image("", Some("")).is_ok());
+        // One that had an image can't lose it.
+        check!(image("", Some("https://example.org/photo.jpg")).is_err());
+    }
+
+    fn saved(admission: Option<Admission>, cost: &str) -> EventAdmission {
+        EventAdmission {
+            admission,
+            cost: cost.to_string(),
+        }
+    }
+
+    #[test]
+    fn a_new_event_answers_admission() {
+        let refusal = admission(None, "$5", None).unwrap_err();
+        check!(refusal.field == Field::Admission);
+        check!(
+            refusal.message
+                == "Please choose whether admission is free, paid, or a suggested donation."
+        );
+    }
+
+    #[test]
+    fn an_older_event_may_stay_unanswered_with_its_cost() {
+        let stored = saved(None, "Free with museum entry");
+        check!(admission(None, "Free with museum entry", Some(&stored)) == Ok(stored.clone()));
+        // Its answer, once given, can't be taken back.
+        let answered = saved(Some(Admission::Free), "");
+        check!(admission(None, "", Some(&answered)).is_err());
+    }
+
+    #[test]
+    fn a_paid_event_gives_its_price() {
+        let refusal = admission(Some(Admission::Paid), " ", None).unwrap_err();
+        check!(refusal.field == Field::Cost);
+        check!(refusal.message == "Please give the admission price.");
+        check!(
+            admission(Some(Admission::Paid), "$10", None)
+                == Ok(saved(Some(Admission::Paid), "$10"))
+        );
+        // One saved without a price may stay so until either changes.
+        let stored = saved(Some(Admission::Paid), "");
+        check!(admission(Some(Admission::Paid), "", Some(&stored)).is_ok());
+    }
+
+    #[test]
+    fn a_free_event_saves_no_cost_and_a_donation_may_name_none() {
+        check!(
+            admission(Some(Admission::Free), "$10", None) == Ok(saved(Some(Admission::Free), ""))
+        );
+        check!(
+            admission(Some(Admission::Donation), "", None)
+                == Ok(saved(Some(Admission::Donation), ""))
+        );
+    }
+
+    #[test]
+    fn nobody_registering_has_no_opening_date() {
+        check!(
+            registration_opens(Some(Registration::NotNeeded), "2027-03-12", "09:00", "")
+                == Ok(None)
+        );
+        let refusal = registration_opens(Some(Registration::Optional), "2027-03-12", "09:00", "")
+            .unwrap_err();
+        check!(refusal.field == Field::TicketingTimezone);
+        check!(
+            registration_opens(None, "2027-03-12", "", "America/New_York")
+                == Ok(Some("2027-03-12T05:00:00Z".parse().unwrap()))
+        );
+    }
+
+    #[test]
+    fn an_event_for_a_specific_audience_names_it() {
+        let refusal = limited_to(" ", true).unwrap_err();
+        check!(refusal.field == Field::LimitedTo);
+        check!(
+            refusal.message
+                == "Please say who the event is for, such as \u{201c}Educators\u{201d} or \u{201c}Girl Scouts.\u{201d}"
+        );
+        check!(limited_to("Anything left typed", false).is_ok());
     }
 
     #[test]

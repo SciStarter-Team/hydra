@@ -127,6 +127,8 @@ pub struct Tallies {
     visitors: HashSet<(Ulid, Ulid)>,
     joiners: HashSet<(Ulid, Ulid)>,
     people: Vec<Person>,
+    /// The accounts deleted, whom no row names.
+    forgotten: HashSet<Ulid>,
     /// Each signed-in participant's contributions to each project, and when
     /// they last contributed.
     participants: Vec<(Ulid, Ulid, i64, String)>,
@@ -303,6 +305,9 @@ pub async fn build(ctx: &SessionContext, now: Timestamp) -> Result<()> {
     tallies.people = paged::<Ulid, Person>("user.stats.people", |person| person.user_id)
         .await
         .context("reading who viewers are")?;
+    tallies.forgotten = crate::forgotten::forgotten()
+        .await
+        .context("reading the accounts deleted")?;
 
     write(&tallies, now).await
 }
@@ -914,7 +919,7 @@ impl Rows {
             viewers: tallies
                 .viewers
                 .iter()
-                .filter(|((_, user), _)| !staff.contains(user))
+                .filter(|((_, user), _)| !staff.contains(user) && !tallies.forgotten.contains(user))
                 .map(|((project, user), views)| (project.to_string(), user.to_string(), *views))
                 .collect(),
             people: tallies
@@ -933,6 +938,7 @@ impl Rows {
             participants: tallies
                 .participants
                 .iter()
+                .filter(|(_, user, _, _)| !tallies.forgotten.contains(user))
                 .map(|(project, user, contributions, last)| {
                     (
                         project.to_string(),
@@ -1047,5 +1053,25 @@ mod tests {
         let distributions = tallies.distributions(&BTreeMap::new());
         check!(distributions[&(saves.key(), "all_time")] == [1.0, 3.0]);
         check!(distributions[&(saves.key(), "last_30")] == [3.0]);
+    }
+
+    #[test]
+    fn a_deleted_account_is_named_by_no_row_though_its_logs_count() {
+        let mut tallies = tallies();
+        let bees: Ulid = BEES.parse().unwrap();
+        let (ada, bea): (Ulid, Ulid) = (ADA.parse().unwrap(), BEA.parse().unwrap());
+
+        for user in [ada, bea] {
+            tallies.viewers.insert((bees, user), 2);
+            tallies
+                .participants
+                .push((bees, user, 3, "2026-11-16T00:00:00Z".to_string()));
+        }
+        tallies.forgotten.insert(ada);
+
+        let rows = Rows::of(&tallies).unwrap();
+        check!(rows.viewers == [(BEES.to_string(), BEA.to_string(), 2)]);
+        check!(rows.participants.len() == 1);
+        check!(rows.participants[0].1 == BEA);
     }
 }

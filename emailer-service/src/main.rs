@@ -10,6 +10,7 @@ use tracing::Level;
 mod analytics;
 mod datasets;
 mod datasets_info;
+mod deletion;
 mod events;
 mod format;
 mod health;
@@ -90,6 +91,8 @@ async fn main() {
         .expect("Unable to initialize AWS SES client");
 
     let mut toplevel = JoinSet::<()>::new();
+
+    toplevel.spawn(common::user_deletions::follow("emailer", deletion::forget));
 
     // Register top-level send handlers
     let emailer_group = service.group("emailer");

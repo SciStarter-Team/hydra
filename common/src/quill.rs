@@ -394,6 +394,39 @@ fn is_button_style(style: &str) -> bool {
     style.contains("display:inline-block") && style.contains("background-color:")
 }
 
+/// Whether a line break is the last thing in its block, as in the
+/// `<p><br></p>` that `delta_to_html` writes for an empty line. Such a break
+/// gives the block its height without starting another line: the block's own
+/// end is the line's end.
+fn ends_its_block<'a>(node: &ego_tree::NodeRef<'a, scraper::Node>) -> bool {
+    use scraper::Node;
+
+    let mut current = *node;
+    loop {
+        let followed = current.next_siblings().any(|sibling| match sibling.value() {
+            Node::Text(text) => !text.trim().is_empty(),
+            Node::Element(_) => true,
+            _ => false,
+        });
+        if followed {
+            return false;
+        }
+        let Some(parent) = current.parent() else {
+            return false;
+        };
+        let Node::Element(element) = parent.value() else {
+            return false;
+        };
+        if matches!(
+            element.name(),
+            "p" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "blockquote" | "li"
+        ) {
+            return true;
+        }
+        current = parent;
+    }
+}
+
 /// The button a paragraph consists of, as a button embed's value, when the
 /// paragraph holds a button link and nothing else.
 fn paragraph_button<'a>(node: &ego_tree::NodeRef<'a, scraper::Node>) -> Option<serde_json::Value> {
@@ -845,6 +878,9 @@ fn process_node<'a>(
                     });
                 }
                 "br" => {
+                    if ends_its_block(node) {
+                        return;
+                    }
                     ops.push(Op {
                         insert: Some(Insert::Text("\n".to_string())),
                         attributes: None,
@@ -1075,6 +1111,7 @@ fn markdown_to_delta(markdown: &str) -> Result<String, anyhow::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert2::check;
 
     #[test]
     fn test_simple_text() {
@@ -1180,6 +1217,36 @@ mod tests {
         assert!(
             delta.contains(r#""link":"https://example.org/""#),
             "{delta}"
+        );
+    }
+
+    /// The HTML a Delta is shown as reads back as that Delta, so empty lines
+    /// don't multiply each time a body is fetched, edited and saved.
+    #[test]
+    fn empty_lines_read_back_as_they_were_written() {
+        let delta = r#"{"ops":[{"insert":"\n\nDear you,\nHello.\n\n\nCheers\n"}]}"#;
+        let html = delta_to_html(delta).unwrap();
+        check!(html == "<p><br></p><p><br></p><p>Dear you,</p><p>Hello.</p><p><br></p><p><br></p><p>Cheers</p>");
+
+        let again = html_to_delta(&html).unwrap();
+        check!(delta_to_html(&again).unwrap() == html);
+    }
+
+    /// A break with more of its block after it still starts a line.
+    #[test]
+    fn a_break_inside_a_paragraph_starts_a_line() {
+        let delta = html_to_delta("<p>One<br>Two<br></p><h2><strong>Head<br></strong></h2>").unwrap();
+
+        check!(
+            serde_json::from_str::<serde_json::Value>(&delta).unwrap()
+                == serde_json::json!({"ops": [
+                    {"insert": "One"},
+                    {"insert": "\n"},
+                    {"insert": "Two"},
+                    {"insert": "\n"},
+                    {"insert": "Head", "attributes": {"bold": true}},
+                    {"insert": "\n", "attributes": {"header": 2}},
+                ]})
         );
     }
 

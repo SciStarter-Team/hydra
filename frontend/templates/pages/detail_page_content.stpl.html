@@ -16,12 +16,18 @@
     <% if self.is_staff_editor { %>
     <p class="ss-staff-status">
       <% if self.kind.is_project() { %><span><%= self.status.label() %></span><% } %>
-      <span><% if self.published { %>Published<% } else { %>Not Published<% } %></span>
+      <span><%= self.publish_status.label() %></span>
     </p>
     <% } %>
 
     <% if !self.status.is_active() { %>
     <div class="ss-alert"><%= self.status.alert_message() %></div>
+    <% } %>
+
+    <%# Straight after an event is submitted for review, its submitter, who
+        sees it before anyone else can, is thanked for it. %>
+    <% if self.new_submission && self.can_edit && !self.publish_status.is_published() { %>
+    <p class="mb-4 p-4 border border-linework rounded-sm bg-primary-light" role="status">Thank you for submitting your event. SciStarter staff will review it before publishing it on the public calendar, and will contact you if they have questions.</p>
     <% } %>
 
     <div class="flex flex-col md:flex-row gap-8">
@@ -46,31 +52,20 @@
         <% } %>
       </div>
       <% } %>
+      <%# An event's details follow its name in the order the event form
+          asks them, as orrery's event page lists them, under the image. %>
       <div>
-        <% if !self.presenter.is_empty() || self.can_edit { %>
+        <% if self.kind.is_project() && (!self.presenter.is_empty() || self.can_edit) { %>
         <%+ self.field("presenter") %>
         <% } %>
+        <%# An event that isn't listed says so over its name, to those who
+            can see it (Darlene's review). %>
+        <% if self.kind.is_event() && !self.publish_status.is_published() { %>
+        <p class="inline-block mb-3 px-2.5 py-1 rounded-sm bg-neutral-light text-neutral-dark text-sm font-bold"><%= self.publish_status.label() %></p>
+        <% } %>
         <%+ self.field("name") %>
-        <% if self.kind.is_event() { %>
-        <%+ self.field("formats") %>
-        <%+ self.field("programs") %>
-        <%+ self.field("venues") %>
-        <%+ self.field("topics") %>
-        <%# Who can attend, where people see it before following the links
-            that sign them up, and then who it is for. %>
-        <%+ self.field("limited_to") %>
-        <%+ self.field("audience") %>
-        <% } %>
-        <% if !self.url.is_empty() || self.can_edit { %>
+        <% if self.kind.is_project() && (!self.url.is_empty() || self.can_edit) { %>
         <%+ self.field("url") %>
-        <% } %>
-        <% if self.kind.is_event() { %>
-        <% if !self.ticket_url.is_empty() || self.can_edit { %>
-        <%+ self.field("ticket_url") %>
-        <% } %>
-        <% if !self.cost.is_empty() || self.can_edit { %>
-        <%+ self.field("cost") %>
-        <% } %>
         <% } %>
 
         <div class="mb-4">
@@ -157,12 +152,35 @@
       <%+ self.field("description") %>
       <% } %>
 
-      <% if self.kind.is_event() && !self.part_of_name.is_empty() { %>
-      <p class="mb-4 text-sm text-neutral-mid">Part of <a class="text-primary-action underline" href="<%= &self.part_of_path %>"><%= &self.part_of_name %></a></p>
+      <%# An event's sections are the event form's, in its order: about it,
+          when and where, who can participate, how to participate, its links
+          and registration, admission, and what helps people discover it, the
+          larger event it's part of last. %>
+      <% if self.kind.is_event() { %>
+      <% if !self.presenter.is_empty() || self.can_edit { %>
+      <div class="mb-4">
+        <%+ self.field("presenter") %>
+      </div>
       <% } %>
 
-      <% if self.kind.is_event() { %>
+      <% if !self.instances.is_empty() || self.can_edit { %>
+      <div class="border border-linework rounded-sm bg-primary-light mb-4">
+        <dl>
+          <dt class="ribbon-project bg-primary-dark text-white">Date and time</dt>
+          <dd class="p-4">
+            <%+ crate::component::detail_page_edit::InstancesDisplay::new(self.target_id.to_string(), self.instances.clone(), self.can_edit, self.event_zone.clone()) %>
+          </dd>
+        </dl>
+      </div>
+      <% } %>
+
       <%+ crate::component::detail_page_edit::EventLocationDisplay::new(self.target_id.to_string(), self.can_edit, |part| self.field(part), &self.location_type, self.entirely_online, self.also_online, self.has_point, self.region_geojson.clone()) %>
+      <div class="mb-4">
+        <%+ self.field("venues") %>
+      </div>
+      <div class="mb-4">
+        <%+ crate::component::detail_page_edit::EventAttendanceDisplay::new(self.target_id.to_string(), self.can_edit, self.limited_to.clone(), self.ages.clone()) %>
+      </div>
       <% } else { %>
       <% if !self.location_name.is_empty() || !self.regions_description.is_empty() || !self.location_description.is_empty() || !self.address.is_empty() || !self.city.is_empty() || !self.state.is_empty() || !self.country.is_empty() || self.entirely_online || self.also_online || self.can_edit { %>
       <div class="border border-linework rounded-sm bg-primary-light mb-4">
@@ -196,7 +214,7 @@
       <% if has_guidance || !self.how_to_join.is_empty() || self.can_edit { %>
       <div class="border border-linework rounded-sm bg-primary-light mb-4<% if !has_guidance && self.how_to_join.is_empty() { %> edit-only<% } %>">
         <dl>
-          <dt class="ribbon-project bg-primary-dark text-white">How to Get Started</dt>
+          <dt class="ribbon-project bg-primary-dark text-white"><% if self.kind.is_event() { %>How to participate<% } else { %>How to Get Started<% } %></dt>
           <dd class="p-4 get-started">
             <% match &self.guidance { GetStartedGuidance::Custom(html) => { %>
             <div class="mb-3"><%- html %></div>
@@ -215,18 +233,24 @@
       </div>
       <% } %>
 
-      <%/* Event instances */%>
-      <% if self.kind.is_event() && (!self.instances.is_empty() || self.can_edit) { %>
-      <div class="border border-linework rounded-sm bg-primary-light mb-4">
-        <dl>
-          <dt class="ribbon-project bg-primary-dark text-white">When</dt>
-          <dd class="p-4">
-            <%+ crate::component::detail_page_edit::InstancesDisplay::new(self.target_id.to_string(), self.instances.clone(), self.can_edit, self.event_zone.clone()) %>
-            <% if let Some(ticketing) = &self.ticketing_begins { %>
-            <p class="mt-3 text-sm"><strong>Tickets / registration open:</strong> <%- crate::local_time::zoned_time(ticketing, TimeFormat::DateTime, crate::local_time::Clocks::of(self.event_zone.as_ref())) %></p>
-            <% } %>
-          </dd>
-        </dl>
+      <% if self.kind.is_event() { %>
+      <div class="mb-4">
+        <% if !self.url.is_empty() || self.can_edit { %>
+        <%+ self.field("url") %>
+        <% } %>
+        <%+ crate::component::detail_page_edit::EventRegistrationDisplay::new(self.target_id.to_string(), self.can_edit, self.registration.clone(), self.event_zone.clone(), &self.instances) %>
+      </div>
+      <div class="mb-4">
+        <%+ crate::component::detail_page_edit::EventAdmissionDisplay::new(self.target_id.to_string(), self.can_edit, self.admission.clone()) %>
+      </div>
+      <div class="mb-4">
+        <%+ self.field("topics") %>
+        <%+ self.field("formats") %>
+        <%+ self.field("programs") %>
+        <% if !self.tags.is_empty() || self.can_edit { %>
+        <%+ self.field("tags") %>
+        <% } %>
+        <%+ crate::component::detail_page_edit::EventPartOfDisplay::new(self.target_id.to_string(), self.can_edit, self.is_staff_editor, self.part_of, self.larger_event.clone()) %>
       </div>
       <% } %>
 
@@ -333,8 +357,8 @@
       <% } %>
       <% } %>
 
-      <%/* Tags */%>
-      <% if !self.tags.is_empty() || self.can_edit { %>
+      <%/* Tags (an event's are with what helps people discover it) */%>
+      <% if self.kind.is_project() && (!self.tags.is_empty() || self.can_edit) { %>
       <%+ self.field("tags") %>
       <% } %>
 

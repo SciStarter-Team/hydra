@@ -1,3 +1,4 @@
+pub mod account_deletion;
 pub mod acts_connected;
 pub mod add;
 pub mod admin;
@@ -296,16 +297,6 @@ fn user_facing() -> impl Endpoint {
             "/add/event",
             get(add::add_event_page).post(add::add_event_submit),
         )
-        .at("/add/event/submitted", get(add::add_event_submitted_page))
-        .at(
-            "/add/event/parent-search",
-            get(add::add_event_parent_search),
-        )
-        .at(
-            "/add/event/parent-select",
-            get(add::add_event_parent_select),
-        )
-        .at("/add/event/parent-clear", get(add::add_event_parent_clear))
         .at("/add/tag-search", get(add::add_tag_search))
         .at("/add/upload-image", post(add::add_upload_image))
         .at("/add/region-lookup", get(add::add_region_lookup))
@@ -440,6 +431,54 @@ fn user_facing() -> impl Endpoint {
         .at(
             "/-detail/:id/location/edit",
             get(component::detail_page_edit::edit_location),
+        )
+        .at(
+            "/-detail/:id/admission",
+            get(component::detail_page_edit::get_admission_display)
+                .put(component::detail_page_edit::save_admission),
+        )
+        .at(
+            "/-detail/:id/admission/edit",
+            get(component::detail_page_edit::edit_admission),
+        )
+        .at(
+            "/-detail/:id/registration",
+            get(component::detail_page_edit::get_registration_display)
+                .put(component::detail_page_edit::save_registration),
+        )
+        .at(
+            "/-detail/:id/registration/edit",
+            get(component::detail_page_edit::edit_registration),
+        )
+        .at(
+            "/-detail/:id/attendance",
+            get(component::detail_page_edit::get_attendance_display)
+                .put(component::detail_page_edit::save_attendance),
+        )
+        .at(
+            "/-detail/:id/attendance/edit",
+            get(component::detail_page_edit::edit_attendance),
+        )
+        .at(
+            "/-detail/:id/part_of",
+            get(component::detail_page_edit::get_part_of_display)
+                .put(component::detail_page_edit::save_part_of),
+        )
+        .at(
+            "/-detail/:id/part_of/edit",
+            get(component::detail_page_edit::edit_part_of),
+        )
+        .at(
+            "/-detail/:id/part_of/search",
+            get(component::detail_page_edit::search_part_of),
+        )
+        .at(
+            "/-detail/:id/part_of/pick",
+            get(component::detail_page_edit::pick_part_of),
+        )
+        .at(
+            "/-detail/:id/part_of/clear",
+            get(component::detail_page_edit::clear_part_of),
         )
         .at(
             "/-detail/:id/instances/new",
@@ -779,6 +818,10 @@ async fn main() -> Result<(), Error> {
         tokio::spawn(training::content::TrainingOverrides::peering_task());
     let _archive_entry_updates = tokio::spawn(admin::archive::ArchiveEntry::peering_task());
     let _file_metadata_updates = tokio::spawn(upload::storage::FileMetadata::peering_task());
+    let _account_deletions = tokio::spawn(common::user_deletions::follow(
+        "frontend",
+        account_deletion::forget,
+    ));
     let _zooniverse_affiliate_announcements = tokio::spawn(lazy_cache::follow(
         project::linked_platform::ZooniverseAffiliates,
     ));
@@ -2183,6 +2226,14 @@ mod sync {
         ticket_url: String,
         #[serde(default)]
         cost: String,
+        /// Whether admission is free, paid or a suggested donation ("free",
+        /// "paid", "donation"), and whether people must register
+        /// ("required", "none", "optional"); empty when the event wasn't
+        /// asked, or from an orrery that predates them.
+        #[serde(default)]
+        admission: String,
+        #[serde(default)]
+        registration: String,
         /// The group the event is limited to; empty when it's open to
         /// everyone, or from an orrery that predates it.
         #[serde(default)]
@@ -2458,6 +2509,26 @@ mod sync {
                 evt.ticketing_begins = data.ticketing_begins.map(|ts| ts.into());
                 evt.ticket_url = data.ticket_url;
                 evt.cost = data.cost;
+                // Orrery tells hydra before it answers either question a new
+                // way; until hydra knows an answer, the event reads as never
+                // asked, keeping its cost and link.
+                evt.admission = crate::event::admission::Admission::parse(&data.admission);
+                if evt.admission.is_none() && !data.admission.trim().is_empty() {
+                    tracing::warn!(
+                        event = %evt.event_id,
+                        admission = %data.admission,
+                        "Orrery sent an admission hydra doesn't know; the event is saved unanswered"
+                    );
+                }
+                evt.registration =
+                    crate::event::registration::Registration::parse(&data.registration);
+                if evt.registration.is_none() && !data.registration.trim().is_empty() {
+                    tracing::warn!(
+                        event = %evt.event_id,
+                        registration = %data.registration,
+                        "Orrery sent a registration hydra doesn't know; the event is saved unanswered"
+                    );
+                }
                 evt.limited_to = data.limited_to;
                 evt.outcomes_label = data.outcomes_label.empty_as_none();
                 evt.outcomes_link = data.outcomes_link.empty_as_none();

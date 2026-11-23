@@ -2007,17 +2007,22 @@ pub async fn user_details_delete(req: &Request) -> Result<UserDetailsDeleteRespo
     let request: UserDetailsDeleteRequest = decode_structured_message(req.message.clone())?;
 
     let user_id_str = request.user_id.to_string();
-    let result = sqlx::query!(r#"DELETE FROM "users" WHERE "user_id" = ?"#, user_id_str)
-        .execute(db())
-        .await;
+    let legacy_v3_id = sqlx::query_scalar!(
+        r#"SELECT "legacy_v3_id" AS "legacy_v3_id: i64" FROM "users" WHERE "user_id" = ?"#,
+        user_id_str
+    )
+    .fetch_optional(db())
+    .await?
+    .flatten();
 
-    match result {
-        Ok(result) => {
-            let success = result.rows_affected() > 0;
-            Ok(UserDetailsDeleteResponse { success })
-        }
-        Err(e) => Err(anyhow::anyhow!("Failed to delete user: {}", e).into()),
-    }
+    let deleted = crate::deletion::delete_users(&[crate::deletion::Doomed {
+        user_id: request.user_id,
+        legacy_v3_id,
+    }])
+    .await?;
+    Ok(UserDetailsDeleteResponse {
+        success: deleted > 0,
+    })
 }
 
 pub async fn admin_password_reset(req: &Request) -> Result<AdminPasswordResetResponse, Error> {

@@ -1,0 +1,25 @@
+<% use crate::component::floating_field::{FieldKind, FloatingField}; %>
+<% use crate::event::admission::Admission; %>
+<% let problem = self.errors.described_by("admission"); %>
+<fieldset class="choice-group" data-admission>
+  <legend<% if !self.legend_shown { %> class="sr-only"<% } %>>Admission<% if self.legend_shown { %><span class="pill-required" aria-hidden="true"> *</span><% } %></legend>
+  <div class="radio-options">
+    <% for answer in Admission::ALL { %>
+    <label class="radio-option">
+      <input type="radio" name="admission" value="<%= answer.as_str() %>" required<% if self.admission == Some(answer) { %> checked<% } %><% if let Some(problem) = &problem { %> aria-invalid="true" aria-describedby="<%= problem %>"<% } %>>
+      <span><%= answer.label() %></span>
+    </label>
+    <%# The cost, under the answer that asks it. %>
+    <% let asked = self.admission == Some(answer); %>
+    <% match answer { Admission::Paid => { %>
+    <fieldset class="radio-option-field border-0 m-0" data-cost-for="paid" <% if !asked { %>hidden disabled<% } %>>
+      <%+ FloatingField::new(FieldKind::Text, "cost", "Admission price", self.cost).id("admission-price").hint("e.g., $10 per person").required().errors(self.errors) %>
+    </fieldset>
+    <% } Admission::Donation => { %>
+    <fieldset class="radio-option-field border-0 m-0" data-cost-for="donation" <% if !asked { %>hidden disabled<% } %>>
+      <%+ FloatingField::new(FieldKind::Text, "cost", "Suggested donation amount (optional)", self.cost).id("donation-amount").hint("e.g., $10").errors(self.errors) %>
+    </fieldset>
+    <% } Admission::Free => {} } %>
+    <% } %>
+  </div>
+</fieldset>

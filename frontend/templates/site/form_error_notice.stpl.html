@@ -1,3 +1,18 @@
-<% if let Some(error) = self.error { %>
-<div id="<%= crate::component::floating_field::FormError::ELEMENT_ID %>" class="ss-alert form-error-notice" tabindex="-1" autofocus><%= error.message %></div>
+<%# Each problem's button goes to what its message describes
+    (`aria-describedby`, which a renumbered date/time row keeps): the control,
+    or the first control in a group of them that the message describes as a
+    whole. %>
+<% if !self.errors.is_empty() { %>
+<div id="<%= crate::component::floating_field::FormError::ELEMENT_ID %>" class="ss-alert form-error-notice" tabindex="-1" autofocus>
+  <% if self.errors.len() > 1 { %><p class="form-error-intro">Please fix these before submitting your <%= self.noun %>:</p><% } %>
+  <ul class="form-error-list" hx-on:click="var item = event.target.closest('li[id]'); if (!item || !event.target.closest('button')) return; var described = document.querySelector('[aria-describedby~=&quot;' + item.id + '&quot;]'); var control = described &amp;&amp; (described.matches('input, select, textarea') ? described : described.querySelector('input, select, textarea')); if (!control) return; control.focus({preventScroll: true}); control.scrollIntoView({block: 'center'});">
+    <% for error in self.errors { %>
+    <% if error.is_general() { %>
+    <li id="<%= error.id() %>"><%= error.message %></li>
+    <% } else { %>
+    <li id="<%= error.id() %>"><button type="button"><%= error.message %></button></li>
+    <% } %>
+    <% } %>
+  </ul>
+</div>
 <% } %>

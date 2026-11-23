@@ -971,7 +971,7 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
     results_qb.push(" AND a.value = ");
     results_qb.push_bind(signature_type.1.to_string());
     results_qb.push(
-        "), ev.address, ev.city, ev.state, ST_Y(ev.point), ST_X(ev.point), ev.location_type \
+        "), ev.address, ev.city, ev.state, ev.event_id \
          FROM events ev \
          JOIN entities e ON e.target = ev.event_id \
          JOIN event_instances ei ON ei.event_id = ev.event_id",
@@ -1006,12 +1006,13 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
             String,
             String,
             String,
-            Option<f64>,
-            Option<f64>,
             String,
         )>()
         .fetch_all(db())
         .await?;
+
+    // Each event's times are on its venue's clocks, as on its page.
+    let zones = crate::event::zone::of_events(rows.iter().map(|r| r.10.as_str())).await?;
 
     let events: Vec<CsmEvent> = rows
         .into_iter()
@@ -1026,7 +1027,7 @@ pub async fn csm_events(Query(query): Query<CsmEventsQuery>) -> Result<Response,
             address: r.7,
             city: r.8,
             state: r.9,
-            zone: crate::event::zone::of_venue(r.10, r.11, &r.12, r.4),
+            zone: zones.get(&r.10).cloned(),
         })
         .collect();
 

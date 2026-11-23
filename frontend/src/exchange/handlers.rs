@@ -926,8 +926,7 @@ async fn load_exchange_event_detail(id: Ulid, slug: &str) -> Result<ExchangeEven
         SELECT name, presenter, image, image_credit, url, description, how_to_join,
                location_type, entirely_online as "entirely_online: bool",
                location_name, location_description, address, city, state, country,
-               AsGeoJSON(regions) as "coverage: Option<String>",
-               ST_Y(point) AS "latitude: f64", ST_X(point) AS "longitude: f64"
+               AsGeoJSON(regions) as "coverage: Option<String>"
         FROM events
         WHERE event_id = ?
         "#,
@@ -976,11 +975,12 @@ async fn load_exchange_event_detail(id: Ulid, slug: &str) -> Result<ExchangeEven
     };
     let coverage = if location.has_map() { coverage } else { None };
 
-    // All in one row, as orrery's exchange shows them.
+    // All in one row, as orrery's exchange shows them, which leaves out the
+    // program or campaign.
     let mut event_types = Vec::new();
     for list in ChoiceList::EVENT_TYPES
         .into_iter()
-        .filter(|list| list.shown_to_visitors())
+        .filter(|list| *list != ChoiceList::EventProgram)
     {
         event_types.extend(ChoiceValue::names_of_target(list, &id_str).await?);
     }
@@ -1001,12 +1001,7 @@ async fn load_exchange_event_detail(id: Ulid, slug: &str) -> Result<ExchangeEven
             .unwrap_or(row.how_to_join),
         event_types,
         instances,
-        zone: crate::event::zone::of_venue(
-            row.latitude,
-            row.longitude,
-            &row.location_type,
-            row.entirely_online,
-        ),
+        zone: crate::event::zone::of_event(&id_str).await?,
         location_name: row.location_name,
         location,
         coverage,

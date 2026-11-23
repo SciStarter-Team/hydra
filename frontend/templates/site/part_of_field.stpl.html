@@ -1,0 +1,22 @@
+<%# Search the published events, apart from the one being changed, and pick
+    one; the pick is kept in the hidden `part_of`. %>
+<% let picked = self.selected.id.clone(); %>
+<div class="part-of-picker flex flex-col gap-2">
+  <span class="field-label" id="part-of-label">Is this part of a larger event?</span>
+  <p id="part-of-help" class="field-help">If part of a festival, conference, or other event listed on SciStarter, search for and select it.</p>
+  <div class="pill-field">
+    <label class="pill-body">
+      <span class="pill-label">Search events on SciStarter</span>
+      <input id="part-of-search" type="search" name="q" placeholder=" " autocomplete="off" aria-describedby="<% if let Some(problem) = &self.problem { %><%= problem %> <% } %>part-of-label part-of-help"<% if self.problem.is_some() { %> aria-invalid="true"<% } %>
+        hx-get="/-detail/<%= &self.selected.event_id %>/part_of/search" hx-trigger="input changed delay:300ms, search"
+        hx-target="#parent-results" hx-swap="innerHTML"
+        hx-on:keydown="if (event.key === 'Enter') event.preventDefault()">
+    </label>
+  </div>
+  <div id="parent-selected" aria-live="polite">
+    <%+ self.selected %>
+  </div>
+  <div id="parent-results"></div>
+  <span id="parent-results-status" class="sr-only" role="status"></span>
+  <input type="hidden" name="part_of" id="part_of" value="<%= picked %>">
+</div>

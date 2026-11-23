@@ -2642,3 +2642,25 @@ mod tests {
         assert!(basic_info(true, false).may_send_messages());
     }
 }
+
+/// Asks user-service for the accounts deleted after the deletion `after`
+/// (0 for all of them), in the order they were deleted. See
+/// `common::user_deletions`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserDeletionsRequest {
+    pub after: i64,
+}
+
+/// A page of deleted accounts, in the order they were deleted; empty once
+/// every deletion has been handed out.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserDeletionsResponse {
+    pub deletions: Vec<UserDeletion>,
+}
+
+/// An account deleted, and where its deletion falls in the order of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct UserDeletion {
+    pub seq: i64,
+    pub user_id: Ulid,
+}

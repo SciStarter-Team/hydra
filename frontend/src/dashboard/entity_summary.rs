@@ -48,6 +48,7 @@ pub async fn lookup_batch(ids: &[String]) -> Result<Vec<EntitySummary>, Error> {
     }
 
     tx.commit().await?;
+    attach_zones(&mut summaries).await?;
 
     Ok(summaries)
 }
@@ -70,6 +71,7 @@ pub async fn lookup_batch_by_slug(slugs: &[String]) -> Result<Vec<EntitySummary>
     }
 
     tx.commit().await?;
+    attach_zones(&mut summaries).await?;
 
     Ok(summaries)
 }
@@ -101,6 +103,24 @@ async fn lookup_one_by_slug(
         entity_row.created,
     )
     .await
+}
+
+/// Fill in the `zone` of the events among `summaries`, as each one's page
+/// finds it: outside the transaction they were read in, since an event with
+/// no point is placed by its address, which may be looked up.
+async fn attach_zones(summaries: &mut [EntitySummary]) -> Result<(), Error> {
+    let events = summaries
+        .iter()
+        .filter(|summary| summary.kind == EntitySummaryKind::Event)
+        .map(|summary| summary.id.to_string())
+        .collect::<Vec<_>>();
+    let mut zones = crate::event::zone::of_events(&events).await?;
+    for summary in summaries.iter_mut() {
+        summary.zone = zones
+            .remove(&summary.id.to_string())
+            .and_then(|zone| zone.iana_name().map(str::to_string));
+    }
+    Ok(())
 }
 
 async fn lookup_one(tx: &mut Immediate, target: &str) -> Result<Option<EntitySummary>, Error> {
@@ -167,9 +187,7 @@ async fn fetch_summary(
         "Event" => {
             let row = sqlx::query!(
                 r#"SELECT "name", "image", "status",
-                    "begin" as "begin_time?", "end" as "end_time?",
-                    ST_Y("point") AS "latitude: f64", ST_X("point") AS "longitude: f64",
-                    "location_type", "entirely_online" AS "entirely_online: bool"
+                    "begin" as "begin_time?", "end" as "end_time?"
                 FROM "events"
                 WHERE "event_id" = ?"#,
                 target
@@ -191,13 +209,8 @@ async fn fetch_summary(
                 created,
                 begin: row.begin_time.filter(|b| !b.is_empty()),
                 end: row.end_time.filter(|e| !e.is_empty()),
-                zone: crate::event::zone::of_venue(
-                    row.latitude,
-                    row.longitude,
-                    &row.location_type,
-                    row.entirely_online,
-                )
-                .and_then(|zone| zone.iana_name().map(str::to_string)),
+                // Filled in once the transaction is over (`attach_zones`).
+                zone: None,
             }))
         }
         _ => Ok(None),

@@ -23,10 +23,15 @@
 //! round that reads every message, are of messages orrery has since
 //! deleted, and are deleted.
 //!
-//! A conversation holds a message and everything that answers it, however
-//! the messages come: an answer to a message not yet copied starts a
-//! conversation of its own, which is folded into its message's when that
-//! comes.
+//! A conversation is between two participants, and holds a message and
+//! everything between the same two that answers it, however the messages
+//! come: an answer to a message not yet copied starts a conversation of its
+//! own, which is folded into its message's when that comes. Orrery's
+//! threads are not so confined: an answer may be copied to a third party,
+//! sent from a manager's own box to a message the project's box received,
+//! or name whatever message its sender chose. An answer between another two
+//! goes in a conversation of theirs, as any message does whose thread has
+//! none of them yet.
 //!
 //! Nothing here notifies anyone: a copy is orrery's message, which orrery
 //! has already delivered or held.
@@ -75,6 +80,10 @@ const SWEPT: &str = "message-sync-swept";
 /// Set once a round has read every message orrery has, and so claimed every
 /// copy that has a message to claim it.
 const CLAIMED: &str = "message-sync-claimed";
+
+/// Set once the copies placed in their thread's conversation although they
+/// went between another two have been moved to conversations of their own.
+const SEPARATED: &str = "message-sync-pairs-separated";
 
 /// What orrery's review made of a message.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
@@ -152,6 +161,11 @@ pub async fn synchronize_messages() {
 /// A message that cannot be copied ends the round there, with the cursor
 /// left before its page, so that it is tried again rather than passed over.
 async fn round(client: &reqwest::Client) -> Result<()> {
+    if misc::get::<bool>(SEPARATED).await?.is_none() {
+        separate_pairs(db()).await?;
+        misc::set(SEPARATED, true).await?;
+    }
+
     if cursor().await?.is_none() && !legacy_round(client).await? {
         return Ok(());
     }
@@ -506,7 +520,7 @@ async fn import(pool: &SqlitePool, message: &OrreryMessage) -> Result<()> {
     .execute(&mut tx)
     .await?;
 
-    let topic = gather(&mut tx, message, topic).await?;
+    let topic = gather(&mut tx, message, sender, recipient, topic).await?;
     update_statuses(&mut tx, &topic).await?;
 
     tx.commit().await?;
@@ -517,23 +531,34 @@ async fn import(pool: &SqlitePool, message: &OrreryMessage) -> Result<()> {
 /// The post that copies `message`, which has none linked to it yet: one
 /// made before copies were linked, or else a new one. It goes in the
 /// conversation its reply reference is in, or else the one of the message
-/// it answers, or else a new one in its recipient's inbox.
+/// it answers, so long as that conversation is between its sender and
+/// recipient, or else a new one in its recipient's inbox.
 async fn place(
     tx: &mut Immediate,
     message: &OrreryMessage,
     sender: &str,
     recipient: &str,
 ) -> Result<String> {
-    let mut topic = topic_of(tx, &message.reply_ref).await?;
+    let mut topic = conversation_of(tx, &message.reply_ref, sender, recipient).await?;
     if topic.is_none()
         && let Some(parent) = &message.in_reply_to_reply_ref
     {
-        topic = topic_of(tx, parent).await?;
+        topic = conversation_of(tx, parent, sender, recipient).await?;
     }
 
     let topic = match topic {
         Some(topic) => topic,
-        None => start_conversation(tx, message, sender, recipient).await?,
+        None => {
+            start_conversation(
+                tx,
+                sender,
+                recipient,
+                &message.subject,
+                &message.body,
+                &message.sent,
+            )
+            .await?
+        }
     };
 
     let earlier = sqlx::query_scalar!(
@@ -580,22 +605,38 @@ async fn place(
 }
 
 /// The conversation the message whose reply reference is `reply_ref` is
-/// in, if it has been copied.
-async fn topic_of(tx: &mut Immediate, reply_ref: &str) -> Result<Option<String>> {
+/// in, if it has been copied and the conversation is between `one` and
+/// `other`. A conversation is between the author of its topic and the owner
+/// of the inbox it is in.
+async fn conversation_of(
+    tx: &mut Immediate,
+    reply_ref: &str,
+    one: &str,
+    other: &str,
+) -> Result<Option<String>> {
     Ok(sqlx::query_scalar!(
-        r#"SELECT "topic_id" FROM "message_reply_refs" WHERE "reply_ref" = ?"#,
-        reply_ref
+        r#"SELECT r."topic_id" FROM "message_reply_refs" r
+           JOIN "topics" t ON t."topic_id" = r."topic_id"
+           WHERE r."reply_ref" = ?1
+             AND ((t."author_id" = ?2 AND t."forum_id" = ?3)
+                  OR (t."author_id" = ?3 AND t."forum_id" = ?2))"#,
+        reply_ref,
+        one,
+        other,
     )
     .fetch_optional(&mut *tx)
     .await?)
 }
 
-/// A new conversation, begun by `message`, in `recipient`'s inbox.
+/// A new conversation, begun by a message from `sender` with `subject` and
+/// `body` sent at `sent`, in `recipient`'s inbox.
 async fn start_conversation(
     tx: &mut Immediate,
-    message: &OrreryMessage,
     sender: &str,
     recipient: &str,
+    subject: &str,
+    body: &str,
+    sent: &str,
 ) -> Result<String> {
     ensure_personal_forum(&mut *tx, recipient).await?;
 
@@ -605,11 +646,11 @@ async fn start_conversation(
            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)"#,
         topic,
         recipient,
-        message.subject,
-        message.body,
+        subject,
+        body,
         sender,
-        message.sent,
-        message.sent,
+        sent,
+        sent,
     )
     .execute(&mut *tx)
     .await?;
@@ -617,14 +658,21 @@ async fn start_conversation(
     Ok(topic)
 }
 
-/// Bring `message`, now in `topic`, together with the rest of its thread:
-/// fold its conversation into that of the message it answers, and fold
-/// those of the answers to it copied before it into its own. The
-/// conversation the thread is in.
-async fn gather(tx: &mut Immediate, message: &OrreryMessage, topic: String) -> Result<String> {
+/// Bring `message`, from `sender` to `recipient` and now in `topic`,
+/// together with the rest of its thread between the same two: fold its
+/// conversation into that of the message it answers, and fold those of the
+/// answers to it copied before it into its own. The conversation the thread
+/// is in.
+async fn gather(
+    tx: &mut Immediate,
+    message: &OrreryMessage,
+    sender: &str,
+    recipient: &str,
+    topic: String,
+) -> Result<String> {
     let mut thread = topic;
     if let Some(parent) = &message.in_reply_to_reply_ref
-        && let Some(parent_topic) = topic_of(tx, parent).await?
+        && let Some(parent_topic) = conversation_of(tx, parent, sender, recipient).await?
         && parent_topic != thread
     {
         fold(tx, &thread, &parent_topic).await?;
@@ -634,9 +682,13 @@ async fn gather(tx: &mut Immediate, message: &OrreryMessage, topic: String) -> R
     let answers = sqlx::query_scalar!(
         r#"SELECT DISTINCT p."topic_id" FROM "orrery_messages" om
            JOIN "posts" p ON p."post_id" = om."post_id"
-           WHERE om."parent_reply_ref" = ? AND p."topic_id" <> ?"#,
+           WHERE om."parent_reply_ref" = ?1 AND p."topic_id" <> ?2
+             AND ((om."sender_id" = ?3 AND om."recipient_id" = ?4)
+                  OR (om."sender_id" = ?4 AND om."recipient_id" = ?3))"#,
         message.reply_ref,
         thread,
+        sender,
+        recipient,
     )
     .fetch_all(&mut *tx)
     .await?;
@@ -693,12 +745,106 @@ async fn fold(tx: &mut Immediate, from: &str, into: &str) -> Result<()> {
     Ok(())
 }
 
+/// Move each copy placed in a conversation between another two than its
+/// sender and recipient, as copies were before conversations kept to two,
+/// into the conversation of the message it answers if that one is between
+/// the same two, or else a new one in its recipient's inbox, under the title
+/// of the conversation it leaves. The copies are moved in the order they
+/// were sent, so that an answer finds its message already moved.
+async fn separate_pairs(pool: &SqlitePool) -> Result<()> {
+    let mut tx = Immediate::begin_with_retry(pool, None, None).await?;
+
+    let misplaced = sqlx::query!(
+        r#"SELECT om."post_id", om."reply_ref", om."parent_reply_ref", om."sender_id",
+                  om."recipient_id", om."sent", p."content", p."topic_id" AS "topic_id!: String",
+                  t."title"
+           FROM "orrery_messages" om
+           JOIN "posts" p ON p."post_id" = om."post_id"
+           JOIN "topics" t ON t."topic_id" = p."topic_id"
+           WHERE NOT ((t."author_id" = om."sender_id" AND t."forum_id" = om."recipient_id")
+                      OR (t."author_id" = om."recipient_id" AND t."forum_id" = om."sender_id"))
+           ORDER BY om."sent", om."orrery_id""#
+    )
+    .fetch_all(&mut tx)
+    .await?;
+
+    let mut topics = BTreeSet::new();
+    for copy in misplaced {
+        let parent_topic = match &copy.parent_reply_ref {
+            Some(parent) => {
+                conversation_of(&mut tx, parent, &copy.sender_id, &copy.recipient_id).await?
+            }
+            None => None,
+        };
+        let topic = match parent_topic {
+            Some(topic) => topic,
+            None => {
+                start_conversation(
+                    &mut tx,
+                    &copy.sender_id,
+                    &copy.recipient_id,
+                    &copy.title,
+                    &copy.content,
+                    &copy.sent,
+                )
+                .await?
+            }
+        };
+
+        sqlx::query!(
+            r#"UPDATE "posts" SET "topic_id" = ? WHERE "post_id" = ?"#,
+            topic,
+            copy.post_id
+        )
+        .execute(&mut tx)
+        .await?;
+        sqlx::query!(
+            r#"UPDATE "message_reply_refs" SET "topic_id" = ? WHERE "reply_ref" = ?"#,
+            topic,
+            copy.reply_ref
+        )
+        .execute(&mut tx)
+        .await?;
+
+        topics.insert(copy.topic_id);
+        topics.insert(topic);
+    }
+
+    for topic in topics {
+        sqlx::query!(
+            r#"UPDATE "topics" SET "updated_at" = (
+                   SELECT MAX(p."created_at") FROM "posts" p WHERE p."topic_id" = ?1)
+               WHERE "topic_id" = ?1"#,
+            topic
+        )
+        .execute(&mut tx)
+        .await?;
+        update_statuses(&mut tx, &topic).await?;
+    }
+
+    tx.commit().await?;
+
+    Ok(())
+}
+
 /// Set where each participant of the conversation `topic` stands with it
 /// from the last message there they can see, as orrery says it: whoever
 /// sent that message has seen it and kept it; whoever it went to has seen
 /// or discarded it as orrery says. A participant with no message there to
-/// see has no standing kept.
+/// see has no standing kept, nor has anyone who is not one of the two
+/// participants: one whose message was moved out of the conversation.
 async fn update_statuses(tx: &mut Immediate, topic: &str) -> Result<()> {
+    sqlx::query!(
+        r#"DELETE FROM "message_status"
+           WHERE "topic_id" = ?1
+             AND "user_id" NOT IN (SELECT "author_id" FROM "topics" WHERE "topic_id" = ?1
+                                   UNION ALL
+                                   SELECT "forum_id" FROM "topics" WHERE "topic_id" = ?1)"#,
+        topic
+    )
+    .execute(&mut *tx)
+    .await?;
+
     let participants = sqlx::query_scalar!(
         r#"SELECT om."sender_id" AS "user_id!: String" FROM "orrery_messages" om
            JOIN "posts" p ON p."post_id" = om."post_id" WHERE p."topic_id" = ?1
@@ -769,6 +915,7 @@ mod tests {
 
     const ANN: &str = "01HZZZZZZZZZZZZZZZZZZZZANN";
     const BOB: &str = "01HZZZZZZZZZZZZZZZZZZZZBOB";
+    const CAL: &str = "01HZZZZZZZZZZZZZZZZZZZZCAL";
 
     async fn migrated() -> SqlitePool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -1127,5 +1274,128 @@ mod tests {
         check!(live_copies(&pool).await.unwrap().len() == 149);
         let topic = topic_of_copy(&pool, 42).await;
         check!(status(&pool, BOB, &topic).await.is_none());
+    }
+
+    /// The (forum, author, title) of the conversation `topic`.
+    async fn conversation(pool: &SqlitePool, topic: &str) -> (String, String, String) {
+        sqlx::query_as(
+            r#"SELECT "forum_id", "author_id", "title" FROM "topics" WHERE "topic_id" = ?"#,
+        )
+        .bind(topic)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn an_answer_between_another_two_goes_in_a_conversation_of_theirs() {
+        // 1 opens, from Ann to Bob; 2 answers 1, but from Bob to Cal; 3
+        // answers 2, from Cal to Bob.
+        let thread = [
+            message(1, ANN, BOB, None),
+            message(2, BOB, CAL, Some("ref-1")),
+            message(3, CAL, BOB, Some("ref-2")),
+        ];
+        for order in [
+            [0, 1, 2],
+            [0, 2, 1],
+            [1, 0, 2],
+            [1, 2, 0],
+            [2, 0, 1],
+            [2, 1, 0],
+        ] {
+            let pool = migrated().await;
+            for i in order {
+                import(&pool, &thread[i]).await.unwrap();
+            }
+
+            check!(count(&pool, "topics").await == 2, "{order:?}");
+            let first = topic_of_copy(&pool, 1).await;
+            let second = topic_of_copy(&pool, 2).await;
+            check!(first != second, "{order:?}");
+            check!(topic_of_copy(&pool, 3).await == second, "{order:?}");
+            check!(conversation(&pool, &first).await.0 == BOB, "{order:?}");
+            let (forum, author, _) = conversation(&pool, &second).await;
+            check!((forum.as_str(), author.as_str()) == (CAL, BOB), "{order:?}");
+            check!(status(&pool, CAL, &first).await.is_none(), "{order:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn copies_in_a_conversation_between_another_two_are_separated() {
+        let pool = migrated().await;
+        for m in [
+            message(1, ANN, BOB, None),
+            message(2, BOB, CAL, Some("ref-1")),
+            message(3, CAL, BOB, Some("ref-2")),
+        ] {
+            import(&pool, &m).await.unwrap();
+        }
+        // As the importer placed them when a thread was one conversation:
+        // all three in the one the first opened.
+        let first = topic_of_copy(&pool, 1).await;
+        let second = topic_of_copy(&pool, 2).await;
+        for table in ["posts", "message_reply_refs"] {
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                r#"UPDATE "{table}" SET "topic_id" = ?"#
+            )))
+            .bind(&first)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        sqlx::query(r#"DELETE FROM "topics" WHERE "topic_id" = ?"#)
+            .bind(&second)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"DELETE FROM "message_status" WHERE "topic_id" = ?"#)
+            .bind(&second)
+            .execute(&pool)
+            .await
+            .unwrap();
+        update_statuses_of(&pool, &first).await;
+        check!(status(&pool, CAL, &first).await.is_some());
+
+        separate_pairs(&pool).await.unwrap();
+
+        check!(count(&pool, "topics").await == 2);
+        check!(topic_of_copy(&pool, 1).await == first);
+        let second = topic_of_copy(&pool, 2).await;
+        check!(second != first);
+        check!(topic_of_copy(&pool, 3).await == second);
+        check!(
+            conversation(&pool, &second).await
+                == (CAL.to_string(), BOB.to_string(), "Subject 1".to_string())
+        );
+        check!(status(&pool, CAL, &first).await.is_none());
+        check!(status(&pool, BOB, &second).await == Some((false, false)));
+        check!(status(&pool, CAL, &second).await == Some((true, false)));
+        let updated: (String, String) = sqlx::query_as(
+            r#"SELECT a."updated_at", b."updated_at" FROM "topics" a, "topics" b
+               WHERE a."topic_id" = ? AND b."topic_id" = ?"#,
+        )
+        .bind(&first)
+        .bind(&second)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        check!(
+            updated
+                == (
+                    "2026-11-18T10:01:00Z".to_string(),
+                    "2026-11-18T10:03:00Z".to_string()
+                )
+        );
+
+        // Separating them again changes nothing.
+        separate_pairs(&pool).await.unwrap();
+        check!(count(&pool, "topics").await == 2);
+    }
+
+    async fn update_statuses_of(pool: &SqlitePool, topic: &str) {
+        let mut tx = Immediate::begin_with_retry(pool, None, None).await.unwrap();
+        update_statuses(&mut tx, topic).await.unwrap();
+        tx.commit().await.unwrap();
     }
 }

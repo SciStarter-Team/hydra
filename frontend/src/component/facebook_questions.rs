@@ -1,6 +1,6 @@
 use sailfish::TemplateOnce;
 
-use crate::component::floating_field::FormError;
+use crate::component::floating_field::FormErrors;
 use crate::event::facebook::FacebookEvent;
 
 /// The questions an event's organizer is asked about promoting the event on
@@ -22,7 +22,7 @@ use crate::event::facebook::FacebookEvent;
 #[template(path = "site/facebook_questions.stpl.html")]
 pub struct FacebookQuestions<'a> {
     pub answers: &'a FacebookEvent,
-    pub error: Option<&'a FormError>,
+    pub errors: &'a FormErrors,
 }
 
 /// The answers to [`FacebookQuestions`] as a form submits them. A form that
@@ -52,10 +52,17 @@ mod tests {
     use assert2::check;
 
     use super::*;
+    use crate::component::floating_field::FormError;
     use crate::event::facebook::URL_FIELD;
 
-    fn render(answers: &FacebookEvent, error: Option<&FormError>) -> String {
-        FacebookQuestions { answers, error }.render_once().unwrap()
+    fn render(answers: &FacebookEvent, error: Option<FormError>) -> String {
+        let errors = FormErrors::from(error);
+        FacebookQuestions {
+            answers,
+            errors: &errors,
+        }
+        .render_once()
+        .unwrap()
     }
 
     #[test]
@@ -85,7 +92,7 @@ mod tests {
     #[test]
     fn a_link_error_marks_the_link_field() {
         let error = FormError::at(URL_FIELD, "Please share the link to your Facebook event.");
-        let html = render(&FacebookEvent::Exists { url: None }, Some(&error));
+        let html = render(&FacebookEvent::Exists { url: None }, Some(error));
         check!(html.matches(r#"aria-invalid="true""#).count() == 1);
     }
 
@@ -101,9 +108,9 @@ mod tests {
     fn an_unanswered_question_is_marked() {
         let problem = FacebookEvent::Unanswered.problem().unwrap();
         let error = FormError::at(problem.field, problem.message);
-        let html = render(&FacebookEvent::Unanswered, Some(&error));
+        let html = render(&FacebookEvent::Unanswered, Some(error));
         check!(html.contains(
-            r#"name="facebook_event" value="yes" required aria-invalid="true" aria-describedby="form-error""#
+            r#"name="facebook_event" value="yes" required aria-invalid="true" aria-describedby="facebook_event-problem""#
         ));
         check!(html.matches(r#"aria-invalid="true""#).count() == 2);
 
@@ -112,7 +119,7 @@ mod tests {
         };
         let problem = missing.problem().unwrap();
         let error = FormError::at(problem.field, problem.message);
-        let html = render(&missing, Some(&error));
+        let html = render(&missing, Some(error));
         check!(html.contains(
             r#"name="facebook_event_requested" value="no" required aria-invalid="true""#
         ));

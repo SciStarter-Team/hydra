@@ -10,6 +10,7 @@ mod bridges;
 mod contributor_joins;
 mod engagement;
 mod exchange;
+mod forgotten;
 mod foundations;
 mod handlers;
 mod project_ids;
@@ -41,9 +42,9 @@ use log_service::{Database, run_compactor_service};
 use parking_lot::RwLock;
 use sync::{
     acts_of_science_synchronize, bookmark_synchronize, exchange_event_synchronize,
-    golink_synchronize, join_synchronize, participation_synchronize, rating_synchronize,
-    project_share_synchronize, project_view_synchronize, review_synchronize,
-    visit_click_synchronize,
+    golink_synchronize, inat_history_repair_synchronize, join_synchronize,
+    participation_synchronize, project_share_synchronize, project_view_synchronize,
+    rating_synchronize, review_synchronize, visit_click_synchronize,
 };
 
 // Global database instance for handler access - using RwLock<Option<>> so we can take ownership for shutdown
@@ -78,6 +79,7 @@ async fn main() -> Result<()> {
     let review_cancel = CancellationToken::new();
     let golink_cancel = CancellationToken::new();
     let acts_cancel = CancellationToken::new();
+    let inat_history_repairs_cancel = CancellationToken::new();
     let exchange_events_cancel = CancellationToken::new();
     let visit_clicks_cancel = CancellationToken::new();
     let project_views_cancel = CancellationToken::new();
@@ -168,6 +170,19 @@ async fn main() -> Result<()> {
         Ok::<(), anyhow::Error>(())
     });
 
+    // Spawn the sync of orrery's iNaturalist history repairs, which deletes
+    // the surplus Wall of Fame acts they took back from the acts mirrored here
+    let inat_history_repairs_cancel_clone = inat_history_repairs_cancel.clone();
+    let inat_history_repairs_database = Arc::clone(&database);
+    background_tasks.spawn(async move {
+        inat_history_repair_synchronize(
+            inat_history_repairs_database,
+            inat_history_repairs_cancel_clone,
+        )
+        .await;
+        Ok::<(), anyhow::Error>(())
+    });
+
     // Spawn orrery Visit click count (legacy visit history) sync task
     let visit_clicks_cancel_clone = visit_clicks_cancel.clone();
     let visit_clicks_database = Arc::clone(&database);
@@ -237,6 +252,8 @@ async fn main() -> Result<()> {
 
     // Use handler! and recv_handler! macros for clean endpoint management
     let mut toplevel = JoinSet::new();
+
+    toplevel.spawn(common::user_deletions::follow("log", forgotten::forget));
 
     // Log endpoints
     let log_group = svc.group("log");
@@ -602,6 +619,7 @@ async fn main() -> Result<()> {
     review_cancel.cancel();
     golink_cancel.cancel();
     acts_cancel.cancel();
+    inat_history_repairs_cancel.cancel();
     exchange_events_cancel.cancel();
     visit_clicks_cancel.cancel();
     project_views_cancel.cancel();

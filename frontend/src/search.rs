@@ -648,26 +648,22 @@ async fn event_zones(
         return Ok(Default::default());
     }
     let mut qb: sqlx::QueryBuilder<sqlx::Sqlite> = sqlx::QueryBuilder::new(
-        "SELECT e.slug, ST_Y(ev.point), ST_X(ev.point), ev.location_type, ev.entirely_online \
-         FROM entities e JOIN events ev ON ev.event_id = e.target \
-         WHERE e.kind = 'Event' AND e.slug IN (",
+        "SELECT e.slug, e.target FROM entities e WHERE e.kind = 'Event' AND e.slug IN (",
     );
     let mut separated = qb.separated(", ");
     for slug in slugs {
         separated.push_bind(slug);
     }
     qb.push(")");
-    Ok(qb
-        .build_query_as::<(String, Option<f64>, Option<f64>, String, bool)>()
+    let targets = qb
+        .build_query_as::<(String, String)>()
         .fetch_all(db())
-        .await?
+        .await?;
+    let mut zones =
+        crate::event::zone::of_events(targets.iter().map(|(_, target)| target.as_str())).await?;
+    Ok(targets
         .into_iter()
-        .filter_map(
-            |(slug, latitude, longitude, location_type, entirely_online)| {
-                crate::event::zone::of_venue(latitude, longitude, &location_type, entirely_online)
-                    .map(|zone| (slug, zone))
-            },
-        )
+        .filter_map(|(slug, target)| zones.remove(&target).map(|zone| (slug, zone)))
         .collect())
 }
 

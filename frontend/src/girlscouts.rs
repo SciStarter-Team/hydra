@@ -67,7 +67,9 @@ impl TakeActionContent {
                 value: form.image,
                 credit: None,
                 layout: ImageLayout::Inline,
-                invalid: false,
+                heading: None,
+                required: false,
+                problem: None,
             },
         }
     }

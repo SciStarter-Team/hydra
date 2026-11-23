@@ -17,10 +17,6 @@
     <% } else { %>
     <meta name="twitter:card" content="summary">
     <% } %>
-    <% if self.edits_event { %>
-    <script src="/-static/js/date-rows.js" defer></script>
-    <script src="/-static/js/location-picker.js" defer></script>
-    <% } %>
     <meta name="twitter:title" content="<%= &self.og_title %>">
     <% if !self.og_description.is_empty() { %>
     <meta name="twitter:description" content="<%= &self.og_description %>">

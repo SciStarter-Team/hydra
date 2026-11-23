@@ -12,7 +12,9 @@ use crate::{
     peering::LoadStorePeered,
 };
 
-use super::{EventInstance, facebook::FacebookEvent};
+use super::{
+    EventInstance, admission::Admission, facebook::FacebookEvent, registration::Registration,
+};
 
 /// Container for all event fields.
 ///
@@ -85,11 +87,19 @@ pub struct EventAll {
     pub topics: BTreeSet<String>,
     pub audience: BTreeSet<String>,
 
+    /// When registration opens; never set for an event nobody registers
+    /// for. See [`crate::event::registration`].
     pub ticketing_begins: Option<TimeString>,
-    /// Where people get tickets or register, if that isn't the event's own
+    /// Where people register or get tickets, if that isn't the event's own
     /// link.
     pub ticket_url: String,
-    /// What it costs to attend, in the organizer's words.
+    /// Whether people must register, or `None` for an event never asked.
+    pub registration: Option<Registration>,
+    /// Whether admission is free, paid or a suggested donation, or `None`
+    /// for an event never asked. See [`crate::event::admission`].
+    pub admission: Option<Admission>,
+    /// The price or the suggested donation, once `admission` is answered;
+    /// before, what it costs to attend, in the organizer's words.
     pub cost: String,
     /// The group the event is limited to, in the organizer's words ("Library
     /// cardholders"); empty when it's open to everyone.
@@ -180,6 +190,8 @@ impl LoadStorePeered for EventAll {
         let facebook_event_requested = self.facebook_event.create_requested();
         // An event joined only online is not also joined online besides.
         let also_online = self.also_online && !self.entirely_online;
+        let admission = Admission::stored(self.admission);
+        let registration = Registration::stored(self.registration);
 
         let mut tx = Immediate::begin_with_retry(db(), None, None).await?;
 
@@ -224,7 +236,9 @@ impl LoadStorePeered for EventAll {
               "ticket_url",
               "cost",
               "limited_to",
-              "published_at"
+              "published_at",
+              "admission",
+              "registration"
             )
             values (
               ?1,
@@ -280,7 +294,9 @@ impl LoadStorePeered for EventAll {
               ?37,
               ?38,
               ?39,
-              ?40
+              ?40,
+              ?41,
+              ?42
             )"#,
             event_id,
             self.created,
@@ -322,6 +338,8 @@ impl LoadStorePeered for EventAll {
             self.cost,
             self.limited_to,
             self.published_at,
+            admission,
+            registration,
         )
         .execute(&mut tx)
         .await?;
@@ -458,7 +476,7 @@ impl LoadStorePeered for EventAll {
                 facebook_event_url,
                 facebook_event_requested as "facebook_event_requested: bool",
                 also_online as "also_online: bool", ticket_url, cost, limited_to,
-                published_at
+                published_at, admission, registration
             FROM events WHERE event_id = ?"#,
             event_id_str
         )
@@ -580,6 +598,8 @@ impl LoadStorePeered for EventAll {
                 .transpose()
                 .map_err(|e| anyhow::anyhow!("Invalid ticketing_begins TimeString: {}", e))?,
             ticket_url: event_row.ticket_url,
+            registration: Registration::parse(&event_row.registration),
+            admission: Admission::parse(&event_row.admission),
             cost: event_row.cost,
             limited_to: event_row.limited_to,
             outcomes_label: event_row.outcomes_label,

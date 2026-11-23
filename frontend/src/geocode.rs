@@ -49,8 +49,8 @@ pub async fn locate(parts: &[&str]) -> Option<Point> {
 }
 
 /// Where a place is, as a GeoJSON point: from its whole address first, then,
-/// when that finds nowhere (a street the geocoder doesn't know, or words typed
-/// as the address), from its zip and locality alone.
+/// when that finds nowhere (a street the geocoder doesn't know), from its zip
+/// and locality alone.
 pub async fn geocode_address(
     address: &str,
     city: &str,

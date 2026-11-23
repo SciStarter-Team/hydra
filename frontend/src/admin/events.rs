@@ -25,6 +25,7 @@ pub fn routes() -> Route {
         .at("/", get(events))
         .at("/search", get(events_search))
         .at("/:id", get(events_edit).delete(events_delete))
+        .at("/:id/raw", get(events_edit_raw))
         .at("/:id/field/:field", put(events_update_field))
 }
 
@@ -43,7 +44,7 @@ pub struct AdminEvent {
     pub event_types: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AdminEventFull {
     pub id: String,
     pub name: String,
@@ -53,8 +54,6 @@ pub struct AdminEventFull {
     pub description: String,
     pub presenter: String,
     pub url: String,
-    pub ticket_url: String,
-    pub cost: String,
     pub limited_to: String,
     pub image: String,
     pub image_credit: String,
@@ -91,8 +90,6 @@ impl AdminEventFull {
             description: event.description,
             presenter: event.presenter,
             url: event.url,
-            ticket_url: event.ticket_url,
-            cost: event.cost,
             limited_to: event.limited_to,
             image: event.image,
             image_credit: event.image_credit,
@@ -137,9 +134,6 @@ async fn fetch_events_page(
         location_name: String,
         event_types: Option<String>,
         entirely_online: bool,
-        location_type: String,
-        latitude: Option<f64>,
-        longitude: Option<f64>,
         next_instance_begin: Option<String>,
         instance_count: i64,
         is_currently_ongoing: i32,
@@ -151,7 +145,7 @@ async fn fetch_events_page(
         query.push(
             "SELECT e.event_id, e.name, e.created, e.location_name,
                     (SELECT group_concat(n.name, ', ' ORDER BY n.rank, n.position, n.name) FROM event_type_names n WHERE n.target = e.event_id) as event_types,
-                    e.entirely_online, e.location_type, ST_Y(e.point) AS latitude, ST_X(e.point) AS longitude,
+                    e.entirely_online,
                     MIN(CASE WHEN ei.begin > datetime('now') THEN ei.begin END) as next_instance_begin,
                     COUNT(ei.begin) as instance_count,
                     CASE WHEN EXISTS(SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.begin <= datetime('now') AND ei2.end > datetime('now')) THEN 1 ELSE 0 END as is_currently_ongoing
@@ -165,7 +159,7 @@ async fn fetch_events_page(
         query.push(
             "SELECT e.event_id, e.name, e.created, e.location_name,
                     (SELECT group_concat(n.name, ', ' ORDER BY n.rank, n.position, n.name) FROM event_type_names n WHERE n.target = e.event_id) as event_types,
-                    e.entirely_online, e.location_type, ST_Y(e.point) AS latitude, ST_X(e.point) AS longitude,
+                    e.entirely_online,
                     MIN(CASE WHEN ei.begin > datetime('now') THEN ei.begin END) as next_instance_begin,
                     COUNT(ei.begin) as instance_count,
                     CASE WHEN EXISTS(SELECT 1 FROM event_instances ei2 WHERE ei2.event_id = e.event_id AND ei2.begin <= datetime('now') AND ei2.end > datetime('now')) THEN 1 ELSE 0 END as is_currently_ongoing
@@ -196,10 +190,14 @@ async fn fetch_events_page(
     query.push_bind(offset);
 
     let event_rows = query.build_query_as::<EventRow>().fetch_all(db()).await?;
+    // Each event's times are on its venue's clocks, as on its page.
+    let mut zones =
+        crate::event::zone::of_events(event_rows.iter().map(|row| row.event_id.as_str())).await?;
 
     let admin_events = event_rows
         .into_iter()
         .map(|row| {
+            let zone = zones.remove(&row.event_id);
             let location = if row.entirely_online {
                 "Online".to_string()
             } else {
@@ -217,12 +215,7 @@ async fn fetch_events_page(
                 instances: row.instance_count as u32,
                 is_ongoing,
                 next_instance,
-                zone: crate::event::zone::of_venue(
-                    row.latitude,
-                    row.longitude,
-                    &row.location_type,
-                    row.entirely_online,
-                ),
+                zone,
                 location,
                 event_types: row.event_types.unwrap_or_default(),
             }
@@ -457,51 +450,99 @@ async fn events_search(
         .body(html))
 }
 
-#[derive(Debug)]
-struct EditEventPage {
-    event: AdminEventFull,
+/// Which of the event's two admin editors a page is.
+enum EditEventPage {
+    /// The event page's own editors, with what staff alone change.
+    Editors(EditEventContent),
+    /// Each of the event's columns, set directly.
+    Raw(EditEventRawContent),
 }
 
-impl Component for EditEventPage {
-    type Param = Option<Arc<BasicInfo>>;
-    type Prepared = AdminLayoutPrepared<EditEventContent>;
+impl EditEventPage {
+    /// The editor `raw` or not of the event `event_id`, as it now stands.
+    async fn load(event_id: Ulid, raw: bool) -> anyhow::Result<Self> {
+        let event_all = crate::event::all::EventAll::load(event_id).await?;
+        let event = AdminEventFull::from_event_all(event_all).await?;
+        Ok(if raw {
+            EditEventPage::Raw(EditEventRawContent { event })
+        } else {
+            let editors = crate::component::detail_page_edit::EventEditors::load(event_id).await?;
+            EditEventPage::Editors(EditEventContent { event, editors })
+        })
+    }
 
-    async fn prepare(self, user_info: Self::Param) -> anyhow::Result<Self::Prepared> {
-        let title = self.event.name.clone();
-        let content = EditEventContent { event: self.event };
-
-        AdminLayout::new(&format!("Edit Event: {}", title), content)
-            .with_breadcrumb("Events", Some("/-admin/events"))
-            .with_breadcrumb_short(&title, "Event", None)
-            .with_sidebar_active("events")
-            .prepare(user_info)
-            .await
+    async fn into_response(
+        self,
+        user_info: Option<Arc<BasicInfo>>,
+    ) -> anyhow::Result<poem::Response> {
+        match self {
+            EditEventPage::Editors(content) => {
+                let title = content.event.name.clone();
+                Ok(AdminLayout::new(&format!("Edit Event: {title}"), content)
+                    .with_breadcrumb("Events", Some("/-admin/events"))
+                    .with_breadcrumb_short(&title, "Event", None)
+                    .with_sidebar_active("events")
+                    .with_quill()
+                    .with_event_editors()
+                    .into_response(user_info)
+                    .await?)
+            }
+            EditEventPage::Raw(content) => {
+                let title = content.event.name.clone();
+                let id = content.event.id.clone();
+                Ok(AdminLayout::new(&format!("Raw Fields: {title}"), content)
+                    .with_breadcrumb("Events", Some("/-admin/events"))
+                    .with_breadcrumb_short(&title, "Event", Some(&format!("/-admin/events/{id}")))
+                    .with_breadcrumb("Raw fields", None)
+                    .with_sidebar_active("events")
+                    .into_response(user_info)
+                    .await?)
+            }
+        }
     }
 }
 
-#[derive(Debug, TemplateOnce)]
+#[derive(TemplateOnce)]
 #[template(path = "admin/edit_event_content.stpl.html")]
 struct EditEventContent {
     event: AdminEventFull,
+    editors: crate::component::detail_page_edit::EventEditors,
 }
 
+#[derive(TemplateOnce)]
+#[template(path = "admin/edit_event_raw_content.stpl.html")]
+struct EditEventRawContent {
+    event: AdminEventFull,
+}
+
+fn parse_event_id(event_id: &str) -> anyhow::Result<Ulid> {
+    event_id
+        .parse::<Ulid>()
+        .map_err(|_| anyhow::anyhow!("Invalid event ID format"))
+}
+
+/// GET `/-admin/events/:id`: the event page's editors of the event.
 #[handler]
 async fn events_edit(
     Path(event_id): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> Result<poem::Response, anyhow::Error> {
-    // Parse event ID and load real event data
-    let event_ulid = event_id
-        .parse::<Ulid>()
-        .map_err(|_| anyhow::anyhow!("Invalid event ID format"))?;
+    EditEventPage::load(parse_event_id(&event_id)?, false)
+        .await?
+        .into_response(user_info)
+        .await
+}
 
-    // Load EventAll from database and convert to AdminEventFull
-    let event_all = crate::event::all::EventAll::load(event_ulid).await?;
-    let event = AdminEventFull::from_event_all(event_all).await?;
-
-    let edit_event_page = EditEventPage { event };
-
-    Ok(edit_event_page.into_response(user_info).await?)
+/// GET `/-admin/events/:id/raw`: the event's columns, to set directly.
+#[handler]
+async fn events_edit_raw(
+    Path(event_id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> Result<poem::Response, anyhow::Error> {
+    EditEventPage::load(parse_event_id(&event_id)?, true)
+        .await?
+        .into_response(user_info)
+        .await
 }
 
 #[handler]
@@ -578,8 +619,6 @@ async fn events_update_field(
         "description" => EventFieldValue::Description(form_value),
         "presenter" => EventFieldValue::Presenter(form_value),
         "url" => EventFieldValue::Url(form_value),
-        "ticket_url" => EventFieldValue::TicketUrl(form_value),
-        "cost" => EventFieldValue::Cost(form_value),
         "limited_to" => EventFieldValue::limited_to(&form_value),
         "image" => EventFieldValue::Image(form_value),
         "image_credit" => EventFieldValue::ImageCredit(form_value),
@@ -615,4 +654,147 @@ async fn events_update_field(
     }
 
     Ok(poem::Response::builder().content_type("text/html").body(""))
+}
+
+#[cfg(test)]
+mod tests {
+    use assert2::check;
+
+    use super::*;
+    use crate::component::detail_page::DetailPageKind;
+    use crate::component::detail_page_edit::{
+        EventAdmissionDisplay, EventAttendanceDisplay, EventEditors, EventLocationDisplay,
+        EventPartOfDisplay, EventRegistrationDisplay, FieldDisplay, InstancesDisplay,
+        ManagersDisplay,
+    };
+
+    const ID: &str = "00000000000000000000000000";
+
+    fn event() -> AdminEventFull {
+        AdminEventFull {
+            id: ID.to_string(),
+            name: "Bioblitz".to_string(),
+            ..AdminEventFull::default()
+        }
+    }
+
+    fn field(field_type: &str) -> FieldDisplay {
+        FieldDisplay::build(
+            ID.to_string(),
+            field_type,
+            DetailPageKind::Event,
+            String::new(),
+            true,
+            String::new(),
+            true,
+        )
+    }
+
+    /// The editors of an event that has nothing set, open to staff.
+    fn editors() -> EventEditors {
+        EventEditors {
+            fields: EventEditors::FIELDS
+                .iter()
+                .map(|&name| (name, field(name)))
+                .collect(),
+            location: EventLocationDisplay::new(
+                ID.to_string(),
+                true,
+                field,
+                "",
+                false,
+                false,
+                false,
+                None,
+            ),
+            instances: InstancesDisplay::new(ID, Box::new([]), true, None),
+            registration: EventRegistrationDisplay::new(
+                ID.to_string(),
+                true,
+                Default::default(),
+                None,
+                &[],
+            ),
+            admission: EventAdmissionDisplay::new(ID.to_string(), true, Default::default()),
+            attendance: EventAttendanceDisplay::new(
+                ID.to_string(),
+                true,
+                String::new(),
+                Vec::new(),
+            ),
+            part_of: EventPartOfDisplay::new(ID.to_string(), true, true, None, None),
+            managers: ManagersDisplay {
+                target_id: ID.to_string(),
+                managers: Vec::new(),
+                can_edit: true,
+                error: None,
+            },
+        }
+    }
+
+    fn editor_page() -> String {
+        EditEventContent {
+            event: event(),
+            editors: editors(),
+        }
+        .render_once()
+        .unwrap()
+    }
+
+    #[test]
+    fn staff_edit_everything_the_event_page_does_with_its_own_editors() {
+        let html = editor_page();
+        for name in EventEditors::FIELDS {
+            check!(html.contains(&format!(r#"id="field-{name}""#)), "{name}");
+        }
+        for part in [
+            "location",
+            "instances",
+            "registration",
+            "admission",
+            "attendance",
+            "part_of",
+        ] {
+            check!(html.contains(&format!("/-detail/{ID}/{part}")), "{part}");
+        }
+        check!(html.contains(&format!("/-detail/{ID}/managers")));
+    }
+
+    #[test]
+    fn the_editors_page_sets_no_column_directly_but_what_staff_alone_change() {
+        let html = editor_page();
+        let raw_fields = html
+            .match_indices(&format!("/-admin/events/{ID}/field/"))
+            .map(|(at, prefix)| {
+                let rest = &html[at + prefix.len()..];
+                &rest[..rest.find('"').unwrap()]
+            })
+            .collect::<Vec<_>>();
+        check!(raw_fields == ["admin_notes", "flagged"]);
+        check!(html.contains(&format!(r#"href="/-admin/events/{ID}/raw""#)));
+    }
+
+    #[test]
+    fn the_raw_page_sets_the_columns_directly() {
+        let html = EditEventRawContent { event: event() }
+            .render_once()
+            .unwrap();
+        for column in [
+            "name",
+            "description",
+            "how_to_join",
+            "location_type",
+            "also_online",
+            "address",
+            "image",
+            "image_credit",
+        ] {
+            check!(
+                html.contains(&format!(r#"hx-put="/-admin/events/{ID}/field/{column}""#)),
+                "{column}"
+            );
+        }
+        check!(html.contains(&format!(r#"href="/-admin/events/{ID}""#)));
+        check!(!html.contains("/-detail/"));
+    }
 }

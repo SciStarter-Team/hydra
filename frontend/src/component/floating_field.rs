@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use sailfish::TemplateOnce;
 
 /// A single-value form field whose label sits inside its box: large, in the
@@ -25,8 +27,9 @@ pub struct FloatingField {
     waived: bool,
     icon: Option<FieldIcon>,
     autocomplete: Option<&'static str>,
-    description_id: Option<&'static str>,
-    invalid: bool,
+    description_id: Option<Cow<'static, str>>,
+    /// The id of the message telling the field's problem, when it has one.
+    problem: Option<String>,
     limit: Option<usize>,
     hint: Option<&'static str>,
 }
@@ -49,7 +52,7 @@ impl FloatingField {
             icon: None,
             autocomplete: None,
             description_id: None,
-            invalid: false,
+            problem: None,
             limit: None,
             hint: None,
         }
@@ -67,12 +70,13 @@ impl FloatingField {
         self
     }
 
-    /// Require the field unless `answered_elsewhere`: it is one of a group
-    /// of fields any of which will do, and another of them has a value. The
-    /// group's script requires it again once none does.
-    pub fn required_unless(mut self, answered_elsewhere: bool) -> Self {
+    /// Require the field unless `waived` for now: it is required only while
+    /// something else on the page says so (no other field of a group that
+    /// any will do for has a value, or an answer asks for it), which the
+    /// page's script follows, requiring it again once it does.
+    pub fn required_unless(mut self, waived: bool) -> Self {
         self.required = true;
-        self.waived = answered_elsewhere;
+        self.waived = waived;
         self
     }
 
@@ -90,8 +94,8 @@ impl FloatingField {
 
     /// The id of the element giving guidance about the field (a help line
     /// written beside it), which assistive software reads with the field.
-    pub fn described_by(mut self, id: &'static str) -> Self {
-        self.description_id = Some(id);
+    pub fn described_by(mut self, id: impl Into<Cow<'static, str>>) -> Self {
+        self.description_id = Some(id.into());
         self
     }
 
@@ -128,32 +132,35 @@ impl FloatingField {
         format!("{}-count", self.id.as_deref().unwrap_or(&self.name))
     }
 
-    /// Mark the field invalid when `error` is about it.
-    pub fn errors(mut self, error: Option<&FormError>) -> Self {
-        self.invalid = error.is_some_and(|e| e.is_about(&self.name));
+    /// Mark the field invalid when one of `errors` is about it.
+    pub fn errors(mut self, errors: &FormErrors) -> Self {
+        self.problem = errors.described_by(&self.name);
         self
     }
 
-    /// The ids the control's `aria-describedby` lists: the form's error
-    /// message when that is about this field, then its guidance, then its
-    /// character count.
+    fn invalid(&self) -> bool {
+        self.problem.is_some()
+    }
+
+    /// The ids the control's `aria-describedby` lists: its problem's message
+    /// when it has one, then its guidance, then its character count.
     fn description_ids(&self) -> String {
-        let error = self.invalid.then_some(FormError::ELEMENT_ID.to_string());
         let counter = self.limit.map(|_| self.counter_id());
-        error
+        self.problem
+            .clone()
             .into_iter()
-            .chain(self.description_id.map(str::to_string))
+            .chain(self.description_id.as_deref().map(str::to_string))
             .chain(counter)
             .collect::<Vec<_>>()
             .join(" ")
     }
 }
 
-/// Why a submitted form was refused: a message for the visitor and, where the
-/// problem is one control's, that control's `name`, with any others it
-/// implicates (either of which would fix it). The form shows the message once,
-/// at its top (element id [`FormError::ELEMENT_ID`], focused on load), and
-/// marks each control it is about `aria-invalid`, described by the message.
+/// One thing wrong with a submitted form: a message for the visitor and, where
+/// the problem is one control's, that control's `name`, with any others it
+/// implicates (either of which would fix it). The message is shown in an
+/// element of its own ([`FormError::id`]), which describes each control it is
+/// about, and those controls are marked `aria-invalid`.
 #[derive(Debug, Clone)]
 pub struct FormError {
     pub message: String,
@@ -162,7 +169,12 @@ pub struct FormError {
 }
 
 impl FormError {
+    /// The id of the notice at the top of a form listing its problems
+    /// ([`FormErrorNotice`]).
     pub const ELEMENT_ID: &'static str = "form-error";
+
+    /// The id of a problem about the submission as a whole.
+    const GENERAL_ID: &'static str = "form-problem";
 
     /// An error about the control named `field`.
     pub fn at(field: impl Into<String>, message: impl Into<String>) -> Self {
@@ -192,6 +204,113 @@ impl FormError {
     /// names, or another it implicates.
     pub fn is_about(&self, field: &str) -> bool {
         self.field.as_deref() == Some(field) || self.also.iter().any(|also| also == field)
+    }
+
+    /// Whether this error is about the submission as a whole, no control's.
+    pub fn is_general(&self) -> bool {
+        self.field.is_none()
+    }
+
+    /// The id of the element showing the message, which describes the
+    /// controls it is about: named for the control it is told under, so that
+    /// it stays the same while the form's rows are renumbered (`-problem`
+    /// ends every one, which is how a page's script knows them).
+    pub fn id(&self) -> String {
+        match &self.field {
+            Some(field) => format!("{field}-problem"),
+            None => Self::GENERAL_ID.to_string(),
+        }
+    }
+}
+
+/// Everything wrong with a submitted form, in the order its checks find
+/// them, which is the order of the page, as orrery's event form finds them.
+/// Only a control's first problem is told: one fixed, the next shows.
+#[derive(Debug, Clone, Default)]
+pub struct FormErrors(Vec<FormError>);
+
+impl FormErrors {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Tell `error`, unless the control it is told under has a problem told
+    /// already.
+    pub fn push(&mut self, error: FormError) {
+        let told = error.field.as_deref().is_some_and(|field| {
+            self.0
+                .iter()
+                .any(|told| told.field.as_deref() == Some(field))
+        });
+        if !told {
+            self.0.push(error);
+        }
+    }
+
+    /// The value `checked` comes to, or `None` once what's wrong with it is
+    /// told.
+    pub fn take<T>(&mut self, checked: Result<T, FormError>) -> Option<T> {
+        checked.map_err(|error| self.push(error)).ok()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, FormError> {
+        self.0.iter()
+    }
+
+    /// The problem the control named `field` is marked with: the first told
+    /// under it or implicating it.
+    pub fn about(&self, field: &str) -> Option<&FormError> {
+        self.0.iter().find(|error| error.is_about(field))
+    }
+
+    /// The id of the message describing the control named `field`, when it
+    /// has a problem.
+    pub fn described_by(&self, field: &str) -> Option<String> {
+        self.about(field).map(FormError::id)
+    }
+
+    /// Whether the control named `field` has a problem.
+    pub fn is_about(&self, field: &str) -> bool {
+        self.about(field).is_some()
+    }
+
+    /// The first problem told, as a form that shows one at a time shows it.
+    pub fn first(&self) -> Option<&FormError> {
+        self.0.first()
+    }
+
+    /// `Ok(())` when nothing is wrong, and otherwise everything that is.
+    pub fn into_result(self) -> Result<(), FormErrors> {
+        if self.is_empty() { Ok(()) } else { Err(self) }
+    }
+}
+
+impl From<FormError> for FormErrors {
+    fn from(error: FormError) -> Self {
+        FormErrors(vec![error])
+    }
+}
+
+impl From<Option<FormError>> for FormErrors {
+    fn from(error: Option<FormError>) -> Self {
+        FormErrors(error.into_iter().collect())
+    }
+}
+
+impl<'a> IntoIterator for &'a FormErrors {
+    type Item = &'a FormError;
+    type IntoIter = std::slice::Iter<'a, FormError>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
@@ -235,14 +354,26 @@ pub enum FieldIcon {
     Clock,
 }
 
-/// Where a refused form says why: the message at the top of the form, focused
-/// when the page loads so that it is the first thing read and the first thing
-/// seen. (Focus, not `role="alert"`: an alert present at load isn't reliably
-/// announced, and one that is would be read twice once focused.)
+/// Where a refused form says why: a notice at the top of the form listing
+/// its problems, each a button that takes the visitor to the control it
+/// describes, focused when the page loads so that it is the first thing read
+/// and the first thing seen. (Focus, not `role="alert"`: an alert present at
+/// load isn't reliably announced, and one that is would be read twice once
+/// focused.) With more than one problem, it says what they are first, for
+/// the `noun` the form adds or saves.
 #[derive(TemplateOnce)]
 #[template(path = "site/form_error_notice.stpl.html")]
 pub struct FormErrorNotice<'a> {
-    pub error: Option<&'a FormError>,
+    pub errors: &'a FormErrors,
+    pub noun: &'a str,
+}
+
+/// A refused change's problems, told in a form that changes one part of a
+/// page, each in the element that describes its controls.
+#[derive(TemplateOnce)]
+#[template(path = "site/form_error_messages.stpl.html")]
+pub struct FormErrorMessages<'a> {
+    pub errors: &'a FormErrors,
 }
 
 #[cfg(test)]
@@ -259,14 +390,14 @@ mod tests {
 
         let named = FloatingField::new(FieldKind::Text, "name", "Name", "")
             .described_by("name-help")
-            .errors(Some(&error))
+            .errors(&FormErrors::from(error.clone()))
             .render_once()
             .unwrap();
         assert!(named.contains(r#"aria-invalid="true""#));
-        assert!(named.contains(r#"aria-describedby="form-error name-help""#));
+        assert!(named.contains(r#"aria-describedby="name-problem name-help""#));
 
         let other = FloatingField::new(FieldKind::Text, "description", "Details", "")
-            .errors(Some(&error))
+            .errors(&FormErrors::from(error.clone()))
             .render_once()
             .unwrap();
         assert!(!other.contains("aria-invalid"));
@@ -299,9 +430,61 @@ mod tests {
     fn general_errors_mark_no_field() {
         let error = FormError::general("Something went wrong.");
         let field = FloatingField::new(FieldKind::Text, "name", "Name", "")
-            .errors(Some(&error))
+            .errors(&FormErrors::from(error.clone()))
             .render_once()
             .unwrap();
         assert!(!field.contains("aria-invalid"));
+    }
+
+    /// Every problem is told, in the order found, but only a control's
+    /// first; a control another implicates is marked with that one.
+    #[test]
+    fn a_control_has_its_first_problem_told() {
+        let mut errors = FormErrors::new();
+        errors.push(FormError::at("name", "Please enter a name."));
+        errors.push(FormError::at("how_to_join", "Please explain how.").also("url"));
+        errors.push(FormError::at("name", "Please shorten the name."));
+        errors.push(FormError::at("url", "Please check the webpage."));
+
+        let told = errors
+            .iter()
+            .map(|e| e.message.as_str())
+            .collect::<Vec<_>>();
+        check!(
+            told == [
+                "Please enter a name.",
+                "Please explain how.",
+                "Please check the webpage."
+            ]
+        );
+        check!(errors.described_by("url") == Some("how_to_join-problem".to_string()));
+        check!(errors.described_by("description") == None);
+    }
+
+    /// The notice lists the problems, each in the element that describes
+    /// its control, saying what they are first only when there are several.
+    #[test]
+    fn the_notice_lists_every_problem() {
+        let notice = |errors: &FormErrors| {
+            FormErrorNotice {
+                errors,
+                noun: "event",
+            }
+            .render_once()
+            .unwrap()
+        };
+        check!(notice(&FormErrors::new()).trim().is_empty());
+
+        let mut errors = FormErrors::from(FormError::at("name", "Please enter a name."));
+        let one = notice(&errors);
+        check!(one.contains(
+            r#"<li id="name-problem"><button type="button">Please enter a name.</button></li>"#
+        ));
+        check!(!one.contains("Please fix these"));
+
+        errors.push(FormError::general("Something went wrong."));
+        let two = notice(&errors);
+        check!(two.contains("Please fix these before submitting your event:"));
+        check!(two.contains(r#"<li id="form-problem">Something went wrong.</li>"#));
     }
 }

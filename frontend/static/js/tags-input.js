@@ -3,6 +3,17 @@
 // autocomplete suggestions come from the server via HTMX. Pills get a stable
 // hash-based color. Auto-inits every [data-tag-input].
 (function () {
+  // A tag in the one form it's stored in: without surrounding space and the
+  // `#` people write for a hashtag, lowercased; the same rule as
+  // `normalize_tag` in common::message::user, so the pills show the tags as
+  // they'll be saved.
+  function normalize(tag) {
+    var bare = String(tag || "").trim();
+    while (bare.charAt(0) === "#") bare = bare.slice(1);
+    while (bare.charAt(bare.length - 1) === "#") bare = bare.slice(0, -1);
+    return bare.toLowerCase();
+  }
+
   function hue(s) {
     var h = 0;
     for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; }
@@ -53,20 +64,38 @@
       hidden.value = tags.join(",");
     }
 
-    function add(tag) {
-      tag = (tag || "").trim();
-      var added = tag && tags.indexOf(tag) === -1;
-      if (added) tags.push(tag);
-      input.value = "";
+    // Adds each of `words` the set doesn't have yet, and says which.
+    function addAll(words) {
+      var added = [];
+      words.forEach(function (tag) {
+        tag = normalize(tag);
+        if (tag && tags.indexOf(tag) === -1 && added.indexOf(tag) === -1) added.push(tag);
+      });
+      tags = tags.concat(added);
       if (suggestions) suggestions.innerHTML = "";
       render();
-      if (added) announce("Added tag " + tag);
+      if (added.length === 1) announce("Added tag " + added[0]);
+      else if (added.length > 1) announce("Added tags " + added.join(", "));
+    }
+
+    function add(tag) {
+      input.value = "";
+      addAll([tag]);
       // A picked suggestion button is gone; carry on from the tag input.
       input.focus();
     }
 
     input.addEventListener("keydown", function (e) {
       if (e.key === "Enter") { e.preventDefault(); add(input.value); }
+    });
+    // A comma ends a tag, typed or pasted: tags are saved comma-separated,
+    // so no tag can hold one. What follows the last comma is still being
+    // typed.
+    input.addEventListener("input", function () {
+      if (input.value.indexOf(",") < 0) return;
+      var parts = input.value.split(",");
+      input.value = parts.pop().replace(/^\s+/, "");
+      addAll(parts);
     });
     if (suggestions) {
       suggestions.addEventListener("click", function (e) {

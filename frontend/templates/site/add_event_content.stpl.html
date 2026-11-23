@@ -1,219 +1,126 @@
-<% use crate::component::floating_field::{FieldIcon, FieldKind, FloatingField}; %>
-<% use crate::add::{SectionIcon, SectionSummary}; %>
-<% use crate::component::{date_row::{DateRowFields, RepeatChip}, timezone_field::TimezoneField}; %>
-<% let error = self.error.as_ref(); %>
-<% let repeating = self.values.repeat_frequency != "once"; %>
+<% use crate::component::floating_field::{FieldKind, FloatingField}; %>
+<% use crate::component::date_row::DateRowFields; %>
+<% let errors = &self.errors; %>
+<% let online = self.values.location_mode == "online"; %>
 <div class="ss-container !pt-8 !pb-12 mx-auto">
-  <div class="add-form-shell">
-    <h1 class="add-form-title">Add an Event</h1>
+  <div class="add-form-shell add-form-single">
+    <h1 class="add-form-title">Add Your Event</h1>
 
     <%+ crate::add::ExchangeNotice { exchange: self.exchange.as_ref(), publishes: self.publishes, noun: "event", path: "/add/event", oob: false } %>
 
-    <%+ crate::component::floating_field::FormErrorNotice { error } %>
+    <%+ crate::component::floating_field::FormErrorNotice { errors, noun: "event" } %>
 
     <%# `novalidate`: every check, required fields among them, is the
         server's own (`validate_and_build`), so a refusal always looks the
         same, with the notice above and the field outlined. The `required`
         attributes stay for assistive technology and the empty-select label
-        styling. %>
+        styling.
+
+        The sections are orrery's event form's (Darlene's "Add Your Event"
+        round), in its order, each open under its heading. Fields that only
+        some answers need appear under the answer that needs them. %>
     <form method="post" action="/add/event" class="add-form" novalidate>
       <input type="hidden" id="submission-exchange-field" name="exchange" value="<%= &self.values.exchange %>">
       <p class="field-help add-area-note">Fields marked <span aria-hidden="true">*</span> are required.</p>
 
-      <%# The groups below are the columns of the desktop layout (the image,
-          and the name, when and where); on a phone they stack in this same
-          order. %>
-      <div class="add-area add-area-image">
-        <%+ self.image %>
-      </div>
+      <section class="add-section" aria-labelledby="add-section-about">
+        <h2 id="add-section-about" class="add-section-title">About your event</h2>
 
-      <%# The name, when and where, in the order of Facebook's event form. %>
-      <div class="add-area add-area-main">
-        <%+ FloatingField::new(FieldKind::Text, "name", "Event name", self.values.name.as_str()).id("event-name").required().limit(crate::event::rules::NAME_LIMIT).errors(error) %>
+        <%+ FloatingField::new(FieldKind::Text, "name", "Event name", self.values.name.as_str()).id("event-name").hint("Enter event name").required().limit(crate::event::rules::NAME_LIMIT).errors(errors) %>
+
+        <div class="add-stack">
+          <%+ self.image %>
+        </div>
+
+        <div>
+          <%+ FloatingField::new(FieldKind::TextArea { rows: 4 }, "description", "Event description", self.values.description.as_str()).id("event-description").required().described_by("description-help").errors(errors) %>
+          <p id="description-help" class="field-help">What is your event about? What will people learn or do? Why should they attend?</p>
+        </div>
+
+        <div>
+          <%+ FloatingField::new(FieldKind::Text, "presenter", crate::event::PRESENTER_LABEL, self.values.presenter.as_str()).hint("Organization name").described_by("presenter-help") %>
+          <p id="presenter-help" class="field-help">Who is hosting this event? This information will appear publicly.</p>
+        </div>
+      </section>
+
+      <section class="add-section" aria-labelledby="add-section-when">
+        <h2 id="add-section-when" class="add-section-title">When and where</h2>
 
         <div id="instances">
           <% for (i, inst) in self.values.instances.iter().enumerate() { %>
             <fieldset class="instance-row">
-              <legend class="sr-only instance-legend">Date and time <%= i + 1 %></legend>
-              <%# Repetition repeats every date, so it's offered under the
-                  first alone. %>
-              <% let row = DateRowFields::new(format!("instances[{i}]"), inst.clone()).errors(error); %>
-              <% if i == 0 { %>
-              <%+ row.with_repeat(RepeatChip { shown: repeating }) %>
-              <% } else { %>
-              <%+ row %>
-              <% } %>
+              <legend class="sr-only instance-legend">Event date and time <%= i + 1 %></legend>
+              <%# Each date/time repeats on its own. %>
+              <%+ DateRowFields::new(format!("instances[{i}]"), inst.row.clone()).with_repeat(inst.repetition.clone()).errors(errors) %>
 
               <button type="button" class="link-btn remove-instance" aria-label="Remove date and time <%= i + 1 %>" <% if i == 0 { %>hidden<% } %>>Remove this date</button>
             </fieldset>
           <% } %>
         </div>
 
-        <%# Repetition, for every date above, once "Repeat event" is chosen
-            (or the event repeats already); "Repeat until" appears once
-            there's something to repeat. %>
-        <div class="space-y-2" data-repeat <% if !repeating { %>hidden<% } %>>
-          <div class="field-pair">
-            <div class="pill-field">
-              <label class="pill-body">
-                <span class="pill-label">Repeat</span>
-                <select name="repeat_frequency"<% if repeating { %> aria-describedby="repeat-help"<% } %>>
-                  <option value="once" <% if !repeating { %>selected<% } %>>Never</option>
-                  <option value="daily" <% if self.values.repeat_frequency == "daily" { %>selected<% } %>>Daily</option>
-                  <option value="weekly" <% if self.values.repeat_frequency == "weekly" { %>selected<% } %>>Weekly</option>
-                  <option value="biweekly" <% if self.values.repeat_frequency == "biweekly" { %>selected<% } %>>Every 2 weeks</option>
-                  <option value="monthly" <% if self.values.repeat_frequency == "monthly" { %>selected<% } %>>Monthly</option>
-                </select>
-              </label>
-            </div>
-            <div data-repeat-only <% if !repeating { %>hidden<% } %>>
-              <%+ FloatingField::new(FieldKind::Date, "repeat_until", "Repeat until", self.values.repeat_until.as_str()).icon(FieldIcon::Calendar).required().described_by("repeat-help").errors(error) %>
-            </div>
-          </div>
-          <p id="repeat-help" class="field-help" data-repeat-only <% if !repeating { %>hidden<% } %>>Each date/time above repeats at this frequency through the &ldquo;repeat until&rdquo; date.</p>
-          <button type="button" class="link-btn" data-repeat-off>Don&rsquo;t repeat</button>
-        </div>
-
         <button type="button" id="add-instance" class="link-btn">+ Add another date/time</button>
 
         <%+ self.location %>
-      </div>
+      </section>
 
-      <div class="add-area add-area-details">
-        <%+ FloatingField::new(FieldKind::TextArea { rows: 4 }, "description", "What are the details?", self.values.description.as_str()).id("event-description").required().described_by("review-note").errors(error) %>
+      <%# Everyone is welcome unless the organizer says otherwise; an event
+          for a specific audience names it, which the event page and the
+          finder's cards show, and what ages it suits. Asked straight after
+          when and where, as Darlene's latest review places it. %>
+      <section class="add-section" aria-labelledby="add-section-who">
+        <h2 id="add-section-who" class="add-section-title">Who can participate?<span class="pill-required" aria-hidden="true"> *</span></h2>
+        <%+ crate::component::event_answers::AttendanceFields { attendance: self.values.attendance, limited_to: &self.values.limited_to, ages: self.audience, legend_shown: false, errors } %>
+      </section>
 
-        <p id="review-note" class="field-help">Your event will be reviewed by SciStarter staff before it appears on the public calendar.</p>
+      <%# The logistics, as the description is the content and appeal. %>
+      <section class="add-section" aria-labelledby="add-section-participate">
+        <h2 id="add-section-participate" class="add-section-title">How to participate</h2>
+        <div>
+          <%+ FloatingField::new(FieldKind::TextArea { rows: 4 }, "how_to_join", "How to participate", self.values.how_to_join.as_str()).described_by("how-to-join-help how-to-join-example").errors(errors) %>
+          <p id="how-to-join-help" class="field-help">Tell attendees how to join, where to go, what to bring, or anything else they should know before the event.<span data-online-only <% if !online { %>hidden<% } %>> For a virtual event, include the link people join at, or where they get it.</span></p>
+          <p id="how-to-join-example" class="field-help field-example">Example: Meet at the library entrance 10 minutes early. Bring comfortable walking shoes and a smartphone if you have one.</p>
+        </div>
+      </section>
 
-        <%# A virtual event joined by instructions has them asked above, as
-            its answer to how people join; js/location-picker.js moves what
-            was typed between the two, and keeps this one from submitting
-            while it's asked there. %>
-        <% let instructions_above = self.values.location_mode == "online" && self.values.virtual_join == "other"; %>
-        <fieldset class="border-0 p-0 m-0" data-instructions-below <% if instructions_above { %>hidden disabled<% } %>>
-          <%+ FloatingField::new(FieldKind::TextArea { rows: 3 }, "how_to_join", "How to join / participate", self.values.how_to_join.as_str()).errors(error) %>
-        </fieldset>
-      </div>
+      <%# The event's webpage, and where people register or get tickets, then
+          whether they must register. Both links are always asked, since a
+          ticket link may serve an event nobody registers for. %>
+      <section class="add-section" aria-labelledby="add-section-links">
+        <h2 id="add-section-links" class="add-section-title">Event links &amp; registration</h2>
 
-      <%# The optional sections, collapsed, in the order of Facebook's form
-          (its "Market your event", "Add co-hosts" and "Add tickets"), then
-          SciStarter's own. %>
-      <div class="add-sections">
-        <%+ self.categories %>
+        <div>
+          <%+ FloatingField::new(FieldKind::Url, "url", "Event webpage", self.values.url.as_str()).hint("https://…").described_by("add-url-help").errors(errors) %>
+          <p id="add-url-help" class="field-help">Link to the official webpage with more information about this event.</p>
+        </div>
 
-        <details class="add-section" <% if !self.values.presenter.is_empty() { %>open<% } %>>
-          <%+ SectionSummary::new(SectionIcon::Presenter, "Organizer / presenter") %>
-          <div class="add-section-body">
-            <%+ FloatingField::new(FieldKind::Text, "presenter", "Organizer / presenter", self.values.presenter.as_str()).described_by("presenter-help") %>
-            <p id="presenter-help" class="field-help">Who is hosting or presenting the event, as it should appear on the event page.</p>
-          </div>
-        </details>
+        <%+ crate::component::event_answers::RegistrationFields { registration: self.values.registration, ticket_url: &self.values.ticket_url, ticketing_date: &self.values.ticketing_date, ticketing_time: &self.values.ticketing_time, ticketing_timezone: &self.values.ticketing_timezone, errors } %>
+      </section>
 
-        <details class="add-section" <% if !self.values.ticketing_date.is_empty() || !self.values.ticket_url.is_empty() || !self.values.cost.is_empty() { %>open<% } %>>
-          <%+ SectionSummary::new(SectionIcon::Ticket, "Tickets / registration") %>
-          <div class="add-section-body">
-            <p class="field-help">Add a link to an external website to get tickets or register.</p>
-            <%+ FloatingField::new(FieldKind::Url, "ticket_url", "Ticket / registration link", self.values.ticket_url.as_str()).hint("https://").errors(error) %>
-            <%+ FloatingField::new(FieldKind::Text, "cost", "Cost", self.values.cost.as_str()).described_by("cost-help").errors(error) %>
-            <p id="cost-help" class="field-help">What it costs to attend, such as &ldquo;Free&rdquo; or &ldquo;$10 suggested donation.&rdquo;</p>
-            <p id="ticketing-help" class="field-help">If tickets or registration open at a specific time, set it here.</p>
-            <div class="when-grid">
-              <%+ FloatingField::new(FieldKind::Date, "ticketing_date", "Opens on", self.values.ticketing_date.as_str()).icon(FieldIcon::Calendar).described_by("ticketing-help").errors(error) %>
-              <%+ FloatingField::new(FieldKind::Time, "ticketing_time", "Time", self.values.ticketing_time.as_str()).icon(FieldIcon::Clock) %>
-              <%+ TimezoneField::build("ticketing_timezone", &self.values.ticketing_timezone, false).errors(error) %>
-            </div>
-          </div>
-        </details>
+      <%# Admission is independent of registration: a free event may require
+          registration, and a paid one may not. The heading asks the
+          question, as "Who can participate?" does. %>
+      <section class="add-section" aria-labelledby="add-section-admission">
+        <h2 id="add-section-admission" class="add-section-title">Admission<span class="pill-required" aria-hidden="true"> *</span></h2>
 
-        <%# Not a question Facebook asks. Open to everyone unless the
-            organizer says otherwise; a restricted event says which group can
-            attend, which the event page and the finder's cards show, and what
-            ages it suits. Choosing to restrict it reveals those questions and
-            moves there; the server reads them only then. Its header has no
-            summary, which read as a dropdown. %>
-        <details class="add-section" data-attendance>
-          <%+ SectionSummary::new(SectionIcon::Audience, "Who can attend") %>
-          <div class="add-section-body">
-            <fieldset class="choice-group">
-              <legend>Who can attend?<span class="pill-required" aria-hidden="true"> *</span></legend>
-              <div class="radio-options">
-                <label class="radio-option">
-                  <input type="radio" name="attendance" value="open"<% if !self.values.limited { %> checked<% } %>>
-                  <span>Open to everyone</span>
-                </label>
-                <label class="radio-option">
-                  <input type="radio" name="attendance" value="limited"<% if self.values.limited { %> checked<% } %>>
-                  <span>Restricted to a specific group</span>
-                </label>
-                <%# Which group, asked under the answer that asks it. %>
-                <div class="radio-option-field" data-limited-only <% if !self.values.limited { %>hidden<% } %>>
-                  <%+ FloatingField::new(FieldKind::Text, "limited_to", "Which group can attend?", self.values.limited_to.as_str()).id("limited-to").required().hint("e.g., Library cardholders, Girl Scouts").limit(crate::event::rules::LIMITED_TO_LIMIT).described_by("attendance-help").errors(error) %>
-                  <p id="attendance-help" class="field-help">List any requirements for attending this event.</p>
-                </div>
-              </div>
-            </fieldset>
-            <div class="attendance-ages" data-limited-only <% if !self.values.limited { %>hidden<% } %>>
-              <%+ self.audience %>
-            </div>
-          </div>
-        </details>
+        <%+ crate::component::event_answers::AdmissionFields { admission: self.values.admission, cost: &self.values.cost, legend_shown: false, errors } %>
+      </section>
 
-        <details class="add-section" <% if !self.values.part_of.is_empty() { %>open<% } %>>
-          <%+ SectionSummary::new(SectionIcon::Umbrella, "Part of a larger event") %>
-          <div class="add-section-body">
-            <p id="part-of-help" class="field-help">If this event belongs to an umbrella event (e.g. a festival), search for and select it.</p>
-            <div class="part-of-picker flex flex-col gap-2">
-              <div class="pill-field">
-                <label class="pill-body">
-                  <span class="pill-label">Search published events</span>
-                  <input id="part-of-search" type="search" name="q" placeholder=" " autocomplete="off" aria-describedby="part-of-help"
-                    hx-get="/add/event/parent-search" hx-trigger="input changed delay:300ms, search"
-                    hx-target="#parent-results" hx-swap="innerHTML"
-                    hx-on:keydown="if (event.key === 'Enter') event.preventDefault()">
-                </label>
-              </div>
-              <div id="parent-selected" aria-live="polite">
-                <% if !self.values.part_of.is_empty() { %>
-                  <div class="flex items-center gap-2">
-                    <span>Part of: <strong><%= self.values.part_of_name %></strong></span>
-                    <button type="button" class="link-btn" aria-label="Clear the larger event"
-                      hx-on:click="document.getElementById('part-of-search').focus()"
-                      hx-get="/add/event/parent-clear" hx-target="#parent-selected" hx-swap="innerHTML">Clear</button>
-                  </div>
-                <% } %>
-              </div>
-              <div id="parent-results"></div>
-              <span id="parent-results-status" class="sr-only" role="status"></span>
-            </div>
-            <input type="hidden" name="part_of" id="part_of" value="<%= self.values.part_of %>">
-          </div>
-        </details>
+      <%# Whether it's virtual, and the kind of venue, are asked with the
+          location, and the ages with who can participate; the rest of what
+          it picks is here, with the tags that help people find it. %>
+      <section class="add-section" aria-labelledby="add-section-discover">
+        <h2 id="add-section-discover" class="add-section-title">Help people discover your event</h2>
 
-        <%# Open from the start, as staff want it filled in. %>
-        <details class="add-section" open>
-          <%+ SectionSummary::new(SectionIcon::Contact, "Organizer contact") %>
-          <div class="add-section-body" role="group" aria-label="Organizer contact" aria-describedby="contact-help">
-            <p id="contact-help" class="field-help">Who should SciStarter staff contact about this event? It isn&rsquo;t shown on the event page.</p>
-            <%+ FloatingField::new(FieldKind::Text, "contact_name", "Contact name", self.values.contact_name.as_str()).autocomplete("name").required().described_by("contact-help").errors(error) %>
-            <%# Either reaches them; an organization that publishes no address
-                may have a contact form instead. So each is required, and
-                marked so, until the other is given. %>
-            <% let has_email = !self.values.contact_email.trim().is_empty(); %>
-            <% let has_url = !self.values.contact_url.trim().is_empty(); %>
-            <div class="field-pair" data-one-required
-                 hx-on:input="var fields = this.querySelectorAll('input'); fields.forEach(function (field) { field.required = Array.prototype.every.call(fields, function (other) { return other === field || !other.value.trim(); }); })">
-              <%+ FloatingField::new(FieldKind::Email, "contact_email", "Email", self.values.contact_email.as_str()).autocomplete("email").required_unless(has_url).described_by("contact-reach-help").errors(error) %>
-              <%+ FloatingField::new(FieldKind::Url, "contact_url", "Contact form link", self.values.contact_url.as_str()).autocomplete("url").required_unless(has_email).described_by("contact-reach-help").errors(error) %>
-            </div>
-            <p id="contact-reach-help" class="field-help">Please give an email address, a link to a contact form, or both.</p>
-            <%+ FloatingField::new(FieldKind::Text, "contact_affiliation", "Affiliation", self.values.contact_affiliation.as_str()).autocomplete("organization") %>
-            <%+ FloatingField::new(FieldKind::Tel, "contact_phone", "Phone", self.values.contact_phone.as_str()).autocomplete("tel") %>
-            <%+ FloatingField::new(FieldKind::Text, "contact_address", "Mailing address", self.values.contact_address.as_str()).autocomplete("street-address") %>
-          </div>
-        </details>
-      </div>
+        <% for checkboxes in self.discover { %>
+        <%+ checkboxes %>
+        <% } %>
+
+        <%+ self.tags %>
+      </section>
 
       <div class="add-area add-area-actions">
-        <button type="submit" class="btn btn-primary add-form-submit">Create event</button>
+        <p id="review-note" class="field-help">Once you submit your event, SciStarter staff will review it before publishing it on the public calendar.</p>
+        <button type="submit" class="btn btn-primary add-form-submit" aria-describedby="review-note">Submit event for review</button>
         <a class="add-form-cancel" href="/add">Cancel</a>
       </div>
     </form>
@@ -230,49 +137,13 @@
       }
     });
 
-    // "Repeat until" and its help show only while the event repeats. The
-    // server ignores the date while it doesn't.
-    var repeat = document.querySelector("[data-repeat]");
-    var frequency = repeat.querySelector('select[name="repeat_frequency"]');
-    function repeatUntilShown() {
-      var repeating = frequency.value !== "once";
-      repeat.querySelectorAll("[data-repeat-only]").forEach(function (el) { el.hidden = !repeating; });
-      if (repeating) {
-        frequency.setAttribute("aria-describedby", "repeat-help");
-      } else {
-        frequency.removeAttribute("aria-describedby");
-      }
-    }
-    frequency.addEventListener("change", repeatUntilShown);
+    var form = document.querySelector("form.add-form");
 
-    // "Repeat event", under the first date, shows the repetition; "Don't
-    // repeat" puts it away, repeating no more. Each hides the control that
-    // was used, so focus moves to the one that takes its place.
-    var repeatToggle = document.querySelector("[data-repeat-toggle]");
-    repeatToggle.addEventListener("click", function () {
-      repeat.hidden = false;
-      repeatToggle.hidden = true;
-      frequency.focus();
-    });
-    repeat.querySelector("[data-repeat-off]").addEventListener("click", function () {
-      frequency.value = "once";
-      repeat.querySelector('input[name="repeat_until"]').value = "";
-      repeatUntilShown();
-      repeat.hidden = true;
-      repeatToggle.hidden = false;
-      repeatToggle.focus();
-    });
-
-    // Who can attend: restricting the event reveals which group can attend
-    // and what ages it suits, and moves there.
-    var attendance = document.querySelector("[data-attendance]");
-    var limitedOnly = attendance.querySelectorAll("[data-limited-only]");
-    var limitedTo = attendance.querySelector("#limited-to");
-    attendance.addEventListener("change", function (e) {
-      if (e.target.name !== "attendance") return;
-      var limited = e.target.value === "limited";
-      limitedOnly.forEach(function (part) { part.hidden = !limited; });
-      if (limited) limitedTo.focus();
+    // The guidance on how to participate says what a virtual event needs.
+    form.addEventListener("ss:location-mode", function (e) {
+      form.querySelectorAll("[data-online-only]").forEach(function (part) {
+        part.hidden = e.detail.mode !== "online";
+      });
     });
 
     // Events are added ahead of time, so dates the event itself happens on
@@ -282,7 +153,7 @@
     function isoDate(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
     var today = isoDate(new Date());
     function setMinDates(root) {
-      root.querySelectorAll('input[name$="[begin_date]"], input[name$="[end_date]"], input[name="repeat_until"]').forEach(function (input) {
+      root.querySelectorAll('input[name$="[begin_date]"], input[name$="[end_date]"], input[name$="[repeat_until]"]').forEach(function (input) {
         input.min = today;
       });
     }
@@ -301,17 +172,31 @@
     }
 
     // Keep instance rows numbered contiguously (instances[0], instances[1], ...),
-    // along with the "Date and time 2" names assistive software gives each row
-    // and its remove button, and hide the remove button when only one row
-    // remains.
+    // in their controls' names and the ids of their help, along with the
+    // "Date and time 2" names assistive software gives each row and its
+    // remove button, and hide the remove button when only one row remains.
     function renumber() {
       var rows = container.querySelectorAll(".instance-row");
       rows.forEach(function (row, i) {
+        var numbered = function (value) {
+          return value.replace(/instances\[\d+\]/g, "instances[" + i + "]");
+        };
         row.querySelectorAll("[name]").forEach(function (el) {
-          el.name = el.name.replace(/instances\[\d+\]/, "instances[" + i + "]");
+          el.name = numbered(el.name);
+        });
+        row.querySelectorAll("[id]").forEach(function (el) {
+          el.id = numbered(el.id);
+        });
+        // A problem's message (its id ends "-problem") keeps the id it was
+        // told under, which is how the notice finds the control it's about.
+        row.querySelectorAll("[aria-describedby]").forEach(function (el) {
+          var ids = el.getAttribute("aria-describedby").split(/\s+/).map(function (id) {
+            return /-problem$/.test(id) ? id : numbered(id);
+          });
+          el.setAttribute("aria-describedby", ids.join(" "));
         });
         var legend = row.querySelector(".instance-legend");
-        if (legend) legend.textContent = "Date and time " + (i + 1);
+        if (legend) legend.textContent = "Event date and time " + (i + 1);
         var rm = row.querySelector(".remove-instance");
         if (rm) {
           rm.hidden = rows.length === 1;
@@ -323,26 +208,7 @@
     document.getElementById("add-instance").addEventListener("click", function () {
       var rows = container.querySelectorAll(".instance-row");
       var clone = rows[0].cloneNode(true);
-      clone.querySelectorAll("input").forEach(function (el) {
-        if (el.type === "checkbox") { el.checked = false; } else { el.value = ""; }
-      });
-      // A refused submission's error belongs to the row it was about.
-      clone.querySelectorAll("[aria-invalid]").forEach(function (el) {
-        el.removeAttribute("aria-invalid");
-        el.removeAttribute("aria-describedby");
-      });
-      var sel = clone.querySelector("select.tz-select");
-      if (sel) {
-        sel.selectedIndex = 0;
-        delete sel.dataset.userSet;
-      }
-      // Repetition is offered under the first date alone.
-      var repeatChip = clone.querySelector("[data-repeat-toggle]");
-      if (repeatChip) repeatChip.remove();
-      var end = clone.querySelector(".end-block");
-      if (end) end.hidden = true;
-      var endToggle = clone.querySelector(".end-toggle");
-      if (endToggle) endToggle.hidden = false;
+      window.DateRows.blank(clone);
       container.appendChild(clone);
       window.DateRows.ensureTz(clone.querySelector("select.tz-select"));
       setMinDates(clone);
@@ -354,12 +220,34 @@
       if (e.target.classList.contains("remove-instance")) {
         var rows = container.querySelectorAll(".instance-row");
         if (rows.length > 1) {
-          e.target.closest(".instance-row").remove();
+          var removed = e.target.closest(".instance-row");
+          removed.remove();
+          dropToldProblems(removed);
           renumber();
           document.getElementById("add-instance").focus();
         }
       }
     });
+
+    // A removed row's problems are no longer the form's: they leave the
+    // notice, and the notice goes once nothing is left in it.
+    function dropToldProblems(row) {
+      row.querySelectorAll("[aria-describedby]").forEach(function (el) {
+        el.getAttribute("aria-describedby").split(/\s+/).forEach(function (id) {
+          if (!/-problem$/.test(id)) return;
+          if (document.querySelector('[aria-describedby~="' + id + '"]')) return;
+          var told = document.getElementById(id);
+          if (told) told.remove();
+        });
+      });
+      var notice = document.getElementById("form-error");
+      if (notice && !notice.querySelector("li")) {
+        notice.remove();
+      } else if (notice && notice.querySelectorAll("li").length < 2) {
+        var intro = notice.querySelector(".form-error-intro");
+        if (intro) intro.remove();
+      }
+    }
 
     renumber();
   })();

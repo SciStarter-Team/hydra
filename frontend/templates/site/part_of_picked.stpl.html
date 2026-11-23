@@ -1,0 +1,4 @@
+<% let picked = self.selected.id.clone(); %>
+<%+ self.selected %>
+<input type="hidden" name="part_of" id="part_of" value="<%= picked %>" hx-swap-oob="true">
+<div id="parent-results" hx-swap-oob="true"></div>

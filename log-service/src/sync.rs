@@ -27,6 +27,10 @@
 //! [`ledger::claim`] before writing. Adding a feed that can deliver a row
 //! twice means doing the same.
 
+mod inat_history_repairs;
+
+pub use inat_history_repairs::inat_history_repair_synchronize;
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;

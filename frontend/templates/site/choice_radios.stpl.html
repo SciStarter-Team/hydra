@@ -1,0 +1,15 @@
+<fieldset class="choice-group choice-category"<% if let Some(problem) = &self.problem { %> aria-describedby="<%= problem %>"<% } %>>
+  <legend><%= &self.legend %></legend>
+  <div class="checkbox-grid">
+    <% for value in &self.values { %>
+    <label class="radio-option">
+      <input type="radio" name="<%= &self.field %>" value="<%= &value.slug %>"<% if self.is_picked(value) { %> checked<% } %><% if self.problem.is_some() { %> aria-invalid="true"<% } %>>
+      <%= &value.name %>
+    </label>
+    <% } %>
+    <label class="radio-option">
+      <input type="radio" name="<%= &self.field %>" value=""<% if self.problem.is_some() { %> aria-invalid="true"<% } %>>
+      None of these
+    </label>
+  </div>
+</fieldset>

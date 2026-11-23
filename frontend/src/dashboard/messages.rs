@@ -86,8 +86,8 @@ pub fn pending_review_fragment() -> Response {
 }
 
 /// Confirmation shown when a message is delivered immediately with no review —
-/// a member's answer, or a trusted, entity-authored send (a manager replying
-/// or broadcasting as the project). `message` is the already-escaped/plain confirmation text.
+/// a member writing to someone who has written to them, or a trusted,
+/// entity-authored send (a manager replying or broadcasting as the project). `message` is the already-escaped/plain confirmation text.
 pub fn sent_fragment(message: &str) -> Response {
     Html(format!(
         "<div class=\"ss-card !p-4 text-sm\">\
@@ -238,7 +238,7 @@ pub async fn send(
         }
     }
 
-    let _: SendMessageResponse = request(
+    let sent: SendMessageResponse = request(
         "forum.messaging.send",
         SendMessage {
             from_user_id: user_info.user_id,
@@ -246,14 +246,19 @@ pub async fn send(
             subject: form.subject,
             body: form.body,
             reply_ref: None,
-            // A member's message is held for staff review.
+            // A member's message is delivered at once only to someone who has
+            // written to them; forum-service decides.
             pre_approved: false,
         },
     )
     .await?;
 
-    // The message is held for staff review, not delivered yet — tell the sender.
-    Ok(pending_review_fragment())
+    // Tell the sender whether it went, or waits for staff review.
+    Ok(if sent.delivered {
+        sent_fragment("Your message has been sent.")
+    } else {
+        pending_review_fragment()
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -429,8 +434,8 @@ pub async fn reply(
             user_id: user_info.user_id,
             topic_id: topic_ulid,
             body: form.body,
-            // A member's reply is delivered at once only as an answer to
-            // what they were sent; forum-service decides.
+            // A member's reply is delivered at once only to someone who has
+            // written to them; forum-service decides.
             pre_approved: false,
         },
     )

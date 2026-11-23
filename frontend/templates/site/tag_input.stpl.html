@@ -11,7 +11,7 @@
     </div>
     <div class="tag-suggestions border border-linework rounded-md mt-1 bg-white empty:hidden"></div>
   </div>
-  <p id="tag-input-help" class="field-help">Press Enter or pick a suggestion to add a tag.</p>
+  <p id="tag-input-help" class="field-help"><%= self.help %></p>
   <%# Present from the start, so changes to it are announced: suggestion counts
       (written out-of-band by /add/tag-search) and tags added or removed. %>
   <span id="tag-input-status" class="sr-only" role="status" data-tag-status></span>

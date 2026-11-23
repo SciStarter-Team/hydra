@@ -19,8 +19,14 @@ pub struct ImageField {
     /// for a photo of the submitters themselves have no one to credit.
     pub credit: Option<String>,
     pub layout: ImageLayout,
-    /// Whether the form's error is about the image link, which marks it.
-    pub invalid: bool,
+    /// The field's own label, over a [`ImageLayout::Cover`] field's cover,
+    /// where the form names the image ("Event cover image").
+    pub heading: Option<&'static str>,
+    /// Whether the form requires an image, which marks the heading.
+    pub required: bool,
+    /// The id of the message telling the image's problem, when it has one,
+    /// which marks it.
+    pub problem: Option<String>,
 }
 
 /// The id of the guidance on the image under a [`ImageLayout::Cover`]
@@ -72,9 +78,9 @@ pub struct ImageUrlInput<'a> {
     pub value: &'a str,
     pub layout: ImageLayout,
     pub oob: bool,
-    /// Whether the form's error is about this input, which marks it
-    /// `aria-invalid` and described by the error.
-    pub invalid: bool,
+    /// The id of the message telling this input's problem, when it has one,
+    /// which marks it `aria-invalid` and is what describes it first.
+    pub problem: Option<&'a str>,
 }
 
 impl ImageUrlInput<'_> {

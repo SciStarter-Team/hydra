@@ -1,12 +1,9 @@
-<% use crate::component::floating_field::FormError; %>
-<% let fields = self.fields.errors(self.error.as_ref()); %>
+<% let fields = self.fields.errors(&self.errors); %>
 <form class="edit-only mt-2 p-3 border border-blue-300 rounded-sm bg-blue-50 space-y-2" novalidate
       <% if let Some(row) = self.row { %>hx-put="/-detail/<%= &self.target_id %>/instances/<%= row %>?<%= &self.row_query %>"<% } else { %>hx-post="/-detail/<%= &self.target_id %>/instances"<% } %>
       hx-target="#event-instances"
       hx-swap="outerHTML">
-  <% if let Some(error) = &self.error { %>
-  <p id="<%= FormError::ELEMENT_ID %>" class="text-sm text-red-700" role="alert"><%= &error.message %></p>
-  <% } %>
+  <%+ crate::component::floating_field::FormErrorMessages { errors: &self.errors } %>
   <%+ fields %>
   <div class="flex gap-2">
     <button type="submit" class="btn btn-primary btn-xs"><% if self.row.is_some() { %>Save<% } else { %>Add<% } %></button>

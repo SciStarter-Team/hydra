@@ -15,9 +15,9 @@
   <label class="pill-body">
     <span class="pill-label"><%= self.label %><% if self.required { %><span class="pill-required" aria-hidden="true"> *</span><% } %></span>
     <% match control { Control::Input(input_type) => { %>
-      <input type="<%= input_type %>" name="<%= self.name %>" value="<%= self.value %>" placeholder="<%= self.placeholder() %>"<% if let Some(id) = &self.id { %> id="<%= id %>"<% } %><% if self.required && !self.waived { %> required<% } %><% if let Some(token) = self.autocomplete { %> autocomplete="<%= token %>"<% } %><% if self.invalid { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %><%- count_on_input %>>
+      <input type="<%= input_type %>" name="<%= self.name %>" value="<%= self.value %>" placeholder="<%= self.placeholder() %>"<% if let Some(id) = &self.id { %> id="<%= id %>"<% } %><% if self.required && !self.waived { %> required<% } %><% if let Some(token) = self.autocomplete { %> autocomplete="<%= token %>"<% } %><% if self.invalid() { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %><%- count_on_input %>>
     <% } Control::TextArea { rows } => { %>
-      <textarea name="<%= self.name %>" rows="<%= rows %>" placeholder="<%= self.placeholder() %>"<% if let Some(id) = &self.id { %> id="<%= id %>"<% } %><% if self.required && !self.waived { %> required<% } %><% if self.invalid { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %><%- count_on_input %>><%= self.value %></textarea>
+      <textarea name="<%= self.name %>" rows="<%= rows %>" placeholder="<%= self.placeholder() %>"<% if let Some(id) = &self.id { %> id="<%= id %>"<% } %><% if self.required && !self.waived { %> required<% } %><% if self.invalid() { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %><%- count_on_input %>><%= self.value %></textarea>
     <% } } %>
   </label>
   <% if let Some(limit) = self.limit { %>

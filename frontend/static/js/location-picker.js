@@ -1,13 +1,15 @@
 // Shared location section for the add forms: an "in person or virtual?"
 // toggle of radio buttons, a Photon-backed place type-ahead (via
 // /add/place-search, and /add/places-near for the visitor's own location),
-// the conditionally revealed region editor, and, for a virtual event, how
-// people join it. Shows only the fields for the
-// selected mode; disabled fieldsets keep their controls out of the
+// and the conditionally revealed region editor. Shows only the fields for
+// the selected mode, and tells the rest of the form which mode that is (the
+// bubbling `ss:location-mode` event); disabled fieldsets keep their controls out of the
 // submission. A fieldset's data-mode lists the modes it serves; "anywhere"
 // (in person, wherever each participant is) has no pane of its own. "region" and
-// "anywhere" aren't on the toggle: links inside the in-person pane switch to
-// them (and back), and the In person radio, still checked, submits them.
+// "anywhere" aren't on the toggle: they are kinds of in person, chosen under it
+// (an event's "Where does it take place?" answers, `data-mode-choice`) or by
+// links (a project's way to a region and back, `data-mode-link`), and the In
+// person radio, still checked, submits them.
 // Auto-inits every [data-location-picker].
 (function () {
   function init(root) {
@@ -44,9 +46,13 @@
         fs.hidden = !active;
         fs.disabled = !active;
       });
-      // A control shown in only one of the modes sharing its pane.
+      // The answer to where an in-person event takes place is the mode.
+      root.querySelectorAll("input[data-mode-choice]").forEach(function (choice) {
+        choice.checked = choice.value === mode;
+      });
+      // A control shown in only the modes it lists.
       root.querySelectorAll("[data-only-mode]").forEach(function (el) {
-        el.hidden = el.getAttribute("data-only-mode") !== mode;
+        el.hidden = el.getAttribute("data-only-mode").split(" ").indexOf(mode) < 0;
       });
       // The region map is initialized while hidden, so it renders at zero size
       // until its pane is shown — fix it up once the region pane is visible.
@@ -58,50 +64,16 @@
       if (common) common.hidden = mode === "";
       var note = root.querySelector(".location-note");
       if (note && mode === "region") note.open = true;
+      var noteInput = note && note.querySelector('input[name="location_description"]');
+      if (noteInput) noteInput.required = mode === "region";
       // An online event has no location note; the server drops one anyway.
       if (note && note.hasAttribute("data-no-online-note")) note.hidden = mode === "online";
       applyUrlText(mode);
-      applyJoin(mode);
+      root.dispatchEvent(new CustomEvent("ss:location-mode", { bubbles: true, detail: { mode: mode } }));
     }
 
-    // How people join a virtual event: each choice's field opens under its
-    // card, and the other's is disabled so it doesn't submit.
-    var join = root.querySelector("[data-virtual-join]");
-    // The instructions are one field, asked in one place at a time: here, as
-    // a virtual event's way to join, and in the form's own field below the
-    // details otherwise. Moving between the two carries what was typed.
-    var form = root.closest("form");
-    var below = form && form.querySelector("[data-instructions-below]");
-    var askedHere = null;
-    function applyJoin(mode) {
-      if (!join) return;
-      var checked = join.querySelector('input[name="virtual_join"]:checked');
-      var how = checked ? checked.value : "";
-      join.querySelectorAll("[data-join]").forEach(function (fs) {
-        var active = fs.getAttribute("data-join") === how;
-        fs.hidden = !active;
-        fs.disabled = !active;
-      });
-      if (!below) return;
-      var here = join.querySelector('[data-join="other"] textarea');
-      var there = below.querySelector("textarea");
-      var asked = mode === "online" && how === "other";
-      if (askedHere !== null && asked !== askedHere && here && there) {
-        if (asked) here.value = there.value;
-        else there.value = here.value;
-      }
-      askedHere = asked;
-      below.hidden = asked;
-      below.disabled = asked;
-    }
-    if (join) {
-      join.querySelectorAll('input[name="virtual_join"]').forEach(function (radio) {
-        radio.addEventListener("change", apply);
-      });
-    }
-
-    // The link/URL field is present in every mode; for an online event it is
-    // the join link, and required.
+    // A project's link/URL field is present in every mode; for one joined
+    // online it is the join link, and required.
     var urlField = root.querySelector("[data-url-field]");
     function applyUrlText(mode) {
       if (!urlField) return;
@@ -125,9 +97,14 @@
       });
     });
 
-    // "Happens across a wider area?", "Can people take part anywhere in the
-    // world?" and "Back to a single place" links switch between the kinds of
-    // in person.
+    // An event's "Where does it take place?" answers, and a project's
+    // "Happens across a wider area?" and "Back to a single place" links,
+    // switch between the kinds of in person.
+    root.querySelectorAll("input[data-mode-choice]").forEach(function (choice) {
+      choice.addEventListener("change", function () {
+        if (choice.checked) setMode(choice.value);
+      });
+    });
     root.querySelectorAll("[data-mode-link]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         setMode(btn.getAttribute("data-mode-link"));
@@ -170,9 +147,15 @@
     // The options on offer, and which one the arrow keys have reached (-1:
     // none; typing stays in the input either way). Each is a place
     // suggestion, except the last, `{ typed: "..." }`, which uses the words
-    // typed as the address.
+    // typed as `typedAs`.
     var current = [];
     var active = -1;
+    // What the words typed are used as, when the search doesn't know them:
+    // an event's venue name, as orrery's event forms use them, or a
+    // project's address (`data-typed-into`, the field they go in).
+    var typedInto = root.getAttribute("data-typed-into") || "address";
+    var typedAs = root.getAttribute("data-typed-as") || "address";
+    var asVenue = typedInto === "location_name";
 
     function announce(text) {
       if (status) status.textContent = text;
@@ -257,20 +240,19 @@
       }
     }
 
-    // Use the words typed as the street address, for a place the search
-    // doesn't know: the other components and the coordinates are cleared,
+    // Use the words typed, for a place the search doesn't know, as
+    // `typedInto`: the other components and the coordinates are cleared,
     // since they belonged to whatever was there before (the save geocodes the
-    // address), and the details open so the rest can be filled in.
+    // address), and the details open for the rest to be filled in.
     function useTyped(words) {
-      ["location_name", "city", "state", "zip", "country", "latitude", "longitude"].forEach(function (key) {
-        if (fields[key]) fields[key].value = "";
+      ["location_name", "address", "city", "state", "zip", "country", "latitude", "longitude"].forEach(function (key) {
+        if (fields[key]) fields[key].value = key === typedInto ? words : "";
       });
-      if (fields.address) fields.address.value = words;
       syncSummary();
       close();
       var details = root.querySelector(".place-details");
       if (details) details.open = true;
-      announce("Using " + words + " as the address");
+      announce("Using " + words + " as the " + typedAs + (asVenue ? "; the address details are open below" : ""));
     }
 
     function choose(option) {
@@ -303,7 +285,7 @@
     }
 
     // Once a search answers, the list always ends with the option to use the
-    // words typed as the address, found places or not. The places around the
+    // words typed, found places or not. The places around the
     // visitor, found with nothing typed, have no such option.
     function render(suggestions, words) {
       list.innerHTML = "";
@@ -319,7 +301,7 @@
       });
       if (offerTyped) {
         var last = option(list.id + "-" + suggestions.length,
-          "Use \u201c" + words + "\u201d as the address", "",
+          "Use \u201c" + words + "\u201d as the " + typedAs, asVenue ? "Then fill in its address below" : "",
           function () { useTyped(words); });
         last.classList.add("place-typed");
         list.appendChild(last);
@@ -333,10 +315,10 @@
         return;
       }
       announce(suggestions.length === 0
-        ? "No places found; use the arrow keys to use what you typed as the address"
+        ? "No places found; use the arrow keys to use what you typed as the " + typedAs
         : suggestions.length === 1
-          ? "1 place found; use the arrow keys to choose it, or to use what you typed as the address"
-          : suggestions.length + " places found; use the arrow keys to choose one, or to use what you typed as the address");
+          ? "1 place found; use the arrow keys to choose it, or to use what you typed as the " + typedAs
+          : suggestions.length + " places found; use the arrow keys to choose one, or to use what you typed as the " + typedAs);
     }
 
     function search() {

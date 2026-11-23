@@ -344,6 +344,10 @@ pub struct DetailPage {
     /// The path and query the page was requested at, which signing in from
     /// it comes back to.
     pub return_to: String,
+    /// Whether the page was opened straight after its event was submitted
+    /// for review ([`crate::event::NEW_SUBMISSION_QUERY`]), which thanks the
+    /// submitter.
+    pub new_submission: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -369,13 +373,50 @@ pub struct ManagerDisplay {
     pub email: String,
 }
 
+/// Whether a page is listed, and, when it isn't, whether it ever was.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PublishStatus {
+    Published,
+    /// Never published: waiting for review.
+    NotYetPublished,
+    /// Published once, and taken out of the listings since.
+    Unpublished,
+}
+
+impl PublishStatus {
+    /// The status of a page that is `published` or not, and was ever
+    /// published (`published_at` set) or not.
+    pub fn of(published: bool, ever_published: bool) -> Self {
+        match (published, ever_published) {
+            (true, _) => PublishStatus::Published,
+            (false, false) => PublishStatus::NotYetPublished,
+            (false, true) => PublishStatus::Unpublished,
+        }
+    }
+
+    pub fn is_published(self) -> bool {
+        self == PublishStatus::Published
+    }
+
+    /// What the page says of it, as orrery's event page says it.
+    pub fn label(self) -> &'static str {
+        match self {
+            PublishStatus::Published => "Published",
+            PublishStatus::NotYetPublished => "Not yet published",
+            PublishStatus::Unpublished => "Not published",
+        }
+    }
+}
+
 #[derive(TemplateOnce)]
 #[template(path = "pages/detail_page_content.stpl.html")]
 pub struct DetailPageContent {
     pub kind: DetailPageKind,
     pub slug: String,
     pub target_id: String,
-    pub published: bool,
+    pub publish_status: PublishStatus,
+    /// Whether the page thanks the person who just submitted it for review.
+    pub new_submission: bool,
 
     // Hero
     pub name: String,
@@ -454,17 +495,20 @@ pub struct DetailPageContent {
     /// The event's venue's time zone, which its dates are shown on; `None`
     /// shows them on the viewer's clocks.
     pub event_zone: Option<jiff::tz::TimeZone>,
-    pub ticketing_begins: Option<TimeString>,
-    /// Where people get tickets or register, when that isn't `url`.
-    pub ticket_url: String,
-    /// What attending costs, in the organizer's words.
-    pub cost: String,
+    /// How people sign up for an event.
+    pub registration: crate::event::registration::EventRegistration,
+    /// What attending an event costs.
+    pub admission: crate::event::admission::EventAdmission,
     /// The group an event is limited to, in the organizer's words; empty
     /// when it's open to everyone, and always for projects.
     pub limited_to: String,
-    /// The umbrella event this one is part of (name + path), empty if none.
-    pub part_of_name: String,
-    pub part_of_path: String,
+    /// The values of the ages an event suits, in list order; none for
+    /// projects.
+    pub ages: Vec<crate::choice::ChoiceValue>,
+    /// The larger event an event is part of, as it is saved.
+    pub part_of: Option<Ulid>,
+    /// It, while it is published.
+    pub larger_event: Option<crate::event::part_of::LargerEvent>,
     /// The event's region as a GeoJSON string, for the inline map.
     pub region_geojson: Option<String>,
     pub contacts: Vec<ContactDisplay>,
@@ -787,10 +831,6 @@ pub struct DetailPageWrapper {
     /// Absolute URL of the entity's uploaded image. Empty when none was uploaded.
     pub og_image: String,
     pub og_url: String,
-    /// Whether the viewer edits an event on the page, whose dates and
-    /// location are edited with the add event form's own controls and
-    /// scripts.
-    pub edits_event: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -820,6 +860,7 @@ impl DetailPage {
             r#"
             SELECT
                 name,
+                published_at IS NOT NULL as "ever_published!: bool",
                 status as "status: ProjectStatus",
                 presenter,
                 goal,
@@ -1199,7 +1240,8 @@ impl DetailPage {
             kind: DetailPageKind::Project,
             editable_fields,
             slug: self.slug,
-            published: self.published,
+            publish_status: PublishStatus::of(self.published, row.ever_published),
+            new_submission: self.new_submission,
             target_id: self.target_id.to_string(),
             name: row.name,
             presenter: row.presenter,
@@ -1258,12 +1300,12 @@ impl DetailPage {
             member_count,
             instances: Box::new([]),
             event_zone: None,
-            ticketing_begins: None,
-            ticket_url: String::new(),
-            cost: String::new(),
+            registration: Default::default(),
+            admission: Default::default(),
             limited_to: String::new(),
-            part_of_name: String::new(),
-            part_of_path: String::new(),
+            ages: Vec::new(),
+            part_of: None,
+            larger_event: None,
             region_geojson: None,
             contacts,
             managers,
@@ -1288,6 +1330,7 @@ impl DetailPage {
             r#"
             SELECT
                 name,
+                published_at IS NOT NULL as "ever_published!: bool",
                 status as "status: EventStatus",
                 presenter,
                 description,
@@ -1307,6 +1350,8 @@ impl DetailPage {
                 country,
                 ticketing_begins,
                 ticket_url,
+                registration,
+                admission,
                 cost,
                 limited_to,
                 part_of,
@@ -1371,24 +1416,15 @@ impl DetailPage {
             .filter(|tag| crate::tag::shown_to(tag, is_staff_editor))
             .collect::<Vec<_>>();
 
-        // The umbrella event this one is part of (only linked if published).
-        let (part_of_name, part_of_path) = if let Some(parent_id) = row.part_of.clone() {
-            match sqlx::query!(
-                r#"SELECT e.name AS "name!", ent.slug AS "slug!"
-                   FROM events e
-                   JOIN entities ent ON ent.target = e.event_id AND ent.kind = 'Event'
-                   WHERE ent.publish = 1 AND e.event_id = ?"#,
-                parent_id
-            )
-            .fetch_optional(db())
-            .await?
-            {
-                Some(r) => (r.name, format!("/events/{}", r.slug)),
-                None => (String::new(), String::new()),
-            }
-        } else {
-            (String::new(), String::new())
+        // The larger event this one is part of, linked while published.
+        let part_of = row.part_of.as_deref().map(str::parse::<Ulid>).transpose()?;
+        let larger_event = match part_of {
+            Some(part_of) => crate::event::part_of::LargerEvent::published(part_of).await?,
+            None => None,
         };
+        let ages =
+            crate::choice::ChoiceValue::picked_by(crate::choice::ChoiceList::Audience, &id_str)
+                .await?;
 
         // Organizer contacts (rendered only for editors — see the template).
         let contacts = sqlx::query!(
@@ -1458,9 +1494,6 @@ impl DetailPage {
             ("presenter", row.presenter.clone()),
             ("name", row.name.clone()),
             ("url", row.url.clone()),
-            ("ticket_url", row.ticket_url.clone()),
-            ("cost", row.cost.clone()),
-            ("limited_to", row.limited_to.clone()),
             ("description", row.description.clone()),
             (
                 "entirely_online",
@@ -1527,18 +1560,26 @@ impl DetailPage {
             });
         }
 
-        let event_zone = crate::event::zone::of_venue(
-            row.latitude,
-            row.longitude,
-            &row.location_type,
-            row.entirely_online,
-        );
+        let event_zone = crate::event::zone::EventVenue {
+            latitude: row.latitude,
+            longitude: row.longitude,
+            location_type: &row.location_type,
+            entirely_online: row.entirely_online,
+            address: &row.address,
+            city: &row.city,
+            state: &row.state,
+            zip: &row.zip,
+            country: &row.country,
+        }
+        .zone()
+        .await;
 
         Ok(DetailPageContent {
             kind: DetailPageKind::Event,
             editable_fields,
             slug: self.slug,
-            published: self.published,
+            publish_status: PublishStatus::of(self.published, row.ever_published),
+            new_submission: self.new_submission,
             target_id: self.target_id.to_string(),
             name: row.name,
             presenter: row.presenter,
@@ -1588,14 +1629,21 @@ impl DetailPage {
             member_count: 0,
             instances,
             event_zone,
-            ticketing_begins: row
-                .ticketing_begins
-                .and_then(|s| TimeString::try_from(s).ok()),
-            ticket_url: row.ticket_url,
-            cost: row.cost,
+            registration: crate::event::registration::EventRegistration {
+                registration: crate::event::registration::Registration::parse(&row.registration),
+                ticket_url: row.ticket_url,
+                ticketing_begins: row
+                    .ticketing_begins
+                    .and_then(|s| TimeString::try_from(s).ok()),
+            },
+            admission: crate::event::admission::EventAdmission {
+                admission: crate::event::admission::Admission::parse(&row.admission),
+                cost: row.cost,
+            },
             limited_to: row.limited_to,
-            part_of_name,
-            part_of_path,
+            ages,
+            part_of,
+            larger_event,
             region_geojson: row.region_geojson.flatten(),
             contacts,
             managers,
@@ -2681,6 +2729,14 @@ mod tests {
     use assert2::check;
 
     use super::*;
+
+    #[test]
+    fn an_unlisted_page_says_whether_it_was_ever_listed() {
+        check!(PublishStatus::of(true, false).label() == "Published");
+        check!(PublishStatus::of(true, true).is_published());
+        check!(PublishStatus::of(false, false).label() == "Not yet published");
+        check!(PublishStatus::of(false, true).label() == "Not published");
+    }
 
     fn platform_form() -> PlatformAccountForm {
         PlatformAccountForm {

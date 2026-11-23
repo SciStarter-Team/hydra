@@ -261,8 +261,6 @@ impl Schedule {
                        WHERE cn.target = e.target
                          AND cn.list = 'Topic'
                          AND e.kind = 'Project') as "topics: String",
-                      ST_Y(ev.point) as "latitude?: f64",
-                      ST_X(ev.point) as "longitude?: f64",
                       (SELECT ei.begin
                        FROM event_instances ei
                        WHERE ei.event_id = e.target
@@ -299,6 +297,15 @@ impl Schedule {
             now
         )
         .fetch_all(db())
+        .await?;
+
+        // An event's times are on its venue's clocks, as on its page.
+        let zones = crate::event::zone::of_events(
+            items_raw
+                .iter()
+                .filter(|row| matches!(row.entity_kind, Some(EntityKind::Event)))
+                .filter_map(|row| row.entity_target.as_deref()),
+        )
         .await?;
 
         Ok(items_raw
@@ -342,12 +349,11 @@ impl Schedule {
                     &row.country,
                 );
 
-                let zone = crate::event::zone::of_venue(
-                    row.latitude,
-                    row.longitude,
-                    &row.location_type,
-                    row.entirely_online,
-                );
+                let zone = row
+                    .entity_target
+                    .as_deref()
+                    .and_then(|target| zones.get(target))
+                    .cloned();
                 let timing = timing(
                     &entity_kind,
                     row.project_timing,

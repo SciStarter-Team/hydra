@@ -89,7 +89,8 @@ pub struct EventSummary {
     pub location: Where,
 
     /// The venue's time zone, which the event's dates are told in; `None`
-    /// for an event with no venue, told in the viewer's.
+    /// for an event with no venue, told in the viewer's. Filled in by
+    /// [`EventSummary::attach_zones`].
     pub zone: Option<jiff::tz::TimeZone>,
 
     /// Whether the exchange hid it from its visitors, which only its staff,
@@ -112,6 +113,17 @@ impl EventSummary {
             event.hidden = hidden.contains(&event.event_id);
         }
 
+        Ok(())
+    }
+
+    /// Fill in `zone` for a page of results, as each event's page finds it.
+    async fn attach_zones(events: &mut [EventSummary]) -> Result<(), Error> {
+        let mut zones =
+            crate::event::zone::of_events(events.iter().map(|event| event.event_id.as_str()))
+                .await?;
+        for event in events.iter_mut() {
+            event.zone = zones.remove(&event.event_id);
+        }
         Ok(())
     }
 
@@ -230,9 +242,7 @@ async fn find(
              ev.city,
              ev.state,
              ev.country,
-             ev.address,
-             ST_Y(ev.point),
-             ST_X(ev.point)"#,
+             ev.address"#,
     );
     query_builder.push(FROM);
     push_conditions(&mut query_builder, exchange, params, &scope);
@@ -294,8 +304,6 @@ async fn find(
         String,
         String,
         String,
-        Option<f64>,
-        Option<f64>,
     );
 
     let mut events: Vec<EventSummary> = query_builder
@@ -318,8 +326,6 @@ async fn find(
                 state,
                 country,
                 address,
-                latitude,
-                longitude,
             )| EventSummary {
                 event_id,
                 slug,
@@ -329,12 +335,7 @@ async fn find(
                 session: None,
                 other_sessions: 0,
                 hidden: false,
-                zone: crate::event::zone::of_venue(
-                    latitude,
-                    longitude,
-                    &location_type,
-                    entirely_online,
-                ),
+                zone: None,
                 location: if entirely_online {
                     Where::Online
                 } else {
@@ -354,6 +355,7 @@ async fn find(
         .collect();
 
     EventSummary::attach_sessions(&mut events, &scope.now).await?;
+    EventSummary::attach_zones(&mut events).await?;
 
     let mut count_builder = sqlx::QueryBuilder::new("SELECT COUNT(*)");
     count_builder.push(FROM);

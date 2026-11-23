@@ -1,29 +1,28 @@
-<% use crate::component::floating_field::{FieldKind, FloatingField, FormError}; %>
+<% use crate::component::floating_field::{FieldKind, FloatingField}; %>
 <% let inperson_active = self.mode == "in_person"; %>
 <% let online_active = self.mode == "online"; %>
 <% let region_active = self.mode == "region"; %>
 <% let anywhere_active = self.mode == "anywhere"; %>
-<%# Across a wider area and anywhere in the world are kinds of in person,
-    reached by the links under it: the toggle shows In person for them, and
-    its radio submits whichever of the three is chosen. %>
+<% use crate::component::location_picker::PLACE_ANSWERS; %>
+<%# Across an area and anywhere in the world are kinds of in person, chosen
+    under it (for a project, a region is reached by a link under the
+    address): the toggle shows In person for them, and its radio submits
+    whichever of the three is chosen. %>
 <% let in_person_toggled = self.mode == "in_person" || region_active || anywhere_active; %>
 <% let in_person_value = if region_active || anywhere_active { self.mode.as_str() } else { "in_person" }; %>
 <% let toggle = [("in_person", "In person"), ("online", "Virtual")]; %>
-<%# An event asks how people join it when it's virtual, at a link or by
-    instructions, and asks its link there; anything else is asked its link
-    with the fields every mode shares. %>
-<% let asks_join = self.offers_event_modes; %>
-<% let join_link = self.virtual_join == "link"; %>
-<% let join_other = self.virtual_join == "other"; %>
 <%# Taken out of `self` up front: rendering the region editor consumes it. %>
-<% let error = self.error.clone(); %>
-<% let error = error.as_ref(); %>
-<% let url_invalid = self.is_invalid("url"); %>
-<%# Attributes marking a hand-written control the form's error is about. %>
-<% let invalid_attrs = |field: &str| if error.is_some_and(|e| e.is_about(field)) { format!(r#" aria-invalid="true" aria-describedby="{}""#, FormError::ELEMENT_ID) } else { String::new() }; %>
-<div data-location-picker class="space-y-2">
+<% let errors = self.errors.clone(); %>
+<% let error = &errors; %>
+<% let url_problem = error.described_by("url"); %>
+<%# Attributes marking a hand-written control one of the form's errors is
+    about. %>
+<% let invalid_attrs = |field: &str| match error.described_by(field) { Some(problem) => format!(r#" aria-invalid="true" aria-describedby="{problem}""#), None => String::new() }; %>
+<%# What the words typed in the place search are used as, which
+    js/location-picker.js reads. %>
+<div data-location-picker data-typed-into="<%= self.place_of().typed_into() %>" data-typed-as="<%= self.place_of().typed_as() %>" class="space-y-2">
   <fieldset class="choice-group">
-    <legend>Is it in person or virtual?<span class="pill-required" aria-hidden="true"> *</span></legend>
+    <legend><% if self.for_event { %>How will people attend?<% } else { %>Is it in person or virtual?<% } %><span class="pill-required" aria-hidden="true"> *</span></legend>
     <div class="radio-options">
       <% for (value, label) in toggle { %>
       <% let in_person = value == "in_person"; %>
@@ -35,9 +34,24 @@
       <% } %>
     </div>
   </fieldset>
-  <%# What the chosen mode means, where its name alone doesn't say. %>
-  <% if self.offers_event_modes { %>
-  <p class="field-help" data-only-mode="anywhere" <% if !anywhere_active { %>hidden<% } %>>People take part in person wherever they are, as in a worldwide bioblitz or bird count. A location note can say more.</p>
+  <%# Where an in-person event happens (Darlene's review): at one place,
+      whose address the search below finds; across an area, drawn on the map
+      below; or wherever each person is. Each answer's fields follow it.
+      Choosing one makes it the mode the In person answer submits
+      (`data-mode-choice`, js/location-picker.js); its own name is only
+      what groups the answers, and isn't read. %>
+  <% if self.for_event { %>
+  <fieldset class="choice-group" data-only-mode="in_person region anywhere" <% if !in_person_toggled { %>hidden<% } %>>
+    <legend>Where does it take place?</legend>
+    <div class="radio-options">
+      <% for (value, label, note) in PLACE_ANSWERS { %>
+      <label class="radio-option">
+        <input type="radio" name="location_place" value="<%= value %>" data-mode-choice<% if self.mode == value { %> checked<% } %>>
+        <span><%= label %><span class="radio-option-note"><%= note %></span></span>
+      </label>
+      <% } %>
+    </div>
+  </fieldset>
   <% } %>
 
   <%# Each mode's fields live in a fieldset that is disabled (so its controls
@@ -104,75 +118,26 @@
       </div>
     </details>
 
-    <%# Only an event held at an address says what kind of venue it is;
-        disabled with the rest of this fieldset in any other mode, and
-        dropped by the server there too. %>
-    <% if let Some(venues) = self.venues { %>
-    <%+ venues %>
-    <% } %>
-
+    <%# A project's way to a region is here, with the address; an event's
+        follows the location note, as orrery's event forms have it. %>
+    <% if !self.for_event { %>
     <button type="button" class="link-btn" data-mode-link="region" data-only-mode="in_person">Happens across a wider area? Draw the region instead.</button>
-    <% if self.offers_event_modes { %>
-    <button type="button" class="link-btn" data-mode-link="anywhere" data-only-mode="in_person">Can people take part anywhere in the world? Choose that instead.</button>
     <% } %>
   </fieldset>
 
   <fieldset class="location-fields space-y-2 border-0 p-0 m-0" data-mode="region" <% if !region_active { %>hidden disabled<% } %>>
     <%+ self.region_editor %>
+    <% if !self.for_event { %>
     <button type="button" class="link-btn" data-mode-link="in_person">Back to a single place</button>
+    <% } %>
   </fieldset>
-
-  <% if self.offers_event_modes { %>
-  <button type="button" class="link-btn" data-mode-link="in_person" data-only-mode="anywhere" <% if !anywhere_active { %>hidden<% } %>>Back to a single place</button>
-  <% } %>
-
-  <%# How people join a virtual event, as Facebook asks it: at a link, or
-      by instructions ("Other"). Each choice is a card, and opens its field
-      under it; a field whose choice isn't made is disabled, so that it
-      doesn't submit. %>
-  <% if asks_join { %>
-  <fieldset class="location-fields choice-group option-cards border-0 p-0 m-0" data-mode="online" data-virtual-join <% if !online_active { %>hidden disabled<% } %>>
-    <legend class="sr-only">How people join<span aria-hidden="true"> *</span></legend>
-    <label class="option-card">
-      <span class="option-card-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
-      </span>
-      <span class="option-card-text">
-        <span class="option-card-title">External link</span>
-        <span class="option-card-description">Add a link so people know where to go when your event starts.</span>
-      </span>
-      <input type="radio" name="virtual_join" value="link" required<%- invalid_attrs("virtual_join") %><% if join_link { %> checked<% } %>>
-    </label>
-    <fieldset class="option-card-field border-0 p-0 m-0" data-join="link" <% if !join_link { %>hidden disabled<% } %>>
-      <%+ FloatingField::new(FieldKind::Url, "url", "Event link", self.url.as_str()).id("join-link").hint("https://").required().errors(error) %>
-    </fieldset>
-    <label class="option-card">
-      <span class="option-card-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="11"/><circle cx="7.5" cy="12" r="1.5" fill="#fff"/><circle cx="12" cy="12" r="1.5" fill="#fff"/><circle cx="16.5" cy="12" r="1.5" fill="#fff"/></svg>
-      </span>
-      <span class="option-card-text">
-        <span class="option-card-title">Other</span>
-        <span class="option-card-description">Include clear instructions on how to participate.</span>
-      </span>
-      <input type="radio" name="virtual_join" value="other" required<%- invalid_attrs("virtual_join") %><% if join_other { %> checked<% } %>>
-    </label>
-    <fieldset class="option-card-field border-0 p-0 m-0" data-join="other" <% if !join_other { %>hidden disabled<% } %>>
-      <%+ FloatingField::new(FieldKind::TextArea { rows: 3 }, "how_to_join", "How to join / participate", self.how_to_join.as_str()).id("join-instructions").required().errors(error) %>
-    </fieldset>
-  </fieldset>
-  <% } %>
 
   <%# Fields meaningful in every mode, held back until the "in person or
       virtual?" question is answered so the section starts as one control. %>
   <div class="space-y-2" data-location-common <% if self.mode.is_empty() { %>hidden<% } %>>
-    <% if asks_join { %>
-    <%# An event's link, when it's held somewhere; a virtual one's is asked
-        as its way to join, above. %>
-    <fieldset class="location-fields space-y-2 border-0 p-0 m-0" data-mode="in_person region anywhere" <% if online_active { %>hidden disabled<% } %>>
-      <%+ FloatingField::new(FieldKind::Url, "url", "Event link", self.url.as_str()).id("add-url").hint("https://").described_by("add-url-help").errors(error) %>
-      <p id="add-url-help" class="field-help">A website, registration page, or livestream link.</p>
-    </fieldset>
-    <% } else { %>
+    <%# A project's link; an event's webpage is asked with its registration
+        link instead. %>
+    <% if !self.for_event { %>
     <div data-url-field
       data-online-label="Join link"
       data-online-help="The link people use to join or participate online."
@@ -183,7 +148,7 @@
       <div class="pill-field">
         <label class="pill-body">
           <span class="pill-label"><span class="url-label"><% if online_active { %>Join link<% } else { %>Link / URL<% } %></span><span class="pill-required url-required" aria-hidden="true" <% if !online_active { %>hidden<% } %>> *</span></span>
-          <input id="add-url" type="url" name="url" value="<%= self.url %>" placeholder="https://"<% if online_active { %> required<% } %><% if url_invalid { %> aria-invalid="true" aria-describedby="<%= FormError::ELEMENT_ID %> add-url-help"<% } else { %> aria-describedby="add-url-help"<% } %>>
+          <input id="add-url" type="url" name="url" value="<%= self.url %>" placeholder="https://"<% if online_active { %> required<% } %><% if let Some(problem) = &url_problem { %> aria-invalid="true" aria-describedby="<%= problem %> add-url-help"<% } else { %> aria-describedby="add-url-help"<% } %>>
         </label>
       </div>
       <p id="add-url-help" class="field-help url-help"><% if online_active { %>The link people use to join or participate online.<% } else { %>A website, registration page, or livestream link.<% } %></p>
@@ -192,14 +157,25 @@
 
     <%# A location note (the area for a region, or a "meet at the north
         entrance"-style note), meaningful in every mode a place is joined in
-        person, and online too unless the picker says otherwise; the server
-        then drops it. Collapsed behind a quiet disclosure; region mode
-        requires it, so it opens there. %>
-    <% let note_hidden = online_active && !self.notes_online; %>
-    <details class="quiet-disclosure location-note"<% if !self.notes_online { %> data-no-online-note<% } %> <% if region_active || !self.location_description.is_empty() { %>open<% } %><% if note_hidden { %> hidden<% } %>>
-      <summary>+ Add a location note</summary>
-      <%+ FloatingField::new(FieldKind::Text, "location_description", "Location note", self.location_description.as_str()).id("location-description").described_by("location-description-help").errors(error) %>
+        person, and, for a project, online too; the server drops an online
+        event's. Collapsed behind a quiet disclosure; region mode requires
+        it, so it opens there, and it and its disclosure are marked required
+        there alone (`data-required-by-answer`, followed by
+        js/location-picker.js). %>
+    <% let note_hidden = online_active && self.for_event; %>
+    <details class="quiet-disclosure location-note" data-required-by-answer<% if self.for_event { %> data-no-online-note<% } %> <% if region_active || !self.location_description.is_empty() { %>open<% } %><% if note_hidden { %> hidden<% } %>>
+      <summary>+ Add a location note<span class="pill-required" aria-hidden="true" data-only-mode="region"<% if !region_active { %> hidden<% } %>> *</span></summary>
+      <%+ FloatingField::new(FieldKind::Text, "location_description", "Location note", self.location_description.as_str()).id("location-description").required_unless(!region_active).described_by("location-description-help").errors(error) %>
       <p id="location-description-help" class="field-help">The area it covers, or a note like &ldquo;meet at the north entrance.&rdquo;</p>
     </details>
   </div>
+
+  <%# Only an event held at an address says what kind of venue it is, under
+      the note, as the event page lists them; disabled in any other mode, and
+      dropped by the server there too. %>
+  <% if let Some(venues) = self.venues { %>
+  <fieldset class="location-fields space-y-2 border-0 p-0 m-0" data-mode="in_person" <% if !inperson_active { %>hidden disabled<% } %>>
+    <%+ venues %>
+  </fieldset>
+  <% } %>
 </div>

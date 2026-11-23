@@ -1,10 +1,10 @@
-//! Where an event is held, and how people join it, settled all at once from
-//! the answer to "Is it in person or virtual?", as orrery's event form
-//! settles it. The parts depend on each other -- a virtual event has no
-//! address, no kinds of venue and no location note, is of the Online type,
-//! and is joined at its link or by its instructions; only an event held at
-//! an address has a venue -- so they are saved together, never one at a
-//! time.
+//! Where an event is held, settled all at once from the answer to "How will
+//! people attend?", as orrery's event form settles it. The parts depend on
+//! each other -- a virtual event has no address, no kinds of venue and no
+//! location note, and is of the Online type; only an event held at an
+//! address has a venue -- so they are saved together, never one at a time.
+//! How people join a virtual event is the event's own instructions, webpage
+//! or registration link (see [`crate::event::rules::way_to_join`]).
 
 use std::collections::BTreeSet;
 
@@ -32,11 +32,6 @@ pub struct EventLocation {
     /// The area a region covers, or a note like "meet at the north
     /// entrance"; an online event isn't held anywhere, and has none.
     pub location_description: String,
-    pub url: String,
-    /// How people join or take part. A virtual event without a link is
-    /// joined by these instructions alone.
-    #[serde(default)]
-    pub how_to_join: String,
     /// Where the event is pinned, as GeoJSON: a picked place's point. `None`
     /// leaves the save to place the event at its address, or in the middle of
     /// its region, or nowhere.
@@ -59,49 +54,16 @@ pub struct LocationInput<'a> {
     pub latitude: &'a str,
     pub longitude: &'a str,
     pub location_description: &'a str,
-    pub url: &'a str,
-    pub how_to_join: &'a str,
     pub regions: &'a str,
     pub venues: &'a [String],
 }
 
-/// How people join a virtual event, as Facebook's event form asks it: at a
-/// link, or by instructions in place of one ("Other").
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VirtualJoin {
-    Link,
-    Other,
-}
-
-impl VirtualJoin {
-    const ALL: [VirtualJoin; 2] = [VirtualJoin::Link, VirtualJoin::Other];
-
-    /// The choice as a form submits it.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            VirtualJoin::Link => "link",
-            VirtualJoin::Other => "other",
-        }
-    }
-
-    /// The choice a form submits as `value`, if it names one.
-    pub fn parse(value: &str) -> Option<VirtualJoin> {
-        VirtualJoin::ALL
-            .into_iter()
-            .find(|how| how.as_str() == value)
-    }
-
-    /// How a saved virtual event is joined: at its link when it has one,
-    /// else by its instructions when it has those, else it isn't said.
-    pub fn of_saved(url: &str, how_to_join: &str) -> Option<VirtualJoin> {
-        if !url.trim().is_empty() {
-            Some(VirtualJoin::Link)
-        } else if !how_to_join.trim().is_empty() {
-            Some(VirtualJoin::Other)
-        } else {
-            None
-        }
-    }
+/// The kind of venue a form's one answer names (`venue`, empty for none
+/// of them), as the kinds an event is held at.
+pub fn answered_venue(venue: &str) -> Option<String> {
+    Some(venue.trim())
+        .filter(|venue| !venue.is_empty())
+        .map(str::to_string)
 }
 
 /// The address an event was saved at, and where it was pinned.
@@ -196,8 +158,6 @@ impl EventLocation {
             } else {
                 input.location_description.trim().to_string()
             },
-            url: input.url.trim().to_string(),
-            how_to_join: input.how_to_join.trim().to_string(),
             point,
             regions: (mode == LocationMode::Region && !regions.is_empty())
                 .then(|| regions.to_string()),
@@ -221,8 +181,6 @@ impl EventLocation {
         event.zip = self.zip;
         event.country = self.country;
         event.location_description = self.location_description;
-        event.url = self.url;
-        event.how_to_join = self.how_to_join;
         event.point = self.point;
         event.regions = self.regions;
     }
@@ -246,7 +204,7 @@ impl EventLocation {
         let row = sqlx::query!(
             r#"SELECT location_type, entirely_online AS "entirely_online: bool",
                       location_name, address, city, state, zip, country,
-                      location_description, url, how_to_join,
+                      location_description,
                       ST_Y(point) AS "latitude: f64", ST_X(point) AS "longitude: f64",
                       AsGeoJSON(regions) AS "regions: String"
                FROM events WHERE event_id = ?"#,
@@ -266,8 +224,6 @@ impl EventLocation {
             zip: row.zip,
             country: row.country,
             location_description: row.location_description,
-            url: row.url,
-            how_to_join: row.how_to_join,
             // Written as a settled location writes it, so that one left as it
             // was compares equal.
             point: row
@@ -292,13 +248,12 @@ impl EventLocation {
                  location_type = ?1, entirely_online = ?2,
                  also_online = also_online AND NOT ?2,
                  location_name = ?3, address = ?4, city = ?5, state = ?6, zip = ?7,
-                 country = ?8, location_description = ?9, url = ?10,
-                 point = CASE WHEN ?11 IS NULL THEN NULL
-                              ELSE SetSRID(GeomFromGeoJSON(?11), 4326) END,
-                 regions = CASE WHEN ?12 IS NULL THEN NULL
-                                ELSE SetSRID(GeomFromGeoJSON(?12), 4326) END,
-                 how_to_join = ?14
-               WHERE event_id = ?13"#,
+                 country = ?8, location_description = ?9,
+                 point = CASE WHEN ?10 IS NULL THEN NULL
+                              ELSE SetSRID(GeomFromGeoJSON(?10), 4326) END,
+                 regions = CASE WHEN ?11 IS NULL THEN NULL
+                                ELSE SetSRID(GeomFromGeoJSON(?11), 4326) END
+               WHERE event_id = ?12"#,
             self.location_type,
             self.entirely_online,
             self.location_name,
@@ -308,11 +263,9 @@ impl EventLocation {
             self.zip,
             self.country,
             self.location_description,
-            self.url,
             self.point,
             self.regions,
             id,
-            self.how_to_join,
         )
         .execute(&mut tx)
         .await?;
@@ -416,8 +369,6 @@ mod tests {
             latitude: "39.9582",
             longitude: "-75.1731",
             location_description: "Meet at the north entrance",
-            url: "https://example.org/bugs",
-            how_to_join: "Sign in with your library card",
             regions: r#"{"type":"MultiPolygon","coordinates":[]}"#,
             venues: &[],
         }
@@ -441,23 +392,6 @@ mod tests {
         check!(location.point.is_none());
         check!(location.regions.is_none());
         check!(location.venues.is_empty());
-        check!(location.url == "https://example.org/bugs");
-        check!(location.how_to_join == "Sign in with your library card");
-    }
-
-    #[test]
-    fn a_saved_virtual_event_is_joined_at_its_link_else_by_its_instructions() {
-        check!(VirtualJoin::of_saved("https://example.org", "Dial in") == Some(VirtualJoin::Link));
-        check!(VirtualJoin::of_saved(" ", "Dial in") == Some(VirtualJoin::Other));
-        check!(VirtualJoin::of_saved("", " ") == None);
-    }
-
-    #[test]
-    fn a_join_choice_reads_back_as_it_is_submitted() {
-        for how in VirtualJoin::ALL {
-            check!(VirtualJoin::parse(how.as_str()) == Some(how));
-        }
-        check!(VirtualJoin::parse("") == None);
     }
 
     #[test]

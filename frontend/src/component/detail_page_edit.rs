@@ -18,16 +18,18 @@ use common::service::request;
 use crate::admin::autocomplete::resolve_user_names;
 use crate::choice::{ChoiceCheckboxes, ChoiceList, ChoiceValue, OrreryValue, limited_heading};
 use crate::component::date_row::{DateRowFields, DateRowValues};
+use crate::component::event_answers::{PartOfPicked, PartOfResults, PartOfSelected};
 use crate::component::facebook_questions::FacebookAnswers;
-use crate::component::floating_field::FormError;
+use crate::component::floating_field::{FormError, FormErrors};
 use crate::component::location_picker::LocationPicker;
 use crate::contact::{Contact, ContactRole, Unreachable};
 use crate::event::facebook::FacebookEvent;
 use crate::event::field::{EventField, EventFieldType, EventFieldValue};
-use crate::event::location::{EventLocation, LocationInput, SavedAddress, VirtualJoin};
+use crate::event::location::{EventLocation, LocationInput, SavedAddress, answered_venue};
+use crate::event::part_of::LargerEvent;
 use crate::event::rules::{self, DateRow, Field as RulesField, Refusal, RowReading};
 use crate::event::{EventInstance, read_instances};
-use crate::project::location::LocationMode;
+use crate::project::location::{LocationMode, PlaceGiven};
 
 use crate::middleware::authorization::Authenticated;
 use crate::page_change::record_edit;
@@ -39,6 +41,15 @@ use crate::project::field::{
 use crate::project::field_source::FieldSource;
 
 use super::detail_page::DetailPageKind;
+
+mod event_editors;
+mod units;
+
+pub use event_editors::EventEditors;
+use units::EventUnit;
+pub use units::{
+    EventAdmissionDisplay, EventAttendanceDisplay, EventPartOfDisplay, EventRegistrationDisplay,
+};
 
 // ---------------------------------------------------------------------------
 // Field metadata
@@ -82,7 +93,6 @@ pub fn choice_field(field_type: &str, kind: DetailPageKind) -> Option<ChoiceList
         ("programs", DetailPageKind::Event) => Some(ChoiceList::EventProgram),
         ("venues", DetailPageKind::Event) => Some(ChoiceList::EventVenue),
         ("topics", DetailPageKind::Event) => Some(ChoiceList::Topic),
-        ("audience", DetailPageKind::Event) => Some(ChoiceList::Audience),
         _ => None,
     }
 }
@@ -131,14 +141,10 @@ const LOCATION_PARTS: &[&str] = &[
 /// can.
 fn refuse_values(field_type: &str, kind: DetailPageKind, values: &[String]) -> Option<String> {
     let list = choice_field(field_type, kind)?;
-    let picked = values
-        .iter()
-        .filter(|value| !value.is_empty())
-        .collect::<HashSet<_>>()
-        .len();
-
     match kind {
-        DetailPageKind::Event => crate::event::refuse_picks(list, picked),
+        DetailPageKind::Event => {
+            crate::event::refuse_picks(list, crate::choice::distinct_picks(values))
+        }
         DetailPageKind::Project => None,
     }
 }
@@ -168,31 +174,35 @@ async fn refuse_event_value(
     let value = values.first().map(String::as_str).unwrap_or("");
     let stored = || read_event_field(id, field_type);
     let checked = match field_type {
+        "topics" => rules::topics(
+            crate::choice::distinct_picks(values),
+            Some(ChoiceValue::of_target(ChoiceList::Topic, id).await?.len()),
+        ),
         "name" => rules::name(value, Some(&stored().await?)),
         "description" => rules::description(&rich_text_words(value)),
-        "image" => rules::image_link(value, Some(&stored().await?)),
-        // A virtual event keeps a way to join, its link or its
-        // instructions, whichever of them is changed here.
+        "image" => rules::image(value, Some(&stored().await?)),
+        // A virtual event keeps a way to join: its instructions, its
+        // webpage or its registration link, whichever of them is changed
+        // here.
         "url" => {
-            let stored_url = stored().await?;
-            let how_to_join = read_event_field(id, "how_to_join").await?;
-            let mode = event_mode(id).await?;
-            mode.map_or(Ok(()), |mode| {
-                rules::way_to_join(mode, value, &how_to_join, RulesField::Url)
+            let ways = WaysToJoin::of_event(id).await?;
+            rules::link(value, Some(&ways.url)).and_then(|()| {
+                if value.trim() == ways.url.trim() {
+                    Ok(())
+                } else {
+                    ways.with_url(value).check()
+                }
             })
-            .and_then(|()| rules::link(value, Some(&stored_url)))
         }
         "how_to_join" => {
-            let url = read_event_field(id, "url").await?;
-            let mode = event_mode(id).await?;
-            mode.map_or(Ok(()), |mode| {
-                rules::way_to_join(mode, &url, value, RulesField::HowToJoin)
-            })
+            let ways = WaysToJoin::of_event(id).await?;
+            let words = rich_text_words(value);
+            if words.trim() == ways.how_to_join.trim() {
+                Ok(())
+            } else {
+                ways.with_how_to_join(&words).check()
+            }
         }
-        "ticket_url" => rules::ticket_link(value, Some(&stored().await?)),
-        // Saying who is eligible limits the event to them; saying no one
-        // opens it to everyone.
-        "limited_to" => rules::limited_to(value, !value.trim().is_empty()),
         _ => Ok(()),
     };
     Ok(checked.err().map(|refusal| refusal.message.into_owned()))
@@ -221,6 +231,74 @@ async fn event_mode(id: &str) -> Result<Option<LocationMode>, Error> {
     ))
 }
 
+/// Where an event is held, and the ways people can learn how to join it,
+/// which a virtual event must keep one of ([`rules::way_to_join`]): changing
+/// any of them on the event page is checked against the others as saved.
+#[derive(Debug, Clone)]
+struct WaysToJoin {
+    /// `None` for a saved `location_type` that names no mode.
+    mode: Option<LocationMode>,
+    /// The words of the instructions, without their markup.
+    how_to_join: String,
+    url: String,
+    ticket_url: String,
+}
+
+impl WaysToJoin {
+    /// The event `id`'s, as saved.
+    async fn of_event(id: &str) -> Result<Self, Error> {
+        let row = sqlx::query!(
+            r#"SELECT location_type, entirely_online AS "entirely_online: bool",
+                      how_to_join, url, ticket_url
+               FROM events WHERE event_id = ?"#,
+            id
+        )
+        .fetch_one(db())
+        .await?;
+        Ok(WaysToJoin {
+            mode: LocationMode::of_event(&row.location_type, row.entirely_online),
+            how_to_join: rich_text_words(&row.how_to_join),
+            url: row.url,
+            ticket_url: row.ticket_url,
+        })
+    }
+
+    fn with_mode(self, mode: LocationMode) -> Self {
+        WaysToJoin {
+            mode: Some(mode),
+            ..self
+        }
+    }
+
+    fn with_how_to_join(self, words: &str) -> Self {
+        WaysToJoin {
+            how_to_join: words.to_string(),
+            ..self
+        }
+    }
+
+    fn with_url(self, url: &str) -> Self {
+        WaysToJoin {
+            url: url.to_string(),
+            ..self
+        }
+    }
+
+    fn with_ticket_url(self, ticket_url: &str) -> Self {
+        WaysToJoin {
+            ticket_url: ticket_url.to_string(),
+            ..self
+        }
+    }
+
+    /// Whether these leave the event a way to join, if it needs one.
+    fn check(&self) -> rules::Checked {
+        self.mode.map_or(Ok(()), |mode| {
+            rules::way_to_join(mode, &self.how_to_join, &self.url, &self.ticket_url)
+        })
+    }
+}
+
 /// Options whose values are their own labels.
 fn vocabulary_options(vocabulary: &[&'static str]) -> Vec<(&'static str, &'static str)> {
     vocabulary.iter().map(|value| (*value, *value)).collect()
@@ -245,7 +323,7 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
             input_kind: FieldInputKind::Text,
         }),
         ("presenter", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Organizer / presenter",
+            label: crate::event::PRESENTER_LABEL,
             input_kind: FieldInputKind::Text,
         }),
         ("image", DetailPageKind::Event) => Some(FieldMeta {
@@ -253,19 +331,19 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
             input_kind: FieldInputKind::Image,
         }),
         ("image_credit", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Image credit",
+            label: "Image source and credit",
             input_kind: FieldInputKind::Text,
         }),
         ("url", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Event link",
+            label: "Event webpage",
             input_kind: FieldInputKind::Url,
         }),
         ("description", DetailPageKind::Event) => Some(FieldMeta {
-            label: "What are the details?",
+            label: "Event description",
             input_kind: FieldInputKind::RichText,
         }),
         ("how_to_join", DetailPageKind::Event) => Some(FieldMeta {
-            label: "How to join / participate",
+            label: "How to participate",
             input_kind: FieldInputKind::RichText,
         }),
         ("location_name", DetailPageKind::Event) => Some(FieldMeta {
@@ -289,7 +367,7 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
             input_kind: FieldInputKind::Text,
         }),
         ("entirely_online", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Is it in person or virtual?",
+            label: "How will people attend?",
             input_kind: FieldInputKind::Boolean,
         }),
 
@@ -529,20 +607,6 @@ pub fn field_meta(field_type: &str, kind: DetailPageKind) -> Option<FieldMeta> {
                 ("Contributory", "Contributory"),
                 ("Contractual", "Contractual"),
             ]),
-        }),
-
-        // Event-only fields
-        ("ticket_url", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Ticket / registration link",
-            input_kind: FieldInputKind::Url,
-        }),
-        ("cost", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Cost",
-            input_kind: FieldInputKind::Text,
-        }),
-        ("limited_to", DetailPageKind::Event) => Some(FieldMeta {
-            label: "Which group can attend? (empty if it's open to everyone)",
-            input_kind: FieldInputKind::Text,
         }),
 
         // Event additional fields
@@ -1066,23 +1130,6 @@ async fn read_event_field(id: &str, field_type: &str) -> Result<String, Error> {
             .await?;
             Ok(if v { "true" } else { "false" }.to_string())
         }
-        "ticket_url" => Ok(sqlx::query_scalar!(
-            "SELECT ticket_url FROM events WHERE event_id = ?",
-            id
-        )
-        .fetch_one(db())
-        .await?),
-        "cost" => Ok(
-            sqlx::query_scalar!("SELECT cost FROM events WHERE event_id = ?", id)
-                .fetch_one(db())
-                .await?,
-        ),
-        "limited_to" => Ok(sqlx::query_scalar!(
-            "SELECT limited_to FROM events WHERE event_id = ?",
-            id
-        )
-        .fetch_one(db())
-        .await?),
         "status" => Ok(sqlx::query_scalar!(
             r#"SELECT status as "v: String" FROM events WHERE event_id = ?"#,
             id
@@ -1271,9 +1318,6 @@ async fn save_event_field(
             "zip" => EventFieldValue::Zip(value.to_string()),
             "country" => EventFieldValue::Country(value.to_string()),
             "entirely_online" => EventFieldValue::EntirelyOnline(value == "true"),
-            "ticket_url" => EventFieldValue::TicketUrl(value.to_string()),
-            "cost" => EventFieldValue::Cost(value.to_string()),
-            "limited_to" => EventFieldValue::limited_to(value),
             "status" => {
                 let status = match value {
                     "Active" => crate::event::EventStatus::Active,
@@ -1345,22 +1389,13 @@ impl FieldEditForm {
                     .filter(|slug| !slug.is_empty())
                     .map(str::to_string)
                     .collect();
-                let (heading, values) = match (kind, list) {
-                    // Online is answered by where the event is held, not
-                    // picked.
-                    (DetailPageKind::Event, ChoiceList::EventFormat) => (
+                let (heading, values) = match kind {
+                    // As the event forms offer them.
+                    DetailPageKind::Event => (
                         crate::event::choice_legend(list),
-                        crate::event::in_format_order(crate::event::offered_types(list).await?),
+                        crate::event::offered(list).await?,
                     ),
-                    (DetailPageKind::Event, ChoiceList::EventProgram | ChoiceList::EventVenue) => (
-                        crate::event::choice_legend(list),
-                        crate::event::offered_types(list).await?,
-                    ),
-                    (DetailPageKind::Event, _) => (
-                        crate::event::choice_legend(list),
-                        ChoiceValue::all(list).await?,
-                    ),
-                    (DetailPageKind::Project, _) => (
+                    DetailPageKind::Project => (
                         limited_heading(meta.label, limit),
                         ChoiceValue::all(list).await?,
                     ),
@@ -1408,9 +1443,6 @@ pub struct FieldDisplay {
     /// rendered content already includes a heading (ribbon boxes, the online
     /// toggle) or that are icon-only adornments.
     pub show_label: bool,
-    /// Whether only the entity's editors see the field, in editing mode, and
-    /// visitors not at all.
-    pub editor_only: bool,
     /// Whether the display replaces the one on the page out of band, beside a
     /// response to a change that changed this field too.
     pub oob: bool,
@@ -1430,8 +1462,6 @@ impl FieldDisplay {
             wrapper_extra: field_wrapper_extra(field_type, kind),
             inline_button: field_inline_button(field_type),
             show_label: !field_self_labeled(field_type, kind),
-            editor_only: choice_field(field_type, kind)
-                .is_some_and(|list| !list.shown_to_visitors()),
             target_id,
             field_type: field_type.to_string(),
             label,
@@ -1468,9 +1498,6 @@ fn field_self_labeled(field_type: &str, kind: DetailPageKind) -> bool {
                 | "training_materials"
                 | "classroom_materials"
                 | "entirely_online"
-                | "ticket_url"
-                | "cost"
-                | "limited_to"
                 | "mobile_app_url"
                 | "mobile_app_url_ios"
                 | "mobile_app_url_android"
@@ -1552,11 +1579,7 @@ pub fn editable_field_list(kind: DetailPageKind) -> &'static [&'static str] {
             "programs",
             "venues",
             "topics",
-            "limited_to",
-            "audience",
             "url",
-            "ticket_url",
-            "cost",
             "description",
             "entirely_online",
             "location_name",
@@ -1961,6 +1984,15 @@ fn ribbon_subbox(label: &str, content: impl std::fmt::Display) -> String {
     )
 }
 
+/// A detail named by `label`, its value's HTML beside it, as the event page's
+/// rows of answers read ("Admission: Free").
+fn labelled_row(label: &str, value_html: String) -> String {
+    format!(
+        r#"<div class="mb-2 flex flex-wrap gap-x-2"><span class="font-semibold">{}:</span><span>{value_html}</span></div>"#,
+        html_escape(label)
+    )
+}
+
 fn not_set() -> &'static str {
     r#"<span class="edit-only text-gray-400 italic">(not set)</span>"#
 }
@@ -1995,8 +2027,10 @@ const SVG_FACEBOOK: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="
 const SVG_TWITTER: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action h-8"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zm297.1 84L257.3 234.6 379.4 396H283.8L209 298.1 123.3 396H75.8l111-126.9L69.7 116h98l67.7 89.5L313.6 116h47.5zM323.3 367.6L153.4 142.9H125.1L296.9 367.6h26.3z"/></svg>"##;
 const SVG_INSTAGRAM: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="fill-primary-action h-8"><path d="M194.4 211.7a53.3 53.3 0 1 0 59.3 88.7 53.3 53.3 0 1 0 -59.3-88.7zm142.3-68.4c-5.2-5.2-11.5-9.3-18.4-12c-18.1-7.1-57.6-6.8-83.1-6.5c-4.1 0-7.9 .1-11.2 .1c-3.3 0-7.2 0-11.4-.1c-25.5-.3-64.8-.7-82.9 6.5c-6.9 2.7-13.1 6.8-18.4 12s-9.3 11.5-12 18.4c-7.1 18.1-6.7 57.7-6.5 83.2c0 4.1 .1 7.9 .1 11.1s0 7-.1 11.1c-.2 25.5-.6 65.1 6.5 83.2c2.7 6.9 6.8 13.1 12 18.4s11.5 9.3 18.4 12c18.1 7.1 57.6 6.8 83.1 6.5c4.1 0 7.9-.1 11.2-.1c3.3 0 7.2 0 11.4 .1c25.5 .3 64.8 .7 82.9-6.5c6.9-2.7 13.1-6.8 18.4-12s9.3-11.5 12-18.4c7.2-18 6.8-57.4 6.5-83c0-4.2-.1-8.1-.1-11.4s0-7.1 .1-11.4c.3-25.5 .7-64.9-6.5-83l0 0c-2.7-6.9-6.8-13.1-12-18.4zM448 96c0-35.3-28.7-64-64-64H64C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V96zM357 389c-18.7 18.7-41.4 24.6-67 25.9c-26.4 1.5-105.6 1.5-132 0c-25.6-1.3-48.3-7.2-67-25.9s-24.6-41.4-25.8-67c-1.5-26.4-1.5-105.6 0-132c1.3-25.6 7.1-48.3 25.8-67s41.5-24.6 67-25.8c26.4-1.5 105.6-1.5 132 0c25.6 1.3 48.3 7.1 67 25.8s24.6 41.4 25.8 67c1.5 26.3 1.5 105.4 0 131.9c-1.3 25.6-7.1 48.3-25.8 67z"/></svg>"##;
 
-/// The values of `list`, in list order, that a choice field's value picks.
-async fn picked_values(list: ChoiceList, value: &str) -> Vec<ChoiceValue> {
+/// The values of `list` that a choice field's value picks, of a page of
+/// `kind`: an event's as the event forms offer them ([`crate::event::offered`]),
+/// anything else's in list order.
+async fn picked_values(list: ChoiceList, value: &str, kind: DetailPageKind) -> Vec<ChoiceValue> {
     let slugs: std::collections::BTreeSet<&str> = value
         .split(',')
         .map(str::trim)
@@ -2007,7 +2041,11 @@ async fn picked_values(list: ChoiceList, value: &str) -> Vec<ChoiceValue> {
         return Vec::new();
     }
 
-    match ChoiceValue::all(list).await {
+    let values = match kind {
+        DetailPageKind::Event => crate::event::offered(list).await,
+        DetailPageKind::Project => ChoiceValue::all(list).await,
+    };
+    match values {
         Ok(values) => values
             .into_iter()
             .filter(|value| slugs.contains(value.slug.as_str()))
@@ -2062,15 +2100,35 @@ async fn format_display_value(
     let esc = || html_escape(value);
 
     // An event's formats, programs, venues, topics and audience are each a
-    // labelled row.
+    // labelled row, of what its organizer chose, in the order the event forms
+    // offer them.
     if kind == DetailPageKind::Event
         && let Some(list) = choice_field(field_type, kind)
     {
-        return choice_row(list, &picked_values(list, value).await, can_edit);
+        let picked = picked_values(list, value, kind).await;
+        return choice_row(list, &picked, can_edit);
     }
 
     match field_type {
         "image" => format_image_display(target_id, value, kind).await,
+
+        // An event's, among its details in the event form's order, named as
+        // the form asks for them, as orrery's event page names them.
+        "presenter" if kind == DetailPageKind::Event => labelled_row(
+            crate::event::PRESENTER_LABEL,
+            if empty { not_set().to_string() } else { esc() },
+        ),
+        "url" if kind == DetailPageKind::Event => labelled_row(
+            "Event webpage",
+            if empty {
+                not_set().to_string()
+            } else {
+                format!(
+                    r#"<a href="{0}" class="text-primary-action underline break-all" target="_blank" rel="noopener">{0}</a>"#,
+                    esc()
+                )
+            },
+        ),
 
         // Hero
         "presenter" => {
@@ -2102,33 +2160,6 @@ async fn format_display_value(
             }
         }
 
-        // Each an event's labelled row under its `url`.
-        "ticket_url" => format!(
-            r#"<p class="mb-2 flex flex-wrap gap-x-2"><span class="font-semibold">Tickets:</span>{}</p>"#,
-            if empty {
-                not_set().to_string()
-            } else {
-                format!(
-                    r#"<a href="{0}" class="text-primary-action underline break-all" target="_blank" rel="noopener">{0}</a>"#,
-                    esc()
-                )
-            }
-        ),
-        "cost" => format!(
-            r#"<p class="mb-4 flex flex-wrap gap-x-2"><span class="font-semibold">Cost:</span>{}</p>"#,
-            if empty { not_set().to_string() } else { esc() }
-        ),
-        // An event's labelled row above its links, the group it's limited
-        // to or that it's open to everyone.
-        "limited_to" => format!(
-            r#"<p class="mb-2 flex flex-wrap gap-x-2"><span class="font-semibold">Who can attend:</span>{}</p>"#,
-            if empty {
-                "Open to everyone".to_string()
-            } else {
-                esc()
-            }
-        ),
-
         // Ribbon-box fields (top-level styled blocks)
         "goal" if kind == DetailPageKind::Project => {
             ribbon_box("Goal", if empty { not_set().to_string() } else { esc() })
@@ -2136,14 +2167,19 @@ async fn format_display_value(
         "task" if kind == DetailPageKind::Project => {
             ribbon_box("Task", if empty { not_set().to_string() } else { esc() })
         }
+        // An event's is named as the event form asks for it.
         "description" => {
+            let heading = match kind {
+                DetailPageKind::Event => "Event description",
+                DetailPageKind::Project => "Description",
+            };
             if empty {
-                ribbon_box("Description", not_set())
+                ribbon_box(heading, not_set())
             } else {
                 let html = common::quill::content_to_html(value)
                     .map(|(h, _)| h)
                     .unwrap_or_else(|_| value.to_string());
-                ribbon_box("Description", &html)
+                ribbon_box(heading, &html)
             }
         }
         // Inside the page's "How to Get Started" box, which also carries the
@@ -2261,7 +2297,7 @@ async fn format_display_value(
             if empty { not_set().to_string() } else { esc() },
         ),
         "audiences" => {
-            let values = picked_values(ChoiceList::Audience, value).await;
+            let values = picked_values(ChoiceList::Audience, value, kind).await;
             let content = if values.is_empty() {
                 not_set().to_string()
             } else {
@@ -2466,7 +2502,7 @@ pub struct InstanceEditor {
     /// The query naming the saved date being changed.
     row_query: String,
     fields: DateRowFields,
-    error: Option<FormError>,
+    errors: FormErrors,
 }
 
 /// A date's row as an editor submits it. Its controls are named as the
@@ -2621,7 +2657,7 @@ pub async fn new_instance(
         row: None,
         row_query: String::new(),
         fields: DateRowFields::new("", values),
-        error: None,
+        errors: FormErrors::new(),
     });
     display.respond()
 }
@@ -2643,7 +2679,7 @@ pub async fn edit_instance(
         row: Some(index),
         row_query: InstancesDisplay::row_query(instance),
         fields: DateRowFields::stored(instance, display.zone.as_ref()),
-        error: None,
+        errors: FormErrors::new(),
     });
     display.respond()
 }
@@ -2712,7 +2748,7 @@ async fn save_instance(
                     .map(InstancesDisplay::row_query)
                     .unwrap_or_default(),
                 fields: DateRowFields::new("", form.values()),
-                error: Some(row_refusal(refusal)),
+                errors: row_refusal(refusal).into(),
             });
             return display.respond();
         }
@@ -2791,13 +2827,13 @@ async fn store_instances(
 // Where an event is held, edited as a whole, as orrery's event form edits it
 // ---------------------------------------------------------------------------
 
-/// The event page's "Where": the mode it is held in, where that says
+/// The event page's "Location": the mode it is held in, where that says
 /// something ("Virtual", "Anywhere on the planet"), each part of the event's
-/// location shown as the page shows a field, and, to an editor, one control to change them all
-/// together, with the add event form's location section. Changing where the
-/// event is held can change its link, its kinds of venue and whether it is of
-/// the Online type too, so a change also replaces those fields' displays
-/// (`changed`) out of band.
+/// location shown as the page shows a field, and, to an editor, one control
+/// to change them all together, with the add event form's location section.
+/// Changing where the event is held can change its kinds of venue and
+/// whether it is of the Online type too, so a change also replaces those
+/// fields' displays (`changed`) out of band.
 #[derive(TemplateOnce)]
 #[template(path = "pages/detail_page_location.stpl.html")]
 pub struct EventLocationDisplay {
@@ -2810,13 +2846,13 @@ pub struct EventLocationDisplay {
     has_point: bool,
     region_geojson: Option<String>,
     editing: Option<LocationPicker>,
-    error: Option<FormError>,
+    errors: FormErrors,
     changed: Vec<FieldDisplay>,
 }
 
 /// The fields a change to where an event is held can change besides its
 /// location's own parts.
-const CHANGED_WITH_LOCATION: &[&str] = &["url", "how_to_join", "formats", "programs", "venues"];
+const CHANGED_WITH_LOCATION: &[&str] = &["formats", "programs", "venues"];
 
 impl EventLocationDisplay {
     /// The display of an event's location from the event page's own values;
@@ -2840,46 +2876,9 @@ impl EventLocationDisplay {
             has_point,
             region_geojson,
             editing: None,
-            error: None,
+            errors: FormErrors::new(),
             changed: Vec::new(),
         }
-    }
-
-    /// Read the event `id`'s location as it now stands, as someone, staff or
-    /// not (`is_staff`), is shown it.
-    async fn load(id: &str, can_edit: bool, is_staff: bool) -> Result<Self, Error> {
-        let row = sqlx::query!(
-            r#"SELECT location_type, entirely_online AS "entirely_online: bool",
-                      also_online AS "also_online: bool",
-                      point IS NOT NULL AS "has_point: bool",
-                      AsGeoJSON(regions) AS "region_geojson: String"
-               FROM events WHERE event_id = ?"#,
-            id
-        )
-        .fetch_one(db())
-        .await?;
-        let mut parts = Vec::with_capacity(LOCATION_PARTS.len());
-        for part in LOCATION_PARTS {
-            parts.push(
-                current_field_display(id, part, DetailPageKind::Event, can_edit, is_staff).await?,
-            );
-        }
-        Ok(EventLocationDisplay {
-            target_id: id.to_string(),
-            can_edit,
-            parts,
-            mode: LocationMode::of_event(&row.location_type, row.entirely_online),
-            also_online: row.also_online,
-            has_point: row.has_point,
-            region_geojson: row.region_geojson,
-            editing: None,
-            error: None,
-            changed: Vec::new(),
-        })
-    }
-
-    fn respond(self) -> poem::Result<poem::Response> {
-        Ok(Html(self.render_once().map_err(internal_error)?).into_response())
     }
 }
 
@@ -2887,7 +2886,7 @@ impl EventLocationDisplay {
 /// location section, named as there.
 #[derive(Debug, Default, serde::Deserialize)]
 #[serde(default)]
-struct LocationForm {
+pub struct LocationForm {
     location_mode: String,
     location_name: String,
     address: String,
@@ -2898,16 +2897,10 @@ struct LocationForm {
     latitude: String,
     longitude: String,
     location_description: String,
-    url: String,
-    /// How people join a virtual event: `link`, `other`, or empty until it
-    /// is chosen.
-    virtual_join: String,
-    /// The instructions a virtual event joined otherwise than at a link
-    /// is joined by, submitted only when that is chosen.
-    how_to_join: String,
     regions: String,
     place_query: String,
-    venues: Vec<String>,
+    /// The kind of venue chosen, empty for none.
+    venue: String,
 }
 
 impl LocationForm {
@@ -2937,21 +2930,16 @@ impl LocationForm {
             latitude,
             longitude,
             location_description: location.location_description,
-            virtual_join: VirtualJoin::of_saved(&location.url, &location.how_to_join)
-                .filter(|_| location.entirely_online)
-                .map(VirtualJoin::as_str)
-                .unwrap_or_default()
-                .to_string(),
-            url: location.url,
-            how_to_join: location.how_to_join,
             regions: location.regions.unwrap_or_default(),
             place_query: String::new(),
-            venues: location.venues.into_iter().collect(),
+            venue: crate::event::first_offered(ChoiceList::EventVenue, &location.venues)
+                .await?
+                .unwrap_or_default(),
         })
     }
 
     /// The add event form's location section, holding this location.
-    async fn picker(&self, error: Option<&FormError>) -> Result<LocationPicker, Error> {
+    async fn picker(&self, errors: &FormErrors) -> Result<LocationPicker, Error> {
         Ok(LocationPicker::build(
             &self.location_mode,
             &self.location_name,
@@ -2963,55 +2951,55 @@ impl LocationForm {
             &self.latitude,
             &self.longitude,
             &self.location_description,
-            &self.url,
+            "",
             &self.regions,
         )
         .with_place_query(&self.place_query)
-        .for_events(&self.virtual_join, &self.how_to_join)
-        .with_venues(ChoiceCheckboxes::new(
-            "venues",
-            crate::event::offered_types(ChoiceList::EventVenue).await?,
-            self.venues.iter().cloned().collect(),
-            crate::event::pick_limit(ChoiceList::EventVenue),
-        ))
-        .errors(error))
+        .for_events()
+        .with_venues(
+            crate::event::offered(ChoiceList::EventVenue).await?,
+            &self.venue,
+        )
+        .errors(errors))
     }
 
     /// The location this settles on, by the rules orrery's event form
-    /// keeps, or why it can't be saved. `stored` is the location the event
-    /// was saved with, `saved` its address, and `venues` the kinds of venue
-    /// picked that are known.
+    /// keeps, or everything that keeps it from being saved. `saved` is the address the event was
+    /// saved at, `venues` the kinds of venue picked that are known, and
+    /// `ways` how people learn to join it, which a virtual event must keep
+    /// one of: that is said of the mode, since this form changes none of
+    /// them.
     fn settle(
         &self,
-        stored: &EventLocation,
         saved: &SavedAddress,
         venues: &[String],
-    ) -> Result<EventLocation, FormError> {
-        let refused = |refusal: Refusal| {
-            let field = match refusal.field {
-                RulesField::LocationMode => "location_mode",
-                RulesField::Address => "address",
-                RulesField::LocationDescription => "location_description",
-                RulesField::Url => "url",
-                RulesField::VirtualJoin => "virtual_join",
-                RulesField::HowToJoin => "how_to_join",
-                _ => return FormError::general(refusal.message),
-            };
-            FormError::at(field, refusal.message)
+        ways: WaysToJoin,
+    ) -> Result<EventLocation, FormErrors> {
+        let refused = |refusal: Refusal| match refusal.field {
+            RulesField::HowToJoin => FormError::at("location_mode", refusal.message),
+            _ => refusal.into_form_error(0),
         };
-        let mode = rules::mode(LocationMode::parse(&self.location_mode)).map_err(refused)?;
-        let choice = VirtualJoin::parse(&self.virtual_join);
-        rules::place(mode, &self.address, &self.city, &self.place_query).map_err(refused)?;
-        let url = rules::join(mode, choice, &self.url, &self.how_to_join).map_err(refused)?;
-        rules::link(url, Some(&stored.url)).map_err(refused)?;
-        rules::location_note(mode, &self.location_description).map_err(refused)?;
-        // The instructions are asked here only as a virtual event's way to
-        // join; otherwise they are the event page's own field, and kept.
-        let how_to_join = if mode == LocationMode::Online && choice == Some(VirtualJoin::Other) {
-            &self.how_to_join
-        } else {
-            &stored.how_to_join
+        let mut errors = FormErrors::new();
+        let Some(mode) =
+            errors.take(rules::mode(LocationMode::parse(&self.location_mode)).map_err(refused))
+        else {
+            return Err(errors);
         };
+        errors.take(
+            rules::place(
+                mode,
+                PlaceGiven {
+                    location_name: &self.location_name,
+                    address: &self.address,
+                    city: &self.city,
+                    place_query: &self.place_query,
+                },
+            )
+            .map_err(refused),
+        );
+        errors.take(ways.with_mode(mode).check().map_err(refused));
+        errors.take(rules::location_note(mode, &self.location_description).map_err(refused));
+        errors.into_result()?;
 
         Ok(EventLocation::settle(
             LocationInput {
@@ -3025,13 +3013,97 @@ impl LocationForm {
                 latitude: &self.latitude,
                 longitude: &self.longitude,
                 location_description: &self.location_description,
-                url,
-                how_to_join,
                 regions: &self.regions,
                 venues,
             },
             Some(saved),
         ))
+    }
+}
+
+impl EventUnit for EventLocationDisplay {
+    const NAME: &'static str = "location";
+    type Form = LocationForm;
+    type Value = EventLocation;
+
+    /// Read the event `id`'s location as it now stands, as someone, staff or
+    /// not (`is_staff`), is shown it.
+    async fn load(id: &str, can_edit: bool, is_staff: bool) -> Result<Self, Error> {
+        let row = sqlx::query!(
+            r#"SELECT location_type, entirely_online AS "entirely_online: bool",
+                      also_online AS "also_online: bool",
+                      point IS NOT NULL AS "has_point: bool",
+                      AsGeoJSON(regions) AS "region_geojson: String"
+               FROM events WHERE event_id = ?"#,
+            id
+        )
+        .fetch_one(db())
+        .await?;
+        let mut parts = Vec::with_capacity(LOCATION_PARTS.len());
+        for part in LOCATION_PARTS {
+            parts.push(
+                current_field_display(id, part, DetailPageKind::Event, can_edit, is_staff).await?,
+            );
+        }
+        Ok(EventLocationDisplay {
+            target_id: id.to_string(),
+            can_edit,
+            parts,
+            mode: LocationMode::of_event(&row.location_type, row.entirely_online),
+            also_online: row.also_online,
+            has_point: row.has_point,
+            region_geojson: row.region_geojson,
+            editing: None,
+            errors: FormErrors::new(),
+            changed: Vec::new(),
+        })
+    }
+
+    async fn stored(id: &str) -> Result<EventLocation, Error> {
+        EventLocation::read(Ulid::from_string(id)?).await
+    }
+
+    async fn form_of(id: &str) -> Result<LocationForm, Error> {
+        LocationForm::of_event(id).await
+    }
+
+    async fn open(&mut self, form: LocationForm, errors: FormErrors) -> Result<(), Error> {
+        self.editing = Some(form.picker(&errors).await?);
+        self.errors = errors;
+        Ok(())
+    }
+
+    async fn settle(
+        id: &str,
+        form: &LocationForm,
+        _stored: &EventLocation,
+    ) -> Result<Result<EventLocation, FormErrors>, Error> {
+        let saved = SavedAddress::of_event(id).await?;
+        let venues = ChoiceValue::known(ChoiceList::EventVenue, answered_venue(&form.venue))
+            .await?
+            .into_iter()
+            .collect::<Vec<_>>();
+        let ways = WaysToJoin::of_event(id).await?;
+        Ok(form.settle(&saved, &venues, ways))
+    }
+
+    fn change(value: EventLocation) -> EventFieldValue {
+        EventFieldValue::Location(value)
+    }
+
+    /// Where the event is held can change its kinds of venue and whether it
+    /// is of the Online type.
+    async fn saved(&mut self, id: &str, is_staff: bool) -> Result<(), Error> {
+        for field in CHANGED_WITH_LOCATION {
+            if editable_field_list(DetailPageKind::Event).contains(field) {
+                self.changed.push(
+                    current_field_display(id, field, DetailPageKind::Event, true, is_staff)
+                        .await?
+                        .out_of_band(),
+                );
+            }
+        }
+        Ok(())
     }
 }
 
@@ -3041,16 +3113,7 @@ pub async fn get_location_display(
     Path(id): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> poem::Result<poem::Response> {
-    let (can_edit, is_staff) = match user_info.as_deref() {
-        Some(user) => check_edit_permission(&id, user, DetailPageKind::Event)
-            .await
-            .unwrap_or((false, false)),
-        None => (false, false),
-    };
-    EventLocationDisplay::load(&id, can_edit, is_staff)
-        .await
-        .map_err(internal_error)?
-        .respond()
+    units::show::<EventLocationDisplay>(&id, user_info.as_deref()).await
 }
 
 /// GET /-detail/:id/location/edit — where the event is held, open to change
@@ -3059,13 +3122,7 @@ pub async fn edit_location(
     Path(id): Path<String>,
     Authenticated(user_info): Authenticated,
 ) -> poem::Result<poem::Response> {
-    let is_staff = instance_editor(&id, user_info.as_deref()).await?;
-    let mut display = EventLocationDisplay::load(&id, true, is_staff)
-        .await
-        .map_err(internal_error)?;
-    let form = LocationForm::of_event(&id).await.map_err(internal_error)?;
-    display.editing = Some(form.picker(None).await.map_err(internal_error)?);
-    display.respond()
+    units::edit::<EventLocationDisplay>(&id, user_info.as_deref()).await
 }
 
 /// PUT /-detail/:id/location — change where the event is held
@@ -3075,61 +3132,192 @@ pub async fn save_location(
     Authenticated(user_info): Authenticated,
     crate::form::QsForm(form): crate::form::QsForm<LocationForm>,
 ) -> poem::Result<poem::Response> {
-    let is_staff = instance_editor(&id, user_info.as_deref()).await?;
-    let user = user_info.expect("an editor is signed in");
-    let target = Ulid::from_string(&id).map_err(|e| {
-        poem::Error::from_string(e.to_string(), poem::http::StatusCode::BAD_REQUEST)
-    })?;
+    units::save::<EventLocationDisplay>(&id, user_info.as_deref(), form).await
+}
 
-    let stored = EventLocation::read(target).await.map_err(internal_error)?;
-    let saved = SavedAddress::of_event(&id).await.map_err(internal_error)?;
-    let venues = ChoiceValue::known(ChoiceList::EventVenue, form.venues.iter().cloned())
-        .await
-        .map_err(internal_error)?
-        .into_iter()
-        .collect::<Vec<_>>();
+/// GET /-detail/:id/admission — what attending the event costs
+#[handler]
+pub async fn get_admission_display(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    units::show::<EventAdmissionDisplay>(&id, user_info.as_deref()).await
+}
 
-    let location = match form.settle(&stored, &saved, &venues) {
-        Ok(location) => location,
-        Err(error) => {
-            let mut display = EventLocationDisplay::load(&id, true, is_staff)
-                .await
-                .map_err(internal_error)?;
-            display.editing = Some(form.picker(Some(&error)).await.map_err(internal_error)?);
-            display.error = Some(error);
-            return display.respond();
-        }
-    };
+/// GET /-detail/:id/admission/edit — admission, open to change
+#[handler]
+pub async fn edit_admission(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    units::edit::<EventAdmissionDisplay>(&id, user_info.as_deref()).await
+}
 
-    if location != stored {
-        EventField::new(target, EventFieldValue::Location(location))
-            .store()
-            .await
-            .map_err(internal_error)?;
-        let _ = log_activity(
-            None,
-            record_edit(DetailPageKind::Event, is_staff),
-            user.user_id,
-            target,
-            "location".to_string(),
-        )
-        .await;
+/// PUT /-detail/:id/admission — change what attending the event costs
+#[handler]
+pub async fn save_admission(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    crate::form::QsForm(form): crate::form::QsForm<units::AdmissionForm>,
+) -> poem::Result<poem::Response> {
+    units::save::<EventAdmissionDisplay>(&id, user_info.as_deref(), form).await
+}
+
+/// GET /-detail/:id/registration — how people sign up for the event
+#[handler]
+pub async fn get_registration_display(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    units::show::<EventRegistrationDisplay>(&id, user_info.as_deref()).await
+}
+
+/// GET /-detail/:id/registration/edit — registration, open to change
+#[handler]
+pub async fn edit_registration(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    units::edit::<EventRegistrationDisplay>(&id, user_info.as_deref()).await
+}
+
+/// PUT /-detail/:id/registration — change how people sign up for the event
+#[handler]
+pub async fn save_registration(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    crate::form::QsForm(form): crate::form::QsForm<units::RegistrationForm>,
+) -> poem::Result<poem::Response> {
+    units::save::<EventRegistrationDisplay>(&id, user_info.as_deref(), form).await
+}
+
+/// GET /-detail/:id/attendance — who can participate in the event
+#[handler]
+pub async fn get_attendance_display(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    units::show::<EventAttendanceDisplay>(&id, user_info.as_deref()).await
+}
+
+/// GET /-detail/:id/attendance/edit — who can participate, open to change
+#[handler]
+pub async fn edit_attendance(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    units::edit::<EventAttendanceDisplay>(&id, user_info.as_deref()).await
+}
+
+/// PUT /-detail/:id/attendance — change who can participate in the event
+#[handler]
+pub async fn save_attendance(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    crate::form::QsForm(form): crate::form::QsForm<units::AttendanceForm>,
+) -> poem::Result<poem::Response> {
+    units::save::<EventAttendanceDisplay>(&id, user_info.as_deref(), form).await
+}
+
+/// GET /-detail/:id/part_of — the larger event the event is part of
+#[handler]
+pub async fn get_part_of_display(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    units::show::<EventPartOfDisplay>(&id, user_info.as_deref()).await
+}
+
+/// GET /-detail/:id/part_of/edit — the larger event, open to change
+#[handler]
+pub async fn edit_part_of(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    units::edit::<EventPartOfDisplay>(&id, user_info.as_deref()).await
+}
+
+/// PUT /-detail/:id/part_of — change the larger event the event is part of
+#[handler]
+pub async fn save_part_of(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    crate::form::QsForm(form): crate::form::QsForm<units::PartOfForm>,
+) -> poem::Result<poem::Response> {
+    units::save::<EventPartOfDisplay>(&id, user_info.as_deref(), form).await
+}
+
+/// What the part-of editor's search is given: the words typed.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(default)]
+pub struct PartOfSearch {
+    q: String,
+}
+
+/// GET /-detail/:id/part_of/search?q= — the published events, other than
+/// this one, whose names hold the words typed, to pick the larger event from
+#[handler]
+pub async fn search_part_of(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    Query(query): Query<PartOfSearch>,
+) -> poem::Result<poem::Response> {
+    units::unit_editor::<EventPartOfDisplay>(&id, user_info.as_deref()).await?;
+    let q = query.q.trim();
+    if q.is_empty() {
+        return Ok(Html(String::new()).into_response());
     }
-
-    let mut display = EventLocationDisplay::load(&id, true, is_staff)
+    let events = LargerEvent::search(q, id.parse().ok())
         .await
         .map_err(internal_error)?;
-    for field in CHANGED_WITH_LOCATION {
-        if editable_field_list(DetailPageKind::Event).contains(field) {
-            display.changed.push(
-                current_field_display(&id, field, DetailPageKind::Event, true, is_staff)
-                    .await
-                    .map_err(internal_error)?
-                    .out_of_band(),
-            );
-        }
+    let html = PartOfResults {
+        event_id: id,
+        events,
     }
-    display.respond()
+    .render_once()
+    .map_err(internal_error)?;
+    Ok(Html(html).into_response())
+}
+
+/// What the part-of editor's pick is given: the event picked.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(default)]
+pub struct PartOfPick {
+    id: String,
+}
+
+/// GET /-detail/:id/part_of/pick?id= — pick the larger event, while it is
+/// published: the pick, with the hidden field holding it and the cleared
+/// results out of band
+#[handler]
+pub async fn pick_part_of(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+    Query(pick): Query<PartOfPick>,
+) -> poem::Result<poem::Response> {
+    units::unit_editor::<EventPartOfDisplay>(&id, user_info.as_deref()).await?;
+    let selected = PartOfSelected::picked(&id, &pick.id)
+        .await
+        .map_err(internal_error)?;
+    let html = PartOfPicked { selected }
+        .render_once()
+        .map_err(internal_error)?;
+    Ok(Html(html).into_response())
+}
+
+/// GET /-detail/:id/part_of/clear — take back the larger event picked
+#[handler]
+pub async fn clear_part_of(
+    Path(id): Path<String>,
+    Authenticated(user_info): Authenticated,
+) -> poem::Result<poem::Response> {
+    units::unit_editor::<EventPartOfDisplay>(&id, user_info.as_deref()).await?;
+    let html = PartOfPicked {
+        selected: PartOfSelected::none(&id),
+    }
+    .render_once()
+    .map_err(internal_error)?;
+    Ok(Html(html).into_response())
 }
 
 // ---------------------------------------------------------------------------
@@ -3548,7 +3736,7 @@ pub struct FacebookEventDisplay {
 
 pub struct RefusedFacebookAnswers {
     pub answers: FacebookEvent,
-    pub error: FormError,
+    pub errors: FormErrors,
 }
 
 impl FacebookEventDisplay {
@@ -3597,7 +3785,7 @@ pub async fn update_facebook_event(
             facebook_event: load_facebook_event(target).await.map_err(internal_error)?,
             refused: Some(RefusedFacebookAnswers {
                 answers,
-                error: FormError::at(problem.field, problem.message),
+                errors: FormError::at(problem.field, problem.message).into(),
             }),
         }
     } else {
@@ -3636,6 +3824,38 @@ pub struct ManagersDisplay {
     pub managers: Vec<super::detail_page::ManagerDisplay>,
     pub can_edit: bool,
     pub error: Option<String>,
+}
+
+impl ManagersDisplay {
+    /// The managers card of page `target_id`, whose managers are the
+    /// accounts `ids`, open to change; `error` tells why the last change was
+    /// refused. Each is shown by its email address, or its id when that
+    /// can't be found.
+    pub async fn of(target_id: String, ids: &[Ulid], error: Option<String>) -> Self {
+        let resolved: HashMap<Ulid, String> = resolve_user_names(ids.to_vec())
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+
+        let managers = ids
+            .iter()
+            .map(|uid| super::detail_page::ManagerDisplay {
+                user_id: uid.to_string(),
+                email: resolved
+                    .get(uid)
+                    .cloned()
+                    .unwrap_or_else(|| uid.to_string()),
+            })
+            .collect();
+
+        ManagersDisplay {
+            target_id,
+            managers,
+            can_edit: true,
+            error,
+        }
+    }
 }
 
 #[derive(TemplateOnce)]
@@ -3703,31 +3923,10 @@ async fn managers_response(
     ids: &[Ulid],
     error: Option<String>,
 ) -> poem::Result<poem::Response> {
-    let resolved: HashMap<Ulid, String> = resolve_user_names(ids.to_vec())
+    let html = ManagersDisplay::of(target_id, ids, error)
         .await
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
-
-    let managers = ids
-        .iter()
-        .map(|uid| super::detail_page::ManagerDisplay {
-            user_id: uid.to_string(),
-            email: resolved
-                .get(uid)
-                .cloned()
-                .unwrap_or_else(|| uid.to_string()),
-        })
-        .collect();
-
-    let html = ManagersDisplay {
-        target_id,
-        managers,
-        can_edit: true,
-        error,
-    }
-    .render_once()
-    .map_err(internal_error)?;
+        .render_once()
+        .map_err(internal_error)?;
     Ok(Html(html).into_response())
 }
 
@@ -4403,7 +4602,7 @@ mod choice_field_tests {
         ];
         let html = choice_row(ChoiceList::EventFormat, &picked, false);
 
-        check!(html.find(">Type of event</span>").unwrap() < html.find("BioBlitz").unwrap());
+        check!(html.find(">Event format</span>").unwrap() < html.find("BioBlitz").unwrap());
         check!(html.find("BioBlitz").unwrap() < html.find("Webinar").unwrap());
         check!(html.matches("<div ").count() == 1);
 
@@ -4418,7 +4617,7 @@ mod choice_field_tests {
             .copied()
             .filter(|field| choice_field(field, DetailPageKind::Event).is_some())
             .collect();
-        check!(fields == ["formats", "programs", "venues", "topics", "audience"]);
+        check!(fields == ["formats", "programs", "venues", "topics"]);
         for field in fields {
             check!(field_self_labeled(field, DetailPageKind::Event));
             check!(field_wrapper_extra(field, DetailPageKind::Event) == "mb-2");
@@ -4426,14 +4625,14 @@ mod choice_field_tests {
     }
 
     #[test]
-    fn only_editors_see_an_events_program() {
-        let display = |field: &str, can_edit: bool| {
+    fn visitors_see_what_an_event_picks_from_every_list() {
+        let display = |field: &str| {
             FieldDisplay::build(
                 "01J0000000000000000000000".to_string(),
                 field,
                 DetailPageKind::Event,
                 "Label".to_string(),
-                can_edit,
+                false,
                 "<p>Shown</p>".to_string(),
                 false,
             )
@@ -4441,13 +4640,8 @@ mod choice_field_tests {
             .unwrap()
         };
 
-        check!(display("programs", false).trim().is_empty());
-        let editor = display("programs", true);
-        check!(editor.contains("<p>Shown</p>"));
-        check!(editor.contains(" edit-only\""));
-
-        for field in ["formats", "venues", "topics", "audience"] {
-            let visitor = display(field, false);
+        for field in ["formats", "programs", "venues", "topics"] {
+            let visitor = display(field);
             check!(visitor.contains("<p>Shown</p>"));
             check!(!visitor.contains("edit-only"));
         }
@@ -4487,15 +4681,12 @@ mod choice_field_tests {
     #[test]
     fn an_events_audience_is_asked_about_ages() {
         let label = |field, kind| field_meta(field, kind).unwrap().label;
-        check!(label("audience", DetailPageKind::Event) == "What ages is this event suitable for?");
         check!(label("audiences", DetailPageKind::Project) == "Audience");
         check!(
             crate::event::choice_legend(ChoiceList::Audience)
                 == "What ages is this event suitable for?"
         );
-        check!(
-            crate::event::choice_legend(ChoiceList::EventFormat) == "Type of event (choose any)"
-        );
+        check!(crate::event::choice_legend(ChoiceList::EventVenue) == "Kind of venue (optional)");
     }
 
     #[test]
@@ -4506,7 +4697,6 @@ mod choice_field_tests {
             ("programs", DetailPageKind::Event, ChoiceList::EventProgram),
             ("venues", DetailPageKind::Event, ChoiceList::EventVenue),
             ("topics", DetailPageKind::Event, ChoiceList::Topic),
-            ("audience", DetailPageKind::Event, ChoiceList::Audience),
         ] {
             check!(choice_field(field, kind) == Some(list));
             check!(editable_field_list(kind).contains(&field));
@@ -4549,8 +4739,6 @@ mod choice_field_tests {
         repeated.push(repeated[0].clone());
         repeated.push(String::new());
         check!(refuse_values("topics", DetailPageKind::Event, &repeated).is_none());
-
-        check!(refuse_values("audience", DetailPageKind::Event, &topics(20)).is_none());
     }
 }
 
@@ -4560,7 +4748,7 @@ mod tests {
 
     use super::*;
 
-    /// The event page's "Where" for an event held as given, its venue
+    /// The event page's "Location" for an event held as given, its venue
     /// named "Town Library".
     fn where_shown(location_type: &str, entirely_online: bool, also_online: bool) -> String {
         let part = |field: &str| {
@@ -4617,21 +4805,5 @@ mod tests {
         check!(html.contains("Town Library"));
         check!(html.contains("and virtual"));
         check!(!html.contains(">Virtual<"));
-    }
-
-    #[tokio::test]
-    async fn an_event_says_who_can_attend() {
-        let line = |value: &'static str| {
-            format_display_value("limited_to", value, "", DetailPageKind::Event, false)
-        };
-
-        check!(
-            line("").await
-                == r#"<p class="mb-2 flex flex-wrap gap-x-2"><span class="font-semibold">Who can attend:</span>Open to everyone</p>"#
-        );
-        check!(
-            line("K–12 teachers & aides").await
-                == r#"<p class="mb-2 flex flex-wrap gap-x-2"><span class="font-semibold">Who can attend:</span>K–12 teachers &amp; aides</p>"#
-        );
     }
 }

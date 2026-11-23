@@ -21,6 +21,7 @@ pub mod auth;
 pub mod bookmarks;
 pub mod certificates;
 pub mod communities;
+pub mod deletion;
 pub mod constant_contact;
 pub mod email_verification;
 pub mod forms;
@@ -3421,6 +3422,7 @@ async fn main() {
     let _applications_sync_task = spawn(applications_synchronize());
 
     let _library_signups_sync_task = spawn(library_signups_synchronize());
+    let _deletions_sweep_task = spawn(deletion::sweep_orrery_deletions());
     let _ambassador_connections_sync_task = spawn(ambassador_connections_synchronize());
     let _link_tokens_sync_task = spawn(link_tokens_synchronize());
     let _signup_tag_grants_sync_task = spawn(signup_tag_grants_synchronize());
@@ -3451,6 +3453,9 @@ async fn main() {
         .expect("Unable to start user service");
 
     let mut toplevel = JoinSet::new();
+
+    let deleted = service.group("user.deleted");
+    toplevel.spawn(handler!(deleted, "since", deletion::deleted_since));
 
     let info = service.group("user.basic_info");
     toplevel.spawn(handler!(info, "by_username", users::basic_info_by_username));

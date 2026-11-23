@@ -1,8 +1,8 @@
-<% use crate::component::floating_field::{FieldKind, FloatingField, FormError}; %>
+<% use crate::component::floating_field::{FieldKind, FloatingField}; %>
 <% use crate::event::facebook::{HAS_FIELD, REQUESTED_FIELD, URL_FIELD}; %>
 <% let has = self.answers.has(); %>
 <% let requested = self.answers.create_requested(); %>
-<% let invalid = |field: &str| if self.error.is_some_and(|error| error.is_about(field)) { format!(r#" aria-invalid="true" aria-describedby="{}""#, FormError::ELEMENT_ID) } else { String::new() }; %>
+<% let invalid = |field: &str| match self.errors.described_by(field) { Some(problem) => format!(r#" aria-invalid="true" aria-describedby="{problem}""#), None => String::new() }; %>
 <% let has_invalid = invalid(HAS_FIELD); %>
 <% let requested_invalid = invalid(REQUESTED_FIELD); %>
 <%# Each follow-up is shown by add-form.css only while its answer is checked. %>
@@ -17,7 +17,7 @@
 
   <div class="facebook-follow-up facebook-if-yes">
     <p id="facebook-share-note" class="field-help">We'd love to help spread the word by sharing it through SciStarter's Facebook account.</p>
-    <%+ FloatingField::new(FieldKind::Url, URL_FIELD, "Please share the link to your Facebook event", self.answers.url().unwrap_or_default()).described_by("facebook-share-note").errors(self.error) %>
+    <%+ FloatingField::new(FieldKind::Url, URL_FIELD, "Please share the link to your Facebook event", self.answers.url().unwrap_or_default()).described_by("facebook-share-note").errors(self.errors) %>
   </div>
 
   <div class="facebook-follow-up facebook-if-no">

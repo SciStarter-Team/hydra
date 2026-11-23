@@ -1,12 +1,9 @@
 <% use crate::add::SectionSummary; %>
-<details class="add-section"<% if self.invalid { %> open<% } %>>
+<details class="add-section">
   <%+ SectionSummary::new(self.icon, self.title.clone()) %>
-  <div class="add-section-body" role="group" aria-label="<%= self.title %>"<% if self.invalid { %> aria-describedby="<%= crate::component::floating_field::FormError::ELEMENT_ID %>"<% } %>>
+  <div class="add-section-body" role="group" aria-label="<%= self.title %>">
     <% for checkboxes in self.checkboxes { %>
     <%+ checkboxes %>
-    <% } %>
-    <% if let Some(tags) = self.tags { %>
-    <%+ tags %>
     <% } %>
   </div>
 </details>

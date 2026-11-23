@@ -1,13 +1,17 @@
-//! One date/time row: a start date and time, an optional end, and the time
-//! zone whose clocks they're on, the end and the zone offered, as Facebook
-//! offers them, as small links under the start. The add event form repeats it for each of a
-//! new event's dates, and the event page's date editor shows one to change a
-//! date or add another; `js/date-rows.js` drives both.
+//! One date/time row: a start date and time, the time zone whose clocks
+//! they're on as the right part of the start time's box, an optional end,
+//! offered as a small link under the start, and, in the add event form, how
+//! the row repeats, offered likewise. The add event form repeats it for each
+//! of a new event's dates, and the event page's date editor shows one to
+//! change a date or add another; `js/date-rows.js` drives both.
 
 use jiff::{Timestamp, tz::TimeZone};
 use sailfish::TemplateOnce;
 
-use crate::{component::floating_field::FormError, event::EventInstance};
+use crate::{
+    component::floating_field::FormErrors,
+    event::{EventInstance, repeat::Repetition},
+};
 
 /// What a row holds, as submitted or as shown.
 #[derive(Debug, Clone, Default)]
@@ -58,25 +62,16 @@ pub struct DateRowFields {
     /// `instances[0][begin_date]` and so on; empty names them `begin_date`.
     prefix: String,
     values: DateRowValues,
-    error: Option<FormError>,
+    errors: FormErrors,
     /// The saved date the row shows, which the script shows again on the
     /// clocks of whichever zone is chosen while the row is left as it was.
     stored: Option<EventInstance>,
     /// Whether the row is shown on UTC's clocks only because the server
     /// doesn't know the viewer's: the script moves it to theirs.
     follow_viewer: bool,
-    /// Whether the row offers "Repeat event" among the links under its
-    /// start, and whether that is already open, so not offered again.
-    repeat: Option<RepeatChip>,
-}
-
-/// "Repeat event", under the first of the add form's dates: repetition
-/// repeats every date, so it is offered once.
-#[derive(Debug, Clone, Copy)]
-pub struct RepeatChip {
-    /// Whether the repetition is already shown (the event repeats), so the
-    /// chip is hidden.
-    pub shown: bool,
+    /// How the row repeats, when it offers "Make this a recurring event"
+    /// among the links under its start.
+    repeat: Option<Repetition>,
 }
 
 impl DateRowFields {
@@ -84,22 +79,23 @@ impl DateRowFields {
         DateRowFields {
             prefix: prefix.into(),
             values,
-            error: None,
+            errors: FormErrors::new(),
             stored: None,
             follow_viewer: false,
             repeat: None,
         }
     }
 
-    /// Offer "Repeat event" under the row's start.
-    pub fn with_repeat(mut self, chip: RepeatChip) -> Self {
-        self.repeat = Some(chip);
+    /// Offer "Make this a recurring event" under the row's start, the row
+    /// repeating as `repetition` says.
+    pub fn with_repeat(mut self, repetition: Repetition) -> Self {
+        self.repeat = Some(repetition);
         self
     }
 
-    /// Mark the control `error` is about, when it is one of this row's.
-    pub fn errors(mut self, error: Option<&FormError>) -> Self {
-        self.error = error.cloned();
+    /// Mark the controls `errors` are about, those that are this row's.
+    pub fn errors(mut self, errors: &FormErrors) -> Self {
+        self.errors = errors.clone();
         self
     }
 
@@ -120,6 +116,15 @@ impl DateRowFields {
             part.to_string()
         } else {
             format!("{}[{part}]", self.prefix)
+        }
+    }
+
+    /// The id of the row's element `part`, unique among the form's rows.
+    fn id(&self, part: &str) -> String {
+        if self.prefix.is_empty() {
+            part.to_string()
+        } else {
+            format!("{}-{part}", self.prefix)
         }
     }
 }

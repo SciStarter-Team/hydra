@@ -64,8 +64,15 @@
     .aa-Panel { z-index: 1000; }
   </style>
 <% } %>
-<script src="/-static/js/scripts.js" defer></script>
+<%# Times are written, and their zones named, before any script naming
+    them the same way runs. %>
 <script src="/-static/js/local_time.js" defer></script>
+<% if self.enable_event_editors { %>
+  <script src="/-static/js/date-rows.js" defer></script>
+  <script src="/-static/js/location-picker.js" defer></script>
+  <script src="/-static/js/event-answers.js" defer></script>
+<% } %>
+<script src="/-static/js/scripts.js" defer></script>
 <script src="/-static/js/social_share.js" defer></script>
 <script src="/-static/js/pagelife.js" defer></script>
 <script src="/-static/js/tabs.js" defer></script>

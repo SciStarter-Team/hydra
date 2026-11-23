@@ -2,7 +2,7 @@
 <% let editing = self.editing; %>
 <% let parts = self.parts; %>
 <% let changed = self.changed; %>
-<% let error = self.error; %>
+<% let errors = self.errors; %>
 <% use crate::project::location::LocationMode; %>
 <% let online = self.mode == Some(LocationMode::Online); %>
 <% let shown = self.can_edit || self.mode.is_some() || self.also_online || self.region_geojson.is_some() || parts.iter().any(|part| !part.empty); %>
@@ -10,16 +10,14 @@
   <% if shown { %>
   <div class="border border-linework rounded-sm bg-primary-light mb-4">
     <dl>
-      <dt class="ribbon-project bg-primary-dark text-white">Where</dt>
+      <dt class="ribbon-project bg-primary-dark text-white">Location</dt>
       <dd class="p-4 relative">
         <% if let Some(picker) = editing { %>
         <form class="edit-only space-y-3" novalidate
               hx-put="/-detail/<%= &self.target_id %>/location"
               hx-target="#event-location"
               hx-swap="outerHTML">
-          <% if let Some(error) = &error { %>
-          <p id="<%= crate::component::floating_field::FormError::ELEMENT_ID %>" class="text-sm text-red-700" role="alert"><%= &error.message %></p>
-          <% } %>
+          <%+ crate::component::floating_field::FormErrorMessages { errors: &errors } %>
           <%+ picker %>
           <div class="flex gap-2">
             <button type="submit" class="btn btn-primary btn-xs">Save</button>

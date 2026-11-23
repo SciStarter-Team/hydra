@@ -283,7 +283,8 @@ pub struct SendMessage {
     pub reply_ref: Option<String>,
     /// When true the message is delivered immediately (`approved = 1`) and
     /// no reviewer is notified — used for trusted, entity-authored messages.
-    /// Defaults false so ordinary sends are held for staff review.
+    /// Defaults false, so that an ordinary send is held for staff review
+    /// unless its recipient has written to the sender.
     #[serde(default)]
     pub pre_approved: bool,
 }
@@ -292,6 +293,11 @@ pub struct SendMessage {
 pub struct SendMessageResponse {
     pub topic_id: Ulid,
     pub post_id: Ulid,
+    /// Whether the message was delivered at once, being pre-approved or
+    /// written to someone who has written to the sender, rather than held
+    /// for staff review.
+    #[serde(default)]
+    pub delivered: bool,
 }
 
 /// Send one message to many recipients as a single batch
@@ -300,8 +306,8 @@ pub struct SendMessageResponse {
 /// staff can approve or reject them together and reviewers are emailed once.
 /// `pre_approved` delivers immediately without review — used when a
 /// project/event messages its own participants (trusted like any
-/// entity-authored message). The only bulk sender today is pre_approved;
-/// the path is kept general for future non-bypassed bulk senders.
+/// entity-authored message). Otherwise each copy is held for review unless
+/// its recipient has written to the sender.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SendBulkMessage {
     /// Author ULID — a user or an entity (project/event) sending as itself.
@@ -335,8 +341,9 @@ pub struct ReplyToMessage {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ReplyToMessageResponse {
     pub post_id: Ulid,
-    /// Whether the reply was delivered at once, as an answer or an entity's
-    /// send, rather than held for staff review.
+    /// Whether the reply was delivered at once, being an entity's send or
+    /// written to someone who has written to the sender, rather than held
+    /// for staff review.
     #[serde(default)]
     pub delivered: bool,
 }

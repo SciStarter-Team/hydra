@@ -457,6 +457,19 @@ async fn users_delete(
         .parse::<ulid::Ulid>()
         .map_err(|_| anyhow::anyhow!("Invalid user ID format"))?;
 
+    let pages = crate::account_deletion::created_pages(parsed_user_id).await?;
+    if pages > 0 {
+        return Ok(error_response(
+            poem::http::StatusCode::CONFLICT,
+            &format!(
+                "This account created {pages} project or event page{}. Give {} to another \
+                 account (the page creator, on the raw editor) before deleting it.",
+                if pages == 1 { "" } else { "s" },
+                if pages == 1 { "it" } else { "them" },
+            ),
+        ));
+    }
+
     let delete_request = UserDetailsDeleteRequest {
         user_id: parsed_user_id,
     };

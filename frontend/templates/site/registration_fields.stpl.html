@@ -1,0 +1,38 @@
+<% use crate::component::floating_field::{FieldIcon, FieldKind, FloatingField}; %>
+<% use crate::component::timezone_field::TimezoneField; %>
+<% use crate::event::registration::Registration; %>
+<% let asks_opening = Registration::asks_opening(self.registration); %>
+<% let opening_open = !self.ticketing_date.is_empty() || self.about("ticketing_date") || self.about("ticketing_timezone"); %>
+<div class="add-stack" data-registration>
+  <%# Required while registration is. %>
+  <div data-required-by-answer>
+    <%+ FloatingField::new(FieldKind::Url, "ticket_url", "Registration or ticket URL", self.ticket_url).hint("https://…").required_unless(self.registration != Some(Registration::Required)).described_by("ticket-url-help").errors(self.errors) %>
+    <p id="ticket-url-help" class="field-help">Direct link where participants can register, RSVP or obtain tickets.</p>
+  </div>
+
+  <fieldset class="choice-group">
+    <legend>Registration required?</legend>
+    <div class="radio-options">
+      <% for answer in Registration::ALL { %>
+      <label class="radio-option">
+        <input type="radio" name="registration" value="<%= answer.as_str() %>"<% if self.registration == Some(answer) { %> checked<% } %>>
+        <span><%= answer.label() %></span>
+      </label>
+      <% } %>
+    </div>
+  </fieldset>
+
+  <%# When registration opens, unless nobody registers. Its zone is named as
+      of the date and time beside it. %>
+  <details class="quiet-disclosure" data-ticketing <% if opening_open { %>open<% } %> <% if !asks_opening { %>hidden<% } %>>
+    <summary>+ Set registration opening date</summary>
+    <fieldset class="add-stack border-0 p-0 m-0" data-zone-scope <% if !asks_opening { %>disabled<% } %>>
+      <p id="ticketing-help" class="field-help">If registration opens at a specific time, set it here.</p>
+      <div class="when-pair">
+        <%+ FloatingField::new(FieldKind::Date, "ticketing_date", "Opens on", self.ticketing_date).icon(FieldIcon::Calendar).described_by("ticketing-help").errors(self.errors) %>
+        <%+ FloatingField::new(FieldKind::Time, "ticketing_time", "Time", self.ticketing_time).icon(FieldIcon::Clock) %>
+      </div>
+      <%+ TimezoneField::build("ticketing_timezone", self.ticketing_timezone, false).errors(self.errors) %>
+    </fieldset>
+  </details>
+</div>

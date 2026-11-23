@@ -1,9 +1,9 @@
-<% use crate::component::floating_field::FormError; %>
 <% use crate::component::image_field::{IMAGE_HELP_ID, ImageLayout, ImageUrlInput}; %>
 <%# The cover layout's guidance on the image (the help under the cover) is
     the link's too. %>
 <% let help = (self.layout == ImageLayout::Cover).then_some(IMAGE_HELP_ID); %>
-<% let described_by = self.invalid.then_some(FormError::ELEMENT_ID).into_iter().chain(help).collect::<Vec<_>>().join(" "); %>
-<%# The cover layout's input sits in a floating-label field, whose label
-    stands in for a placeholder; a real one would print over it. %>
-<input type="url" id="add-image" name="<%= ImageUrlInput::NAME %>" value="<%= self.value %>" placeholder="<% if self.layout == ImageLayout::Cover { %> <% } else { %>https://&hellip;<% } %>"<% if self.invalid { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %><% if self.oob { %> hx-swap-oob="true"<% } %>>
+<% let described_by = self.problem.into_iter().chain(help).collect::<Vec<_>>().join(" "); %>
+<%# In the cover layout's floating-label field, the placeholder is a hint
+    shown once the label has moved out of its way, as `FloatingField::hint`
+    is. %>
+<input type="url" id="add-image" name="<%= ImageUrlInput::NAME %>" value="<%= self.value %>" placeholder="https://&hellip;"<% if self.problem.is_some() { %> aria-invalid="true"<% } %><% if !described_by.is_empty() { %> aria-describedby="<%= described_by %>"<% } %><% if self.oob { %> hx-swap-oob="true"<% } %>>

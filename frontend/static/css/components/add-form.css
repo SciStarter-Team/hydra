@@ -1,6 +1,7 @@
 /* Add Event / Add Project forms: floating-label fields in one narrow column
-   (two on a desktop screen), the optional sections as collapsed rows, the
-   cover image, the place type-ahead and the calendar popover. */
+   (the project form's two on a desktop screen), its sections open under
+   their headings (the event form) or as collapsed rows (the project form),
+   the cover image, the place type-ahead and the calendar popover. */
 
 .add-form-shell {
     max-width: 34rem;
@@ -13,6 +14,9 @@
 form.add-form,
 form .add-area {
     @apply flex flex-col gap-3;
+}
+form .add-stack {
+    @apply flex flex-col gap-2;
 }
 
 /* On a desktop screen the form is two columns: the image on the left, the
@@ -45,6 +49,26 @@ form .add-area {
     form .add-area-details { grid-area: details; }
     form .add-sections { grid-area: sections; }
     form .add-area-actions { grid-area: actions; }
+}
+
+/* The event form is one column at every width, each section open under its
+   heading, as orrery's is. */
+.add-form-shell.add-form-single {
+    max-width: 40rem;
+}
+.add-form-single form.add-form {
+    display: flex;
+}
+@media (min-width: 40rem) {
+    .add-form-single form .add-area-actions {
+        @apply items-center;
+    }
+    .add-form-single form .add-area-actions .field-help {
+        @apply text-center;
+    }
+    .add-form-single form .add-form-submit {
+        max-width: 22rem;
+    }
 }
 
 /* A bordered field box with an optional leading icon. Its label sits inside
@@ -153,8 +177,9 @@ form .pill-required {
     @apply text-alert;
 }
 /* One of a group of fields any of which will do is marked only while it's
-   required: until another of them is given. */
-form [data-one-required] .pill-body:has(> :is(input, textarea):not([required])) .pill-required {
+   required: until another of them is given. So is a field an answer
+   requires ("Registration or ticket URL" while registration is). */
+form :is([data-one-required], [data-required-by-answer]) .pill-body:has(> :is(input, textarea):not([required])) .pill-required {
     display: none;
 }
 
@@ -171,6 +196,25 @@ form .pill-field:has([aria-invalid="true"]):focus-within {
 .form-error-notice:focus {
     outline: 2px solid var(--color-alert);
     outline-offset: 2px;
+}
+/* A refused submission's problems, each a button that goes to its field. */
+.form-error-notice .form-error-intro {
+    margin: 0 0 calc(var(--spacing) * 2);
+}
+.form-error-notice .form-error-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.form-error-notice .form-error-list button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: inherit;
+    text-decoration: underline;
+    cursor: pointer;
 }
 form .pill-field input,
 form .pill-field select,
@@ -201,43 +245,53 @@ form .field-help {
     @apply text-sm text-neutral-mid mt-1 mb-0;
 }
 
-/* Start date · start time · zone on one line where there's room. Where
-   there isn't (a phone, or a desktop layout's column) the date, whose value
-   is the widest, takes a line of its own, with the time and zone sharing the
-   next; where even those two won't fit side by side (a narrow screen, or
-   enlarged text) every field takes its own line. The room is the row's own
-   width, not the screen's, since the same row sits in spaces of different
-   widths. */
+/* Dates and times size their fields by the room they have, not the
+   screen's width, since the same row sits in spaces of different widths. */
 form .instance-row,
-form .add-section-body {
+form .add-section-body,
+form [data-zone-scope] {
     container-type: inline-size;
 }
-form .when-grid {
+
+/* A date's start (its date, and its time with the zone as the time's right
+   part), and its end below in the same columns: side by side where they
+   fit, the date above the time where they don't. */
+form .when-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.5rem;
 }
-form .when-grid > .pill-field:has(input[type="date"]) {
-    grid-column: 1 / -1;
-}
-@container (max-width: 18rem) {
-    form .when-grid {
+@container (max-width: 36rem) {
+    form .when-row {
         grid-template-columns: minmax(0, 1fr);
     }
 }
-/* Three across once each fits, sized by what it holds rather than split
-   evenly. Beside 4rem of icon and padding, a date's value needs about 7.75rem
-   and a time's about 7rem: measured in Firefox, which draws its own picker
-   button inside the field (the rule hiding that button is `-webkit-` only, so
-   Chrome's is gone and Firefox's stays). A zone's short name ("GMT+10") needs
-   4rem. */
-@container (min-width: 31.75rem) {
-    form .when-grid {
-        grid-template-columns: minmax(11.75rem, 1.35fr) minmax(11rem, 1fr) 8rem;
-    }
-    form .when-grid > .pill-field:has(input[type="date"]) {
-        grid-column: auto;
-    }
+
+/* The time field and the zone field as one box with a divider: the two
+   fields' boxes meet, sharing the border between them. A field focused or
+   wrong outlines its own half, over the shared border. The zone's half is
+   as wide as its short name and label need; the time takes the rest. */
+form .time-zone {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-width: 0;
+}
+form .time-zone > .pill-field {
+    grid-row: 1;
+}
+form .time-zone > .pill-field:is(:focus-within, :has([aria-invalid="true"])) {
+    z-index: 1;
+}
+form .time-zone > .pill-field:not(.tz-pill) {
+    grid-column: 1;
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+}
+form .time-zone > .tz-pill {
+    grid-column: 2;
+    margin-inline-start: -1px;
+    border-start-start-radius: 0;
+    border-end-start-radius: 0;
 }
 
 /* Two related fields side by side, stacking when each can't have 12.5rem:
@@ -254,13 +308,17 @@ form .pill-field :is(input, select, textarea) {
 form .instance-row {
     @apply flex flex-col gap-2 items-start;
 }
-form .instance-row > :is(.when-pair, .end-block) {
+form .instance-row > .date-row,
+form .date-row > :is(.when-row, .end-block, .repeat-block) {
     @apply self-stretch;
+}
+form .date-row {
+    @apply flex flex-col gap-2 items-start;
 }
 form .end-block {
     @apply flex flex-col gap-2 items-start;
 }
-form .end-block > .when-pair {
+form .end-block > .when-row {
     @apply self-stretch;
 }
 
@@ -277,8 +335,8 @@ form .when-pair {
     }
 }
 
-/* Facebook's small links under a date's start (an end time, repeating, the
-   time zone): grey rounded buttons in a row that wraps. */
+/* The small links under a date (an end time, repeating): grey rounded
+   buttons in a row that wraps. */
 form .when-chips {
     @apply flex flex-wrap items-start gap-2;
 }
@@ -294,41 +352,11 @@ form .chip-icon {
     @apply w-5 h-5 shrink-0;
 }
 
-/* The time zone chip: its short name over the full list, which lies
-   invisibly across it, as the time zone field's does. */
-form .tz-chip {
-    position: relative;
-}
-form .tz-chip .tz-chip-body {
-    @apply m-0 cursor-pointer;
-    font-weight: inherit;
-}
-form .tz-chip .tz-short {
-    white-space: nowrap;
-}
-form .tz-chip select {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    opacity: 0;
-    cursor: pointer;
-}
-form .tz-chip:has(select:focus-visible) {
-    outline: 2px solid var(--color-primary-action);
-    outline-offset: 2px;
-}
-form .tz-chip:has([aria-invalid="true"]) {
-    outline: 2px solid var(--color-alert);
-    outline-offset: -2px;
-}
-
 /* Time zone: once the form script has written the zone's short name into the
    field, the full list lies invisibly across it (across the field's body,
    the positioned box), so a click there opens it. */
 form .tz-pill .tz-short {
-    @apply block truncate;
+    @apply block whitespace-nowrap;
     font-size: 1rem;
     line-height: 1.5rem;
 }
@@ -407,12 +435,45 @@ form .place-details .place-summary-action {
     @apply text-primary-action underline;
 }
 
-/* Optional sections: a list of rows, each an icon, a bold title and a
-   chevron, opening in place. */
+/* The event form's sections, each open under its heading, a rule apart
+   from the one before. */
+form section.add-section {
+    @apply flex flex-col gap-3 m-0;
+    padding-top: calc(var(--spacing) * 5);
+    border-top: 1px solid var(--color-neutral-light);
+}
+form section.add-section > .add-section-title {
+    @apply m-0 text-neutral-dark font-bold;
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+}
+
+/* A field's own label, over a control that has none in its box (the cover
+   image, the larger event's search), set as a question's legend. */
+form .field-label {
+    @apply block font-semibold;
+    font-size: 1rem;
+    line-height: 1.5rem;
+}
+
+/* An example of what to write, under the guidance it illustrates. */
+form .field-example {
+    @apply italic;
+}
+
+/* A missing image, outlined as an invalid pill field is. */
+form .image-cover.image-cover-invalid {
+    border-color: var(--color-alert);
+    outline: 1px solid var(--color-alert);
+    outline-offset: -1px;
+}
+
+/* The project form's optional sections: a list of rows, each an icon, a
+   bold title and a chevron, opening in place. */
 form .add-sections {
     border-top: 1px solid var(--color-neutral-light);
 }
-form .add-section {
+form details.add-section {
     border-bottom: 1px solid var(--color-neutral-light);
 }
 form .add-section > summary {
@@ -484,6 +545,19 @@ form .choice-options {
 form .radio-options {
     @apply flex flex-col;
     gap: calc(var(--spacing) * 3);
+}
+/* An answer explained under its words (where an in-person event takes
+   place): the button level with the answer's first line. */
+form .radio-option:has(.radio-option-note) {
+    @apply items-start;
+}
+form .radio-option:has(.radio-option-note) input {
+    margin-top: 0.125rem;
+}
+form .radio-option-note {
+    @apply block text-sm;
+    color: var(--color-neutral-mid);
+    line-height: 1.4;
 }
 /* What one answer goes on to ask, under it and lined up with the answers'
    words rather than their buttons. */
@@ -774,3 +848,4 @@ form fieldset.instance-row + fieldset.instance-row {
         transition: none;
     }
 }
+

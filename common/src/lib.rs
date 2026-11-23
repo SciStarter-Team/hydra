@@ -28,6 +28,8 @@ pub mod serde_utils;
 pub mod service;
 pub mod shared;
 pub mod tag;
+#[cfg(feature = "database")]
+pub mod user_deletions;
 #[cfg(test)]
 mod test_nats;
 pub mod timestring;

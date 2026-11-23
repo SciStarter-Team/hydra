@@ -10,16 +10,42 @@
     'datetime': { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }
   };
 
+  // The short name of the zone `tz` (the viewer's own when none is given)
+  // at `at`, or now, as the event forms name zones whatever the viewer's
+  // language: "PDT", "GMT+3". New York is EDT in July and EST in January.
+  function zoneName(tz, at) {
+    try {
+      var options = { timeZoneName: 'short' };
+      if (tz) options.timeZone = tz;
+      var parts = new Intl.DateTimeFormat('en-US', options)
+        .formatToParts(at ? new Date(at) : new Date());
+      var name = parts.find(function (p) { return p.type === 'timeZoneName'; });
+      return name ? name.value : (tz || '');
+    } catch (e) {
+      return tz || '';
+    }
+  }
+  window.LocalTime = { zoneName: zoneName };
+
   // The options a format writes with on a node's clocks: a place's, named
-  // by `data-zone`, or the viewer's own; `data-named-zone` names the zone in
-  // the text ("9:30 AM EST").
+  // by `data-zone`, or the viewer's own.
   function optionsFor(node, base) {
     var options = {};
     for (var key in base) options[key] = base[key];
     var zone = node.getAttribute('data-zone');
     if (zone) options.timeZone = zone;
-    if (node.hasAttribute('data-named-zone') && 'hour' in base) options.timeZoneName = 'short';
     return options;
+  }
+
+  // The name of the node's clocks at `d`, when `data-named-zone` asks for it
+  // and the format tells the time ("9:30 AM EST"); otherwise none.
+  function namedZone(node, base, d) {
+    if (!node.hasAttribute('data-named-zone') || !('hour' in base)) return '';
+    return zoneName(node.getAttribute('data-zone'), d);
+  }
+
+  function named(text, zone) {
+    return zone ? text + ' ' + zone : text;
   }
 
   // The year, month (1-12) and day of `d` on the node's clocks.
@@ -44,20 +70,28 @@
 
     try {
       // A span (`local_time_range`): formatRange writes what both ends share
-      // only once, so a session reads "March 5, 2027, 9:30 – 11:00 PM".
+      // only once, so a session reads "March 5, 2027, 9:30 – 11:00 PM EST".
+      // A span across a change of the clocks names the zone at each end.
       if (node.hasAttribute('data-end') && OPTIONS[format]) {
         var end = new Date(node.getAttribute('data-end'));
         if (isNaN(end.getTime())) return;
         var range = new Intl.DateTimeFormat(undefined, optionsFor(node, OPTIONS[format]));
-        node.textContent = range.formatRange
-          ? range.formatRange(d, end)
-          : range.format(d) + ' \u2013 ' + range.format(end);
+        var from = namedZone(node, OPTIONS[format], d);
+        var to = namedZone(node, OPTIONS[format], end);
+        if (from === to && range.formatRange) {
+          node.textContent = named(range.formatRange(d, end), from);
+        } else {
+          node.textContent = named(range.format(d), from) + ' \u2013 ' + named(range.format(end), to);
+        }
         node.dataset.localTimeApplied = '1';
         return;
       }
 
       if (OPTIONS[format]) {
-        text = new Intl.DateTimeFormat(undefined, optionsFor(node, OPTIONS[format])).format(d);
+        text = named(
+          new Intl.DateTimeFormat(undefined, optionsFor(node, OPTIONS[format])).format(d),
+          namedZone(node, OPTIONS[format], d)
+        );
       } else {
         var day = calendar(node, d);
         switch (format) {

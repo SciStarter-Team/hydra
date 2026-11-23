@@ -1,0 +1,10 @@
+<% if !self.id.is_empty() { %>
+  <div class="flex items-center gap-2">
+    <span>Part of: <% if let Some(name) = &self.name { %><strong><%= name %></strong><% } else { %><em>an event that isn&rsquo;t published</em><% } %></span>
+    <%# Focus follows a choice (the result button picked is gone), and on to
+        the search once the choice is cleared, before this button goes too. %>
+    <button type="button" class="link-btn" aria-label="Clear the larger event"<% if self.autofocus { %> autofocus<% } %>
+      hx-on:click="document.getElementById('part-of-search').focus()"
+      hx-get="/-detail/<%= &self.event_id %>/part_of/clear" hx-target="#parent-selected" hx-swap="innerHTML">Clear</button>
+  </div>
+<% } %>
